@@ -1006,7 +1006,7 @@ class Spotlight(Gtk.Application):
 # ---------------------------------------------------------------- calculatrice (Super + O)
 
 KEYPAD = [
-    [("√", "sqrt(", "fn"), ("x²", "^2", "fn"), ("π", "π", "fn"), ("%", "%", "fn")],
+    [("√", "√(", "fn"), ("x²", "^2", "fn"), ("π", "π", "fn"), ("%", "%", "fn")],
     [("AC", "clear", "fn"), ("(", "(", "fn"), (")", ")", "fn"), ("÷", "÷", "op")],
     [("7", "7", "num"), ("8", "8", "num"), ("9", "9", "num"), ("×", "×", "op")],
     [("4", "4", "num"), ("5", "5", "num"), ("6", "6", "num"), ("−", "−", "op")],
@@ -1015,6 +1015,15 @@ KEYPAD = [
 ]
 # Caractère tapé au clavier → touche à éclairer à l'écran
 KEY_ALIASES = {"*": "×", "x": "×", "/": "÷", "-": "−", ".": ",", "^": "x²"}
+
+# Seuls les caractères d'un vrai calcul sont acceptés dans la calculatrice ;
+# certains sont convertis en jolis symboles au passage
+CALC_MAP = {"*": "×", "x": "×", "X": "×", "/": "÷", "-": "−", ".": ",", "p": "π", "P": "π"}
+CALC_ALLOWED = set("0123456789+−×÷^%(),π√! ")
+
+
+def filter_calc_input(text: str) -> str:
+    return "".join(c for c in (CALC_MAP.get(ch, ch) for ch in text) if c in CALC_ALLOWED)
 
 
 class Calculator(Gtk.Application):
@@ -1078,7 +1087,8 @@ class Calculator(Gtk.Application):
         self.entry = Gtk.Entry(placeholder_text="0")
         self.entry.add_css_class("calc-expr")
         self.entry.set_alignment(1.0)
-        self.entry.connect("changed", self.on_changed)
+        # Filtre la saisie (frappe et collage) : chiffres et opérateurs uniquement
+        self.changed_handler = self.entry.connect("changed", self.on_changed)
         self.entry.connect("activate", lambda *_: self.commit())
         display.append(self.entry)
 
@@ -1211,7 +1221,33 @@ class Calculator(Gtk.Application):
         return format_number(value), value
 
     def on_changed(self, *_args) -> None:
+        text = self.entry.get_text()
+        if filter_calc_input(text) != text:
+            # Correction juste après la frappe (GTK refuse de modifier le texte pendant)
+            if not getattr(self, "filter_pending", False):
+                self.filter_pending = True
+                GLib.idle_add(self.apply_filter)
+            return
         self.update()
+
+    def apply_filter(self) -> bool:
+        self.filter_pending = False
+        if self.window is None:
+            return False
+        text = self.entry.get_text()
+        clean = filter_calc_input(text)
+        if clean != text:
+            pos = self.entry.get_position()
+            before = len(filter_calc_input(text[:pos]))
+            self.entry.handler_block(self.changed_handler)
+            self.entry.set_text(clean)
+            self.entry.handler_unblock(self.changed_handler)
+            self.entry.set_position(before)
+            if any(ch.isalpha() and ch not in "xXpP" for ch in text) or not clean:
+                self.hint.add_css_class("error")
+                self.show_hint("Seulement des chiffres et des opérateurs")
+        self.update()
+        return False
 
     def update(self) -> None:
         text = self.entry.get_text()

@@ -24,8 +24,8 @@ CSS_FILE = Path.home() / ".config/caelestia-shortcuts/style.css"
 SHORTCUTS = [
     ("Essentiels", "󰌌", [
         ("Super", "Ouvrir le lanceur d'applications (appui seul, puis relâcher)"),
-        ("Super + Espace", "Recherche façon Spotlight (web + calculs)"),
-        ("Super + O", "Calculatrice (tape ou clique ; conversions : « 10 km en miles »)"),
+        ("Super + Espace", "Recherche façon Spotlight (web, calculs, conversions : « 10 km en miles »)"),
+        ("Super + O", "Calculatrice (chiffres et opérateurs uniquement)"),
         ("Super + Tab", "Mission Control : voir toutes les fenêtres et bureaux"),
         ("Super + H", "Afficher cette fenêtre des raccourcis"),
         ("Super + I", "Ouvrir les paramètres de Caelestia"),
