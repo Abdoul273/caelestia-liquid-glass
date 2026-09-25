@@ -268,6 +268,9 @@ install_files() {
     install_item config/kitty/liquid-glass.conf "$HOME/.config/kitty/liquid-glass.conf"
     ok "kitty en verre"
 
+    install_item config/starship/starship.toml "$HOME/.config/starship.toml"
+    ok "Prompt Starship (capsules Catppuccin Mocha)"
+
     install_item config/gtk-4.0/liquid-glass.css "$HOME/.config/gtk-4.0/liquid-glass.css"
     backup_path "$HOME/.config/gtk-3.0/liquid-glass.css"
     run mkdir -p "$HOME/.config/gtk-3.0"
