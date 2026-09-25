@@ -29,6 +29,8 @@ Verre translucide partout, Mission Control, Spotlight, animations fluides façon
 - **Les couleurs suivent ton fond d'écran** : tout est régénéré automatiquement à chaque changement de thème.
 
 ### 🪟 Façon macOS
+- **Démarrage façon Mac** (optionnel) : logo blanc et fine barre de progression sur fond noir, au lieu du texte qui défile.
+- **Curseur macOS** ([apple_cursor](https://github.com/ful1e5/apple_cursor)), jusque sur l'écran de connexion.
 - **Mission Control** (`Super + Tab` ou **3 doigts vers le haut**) : tes fenêtres glissent en grille, tes bureaux s'affichent en haut, et un clic t'y emmène.
 - **Spotlight** (`Super + Espace`) : suggestions Google instantanées, fiche Wikipédia, résultats web, calculs.
 - **Calculatrice** (`Super + O`) : le résultat s'affiche pendant que tu tapes (`12,5 × 4 + 20 %`), et Entrée le copie.
@@ -86,8 +88,9 @@ C'est tout. L'installateur :
 4. installe le shell Liquid Glass, les réglages Hyprland, les outils, kitty et Nautilus en verre ;
 5. **active les services** (bascule audio Bluetooth, verre de Nautilus) ;
 6. **te propose les fonds d'écran macOS 27 « Golden Gate »** ;
-7. **te propose l'écran de connexion en verre** (si tu utilises SDDM) ;
-8. **recharge ton bureau** : tout est actif immédiatement.
+7. installe le **curseur macOS** et **te propose l'écran de connexion en verre** (si tu utilises SDDM) ;
+8. **te propose l'écran de démarrage façon Mac** (non coché par défaut, car il modifie le démarrage ; réversible) ;
+9. **recharge ton bureau** : tout est actif immédiatement.
 
 Options :
 
@@ -167,6 +170,9 @@ Liquid Glass remplace le shell de Caelestia par une version modifiée, prévue p
 **Le verre de Nautilus a disparu après un changement de fond d'écran.**
 Un petit service le remet automatiquement. Vérifie qu'il est actif : `systemctl --user status caelestia-glass-gtk.path`.
 
+**Comment retirer l'écran de démarrage ?**
+`sudo config/plymouth/install-boot-splash --remove` : la ligne de démarrage d'origine est restaurée depuis la sauvegarde (`/var/backups/caelestia-liquid-glass`).
+
 **Ma disposition de clavier / ma langue est différente.**
 Rien n'est imposé : ta disposition reste celle de ta config Hyprland, et les dossiers de captures suivent tes dossiers utilisateur (Images, Pictures…).
 
@@ -176,6 +182,7 @@ Rien n'est imposé : ta disposition reste celle de ta config Hyprland, et les do
 
 - **[Caelestia](https://github.com/caelestia-dots)** par soramanew et ses contributeurs : le shell et les dotfiles sur lesquels tout repose (GPL-3.0).
 - **Google Sans Flex** (SIL Open Font License), fournie avec Caelestia.
+- **[apple_cursor](https://github.com/ful1e5/apple_cursor)** par ful1e5 (GPL-3.0), téléchargé à l'installation.
 - Fonds d'écran macOS 27 : © Apple. Ils **ne sont pas inclus** dans ce dépôt ; l'installateur propose seulement de les télécharger depuis leur source publique.
 
 ## 📄 Licence

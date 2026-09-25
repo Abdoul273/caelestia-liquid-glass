@@ -353,6 +353,43 @@ offer_wallpapers() {
     done
 }
 
+install_cursor() {
+    title "Curseur macOS"
+    local dest="$HOME/.local/share/icons/macOS" tmp
+    if [[ -d $dest/cursors ]]; then
+        ok "Déjà installé"
+        return
+    fi
+    tmp=$(mktemp -d)
+    if run curl -sfL -o "$tmp/macOS.tar.xz" "https://github.com/ful1e5/apple_cursor/releases/download/v2.0.1/macOS.tar.xz" \
+        && run tar -xJf "$tmp/macOS.tar.xz" -C "$tmp" 2>/dev/null; then
+        run mkdir -p "$HOME/.local/share/icons"
+        backup_path "$dest"
+        run rm -rf "$dest"
+        run cp -r "$tmp/macOS" "$dest"
+        record "$dest"
+        if (( ! DRY_RUN )); then
+            mkdir -p "$HOME/.icons/default"
+            [[ -f $HOME/.icons/default/index.theme ]] || printf '[Icon Theme]\nInherits=macOS\n' > "$HOME/.icons/default/index.theme"
+            gsettings set org.gnome.desktop.interface cursor-theme macOS 2>/dev/null || true
+        fi
+        ok "Curseur macOS (apple_cursor par ful1e5)"
+    else
+        warn "Téléchargement du curseur impossible (pas de connexion ?) : curseur par défaut conservé."
+    fi
+    rm -rf "$tmp"
+}
+
+install_boot_splash() {
+    title "Écran de démarrage"
+    printf '%s\n' "  Un démarrage façon Mac : logo blanc et fine barre de progression sur fond noir," \
+        "  au lieu du texte qui défile. Modifie la ligne de démarrage du noyau (sauvegardée" \
+        "  avant) ; annulable avec : ${B}sudo config/plymouth/install-boot-splash --remove${R}"
+    ask "Installer l'écran de démarrage ?" n || return 0
+    run sudo "$REPO_DIR/config/plymouth/install-boot-splash"
+    ok "Écran de démarrage installé (visible au prochain démarrage)"
+}
+
 install_login_screen() {
     title "Écran de connexion"
     if ! command -v sddm >/dev/null 2>&1; then
@@ -416,15 +453,18 @@ cat <<EOF
   • remplacer ton shell Caelestia par la version Liquid Glass
   • installer les réglages Hyprland dans ~/.config/caelestia (jamais dans ~/.config/hypr)
   • installer les outils, kitty et Nautilus en verre, et les services
-  • proposer l'écran de connexion en verre (SDDM)
+  • installer le curseur macOS
+  • proposer l'écran de connexion en verre (SDDM) et l'écran de démarrage façon Mac
 EOF
 ask "On y va ?" o || { info "Installation annulée."; exit 0; }
 
 install_deps
 install_files
 enable_services
+install_cursor
 title "Fonds d'écran"
 offer_wallpapers
 install_login_screen
+install_boot_splash
 reload_desktop
 summary

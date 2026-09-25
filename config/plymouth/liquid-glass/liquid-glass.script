@@ -1,0 +1,140 @@
+# Caelestia Liquid Glass — écran de démarrage façon macOS
+# Logo blanc en fondu, fine barre de progression arrondie, mot de passe en verre.
+
+Window.SetBackgroundTopColor(0, 0, 0);
+Window.SetBackgroundBottomColor(0, 0, 0);
+
+sw = Window.GetWidth();
+sh = Window.GetHeight();
+scale = Math.Min(sw / 1920, sh / 1080);
+if (scale < 0.6) scale = 0.6;
+
+# ---------------------------------------------------------------- logo
+logo_img = Image("logo.png");
+logo_w = Math.Int(logo_img.GetWidth() * 0.62 * scale);
+logo_h = Math.Int(logo_img.GetHeight() * 0.62 * scale);
+logo = Sprite(logo_img.Scale(logo_w, logo_h));
+logo.SetX(sw / 2 - logo_w / 2);
+logo.SetY(sh / 2 - logo_h / 2 - 40 * scale);
+logo.SetOpacity(0);
+
+# ---------------------------------------------------------------- barre
+bar_w = Math.Int(240 * scale);
+bar_h = Math.Int(6 * scale);
+if (bar_h < 4) bar_h = 4;
+bar_x = sw / 2 - bar_w / 2;
+bar_y = sh / 2 + logo_h / 2 + 60 * scale;
+
+track = Sprite(Image("track.png").Scale(bar_w, bar_h));
+track.SetX(bar_x);
+track.SetY(bar_y);
+track.SetOpacity(0);
+
+fill_img = Image("fill.png");
+fill = Sprite();
+fill.SetX(bar_x);
+fill.SetY(bar_y);
+fill.SetZ(2);
+
+shown = 0;       # progression affichée (lissée)
+target = 0;      # progression réelle
+fade = 0;        # fondu d'apparition
+show_bar = 1;
+if (Plymouth.GetMode() == "shutdown" || Plymouth.GetMode() == "reboot") show_bar = 0;
+
+fun set_progress(duration, progress) {
+    target = progress;
+}
+Plymouth.SetBootProgressFunction(set_progress);
+
+fun refresh() {
+    if (fade < 1) fade = fade + 0.04;
+    if (fade > 1) fade = 1;
+    logo.SetOpacity(fade);
+
+    if (show_bar) {
+        track.SetOpacity(fade);
+        # Remplissage en douceur, toujours vers l'avant
+        if (target > shown) shown = shown + (target - shown) * 0.08;
+        w = Math.Int(bar_w * shown);
+        if (w >= 2) {
+            fill.SetImage(fill_img.Scale(w, bar_h));
+            fill.SetOpacity(fade);
+        }
+    } else {
+        track.SetOpacity(0);
+        fill.SetOpacity(0);
+    }
+}
+Plymouth.SetRefreshFunction(refresh);
+
+# ---------------------------------------------------------------- mot de passe (disque chiffré)
+entry_img = Image("entry.png");
+entry_w = Math.Int(entry_img.GetWidth() * scale);
+entry_h = Math.Int(entry_img.GetHeight() * scale);
+entry = Sprite(entry_img.Scale(entry_w, entry_h));
+entry.SetX(sw / 2 - entry_w / 2);
+entry.SetY(bar_y - 10 * scale);
+entry.SetZ(5);
+entry.SetOpacity(0);
+
+prompt = Sprite();
+prompt.SetZ(5);
+bullet_count = 0;
+bullet_img = Image("bullet.png");
+
+fun hide_password() {
+    entry.SetOpacity(0);
+    prompt.SetOpacity(0);
+    i = 0;
+    while (i < bullet_count) {
+        bullets[i].SetOpacity(0);
+        i = i + 1;
+    }
+    show_bar = 1;
+    if (Plymouth.GetMode() == "shutdown" || Plymouth.GetMode() == "reboot") show_bar = 0;
+}
+
+fun display_password(text, count) {
+    show_bar = 0;
+    entry.SetOpacity(1);
+    label = "Mot de passe du disque";
+    if (text != "") label = text;
+    prompt.SetImage(Image.Text(label, 1, 1, 1, 0.75, "Sans 12"));
+    prompt.SetX(sw / 2 - prompt.GetImage().GetWidth() / 2);
+    prompt.SetY(entry.GetY() - 34 * scale);
+    prompt.SetOpacity(1);
+    i = 0;
+    while (i < bullet_count) {
+        bullets[i].SetOpacity(0);
+        i = i + 1;
+    }
+    n = count;
+    if (n > 24) n = 24;
+    total = n * 16 * scale;
+    i = 0;
+    while (i < n) {
+        if (i >= bullet_count) {
+            bullets[i] = Sprite(bullet_img);
+            bullet_count = i + 1;
+        }
+        bullets[i].SetX(sw / 2 - total / 2 + i * 16 * scale);
+        bullets[i].SetY(entry.GetY() + entry_h / 2 - 6);
+        bullets[i].SetZ(6);
+        bullets[i].SetOpacity(1);
+        i = i + 1;
+    }
+}
+
+Plymouth.SetDisplayPasswordFunction(display_password);
+Plymouth.SetDisplayNormalFunction(hide_password);
+
+# Messages système : discrets en bas de l'écran
+message = Sprite();
+message.SetZ(4);
+fun show_message(text) {
+    message.SetImage(Image.Text(text, 1, 1, 1, 0.55, "Sans 11"));
+    message.SetX(sw / 2 - message.GetImage().GetWidth() / 2);
+    message.SetY(sh - 60 * scale);
+}
+Plymouth.SetMessageFunction(show_message);

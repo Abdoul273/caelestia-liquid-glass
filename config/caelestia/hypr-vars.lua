@@ -22,4 +22,8 @@ return {
     -- remplacés par 4 doigts dans hypr-user.lua.
     workspaceSwipeFingers = 3,
     gestureFingers        = 5,
+
+    -- Curseur façon macOS (apple_cursor)
+    cursorTheme = "macOS",
+    cursorSize  = 24,
 }

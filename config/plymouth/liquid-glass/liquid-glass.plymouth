@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Liquid Glass
+Description=Démarrage façon macOS : logo blanc et fine barre de progression sur fond noir
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/liquid-glass
+ScriptFile=/usr/share/plymouth/themes/liquid-glass/liquid-glass.script

@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# ============================================================================
+#  Caelestia Liquid Glass — écran de démarrage façon macOS (Plymouth)
+#    sudo ./config/plymouth/install-boot-splash            installe
+#    sudo ./config/plymouth/install-boot-splash --remove   désinstalle
+#
+#  Gère systemd-boot (kernel-install, EndeavourOS) et GRUB, avec dracut ou
+#  mkinitcpio. Tout ce qui est modifié est sauvegardé avant.
+# ============================================================================
+set -euo pipefail
+
+[[ $EUID -eq 0 ]] || { echo "Lance ce script avec sudo." >&2; exit 1; }
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+THEME=liquid-glass
+THEME_DIR=/usr/share/plymouth/themes/$THEME
+BACKUP=/var/backups/caelestia-liquid-glass
+DRACUT_CONF=/etc/dracut.conf.d/liquid-glass-plymouth.conf
+PARAMS=(quiet splash loglevel=3 rd.udev.log_level=3 vt.global_cursor_default=0)
+
+say() { printf '  • %s\n' "$1"; }
+
+rebuild_boot() {
+    say "Reconstruction de l'image de démarrage (ça peut prendre une minute)…"
+    if command -v reinstall-kernels >/dev/null; then
+        reinstall-kernels                    # EndeavourOS (systemd-boot + kernel-install)
+    elif command -v dracut-rebuild >/dev/null; then
+        dracut-rebuild
+    elif command -v dracut >/dev/null && ! command -v mkinitcpio >/dev/null; then
+        dracut --regenerate-all --force
+    elif command -v mkinitcpio >/dev/null; then
+        mkinitcpio -P
+    fi
+    if [[ -f /etc/default/grub ]] && command -v grub-mkconfig >/dev/null; then
+        grub-mkconfig -o /boot/grub/grub.cfg
+    fi
+}
+
+# ---------------------------------------------------------------- désinstallation
+if [[ ${1:-} == --remove ]]; then
+    [[ -f $BACKUP/kernel-cmdline ]] && cp -a "$BACKUP/kernel-cmdline" /etc/kernel/cmdline
+    [[ -f $BACKUP/grub ]] && cp -a "$BACKUP/grub" /etc/default/grub
+    [[ -f $BACKUP/mkinitcpio.conf ]] && cp -a "$BACKUP/mkinitcpio.conf" /etc/mkinitcpio.conf
+    rm -f "$DRACUT_CONF"
+    command -v plymouth-set-default-theme >/dev/null && plymouth-set-default-theme bgrt 2>/dev/null || true
+    rm -rf "$THEME_DIR"
+    rebuild_boot
+    echo "✓ Écran de démarrage retiré : ton démarrage d'origine est restauré."
+    exit 0
+fi
+
+# ---------------------------------------------------------------- installation
+echo "Installation de l'écran de démarrage Liquid Glass"
+install -d -m 700 "$BACKUP"
+
+pacman -Q plymouth >/dev/null 2>&1 || { say "Installation de Plymouth…"; pacman -S --needed --noconfirm plymouth; }
+
+say "Thème"
+rm -rf "$THEME_DIR"
+cp -r "$HERE/$THEME" "$THEME_DIR"
+chmod -R a+rX "$THEME_DIR"
+plymouth-set-default-theme "$THEME"
+
+say "Image de démarrage"
+if command -v dracut >/dev/null && ! grep -q '^HOOKS=' /etc/mkinitcpio.conf 2>/dev/null; then
+    echo 'add_dracutmodules+=" plymouth "' > "$DRACUT_CONF"
+elif [[ -f /etc/mkinitcpio.conf ]]; then
+    [[ -f $BACKUP/mkinitcpio.conf ]] || cp -a /etc/mkinitcpio.conf "$BACKUP/mkinitcpio.conf"
+    if ! grep -qE '^HOOKS=.*\bplymouth\b' /etc/mkinitcpio.conf; then
+        # plymouth juste après systemd ou udev
+        sed -i -E '/^HOOKS=/ { s/\b(systemd|udev)\b/\1 plymouth/; }' /etc/mkinitcpio.conf
+    fi
+fi
+
+say "Ligne de démarrage du noyau (quiet splash)"
+if [[ -f /etc/kernel/cmdline ]]; then
+    [[ -f $BACKUP/kernel-cmdline ]] || cp -a /etc/kernel/cmdline "$BACKUP/kernel-cmdline"
+    line=$(tr -s '\n' ' ' < /etc/kernel/cmdline | sed 's/ *$//')
+    for p in "${PARAMS[@]}"; do
+        [[ " $line " == *" ${p%%=*}"[=\ ]* ]] || line+=" $p"
+    done
+    printf '%s\n' "$line" > /etc/kernel/cmdline
+elif [[ -f /etc/default/grub ]]; then
+    [[ -f $BACKUP/grub ]] || cp -a /etc/default/grub "$BACKUP/grub"
+    current=$(sed -n 's/^GRUB_CMDLINE_LINUX_DEFAULT="\(.*\)"/\1/p' /etc/default/grub)
+    for p in "${PARAMS[@]}"; do
+        [[ " $current " == *" ${p%%=*}"[=\ ]* ]] || current+=" $p"
+    done
+    sed -i "s|^GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"${current# }\"|" /etc/default/grub
+else
+    echo "  ! Chargeur de démarrage non reconnu : ajoute toi-même « quiet splash » à la ligne du noyau." >&2
+fi
+
+rebuild_boot
+echo "✓ Écran de démarrage installé : tu le verras au prochain démarrage."
+echo "  Sauvegardes : $BACKUP   •   Annuler : sudo $0 --remove"

@@ -16,7 +16,7 @@ DATA_DIR=/var/lib/caelestia-login
 CONF=/etc/sddm.conf.d/10-liquid-glass.conf
 
 if [[ ${1:-} == --remove ]]; then
-    rm -rf "$THEME_DIR" "$CONF" "$DATA_DIR"
+    rm -rf "$THEME_DIR" "$CONF" "$DATA_DIR" /usr/share/icons/macOS
     echo "✓ Écran de connexion Liquid Glass retiré (SDDM reprend son thème par défaut)."
     exit 0
 fi
@@ -49,12 +49,22 @@ if [[ -f $USER_HOME/.face ]]; then
     fi
 fi
 
+# Curseur macOS aussi sur l'écran de connexion (s'il est installé pour l'utilisateur)
+cursor_line=""
+if [[ -d $USER_HOME/.local/share/icons/macOS/cursors ]]; then
+    rm -rf /usr/share/icons/macOS
+    cp -r "$USER_HOME/.local/share/icons/macOS" /usr/share/icons/macOS
+    chmod -R a+rX /usr/share/icons/macOS
+    cursor_line="CursorTheme=macOS"
+fi
+
 # Activation du thème
 install -d /etc/sddm.conf.d
 cat > "$CONF" <<CONFEOF
 # Caelestia Liquid Glass
 [Theme]
 Current=liquid-glass
+$cursor_line
 CONFEOF
 
 echo "✓ Écran de connexion Liquid Glass installé : il apparaîtra à ta prochaine connexion."

@@ -27,6 +27,10 @@ read -r -p "  Continuer ? [o/N] " answer || true
 [[ ${answer,,} == o* || ${answer,,} == y* ]] || { echo "  Annulé."; exit 0; }
 
 systemctl --user disable --now bt-audio-autoswitch.service caelestia-glass-gtk.path caelestia-login-sync.path 2>/dev/null || true
+if [[ -d /usr/share/plymouth/themes/liquid-glass ]]; then
+    echo "  Retrait de l'écran de démarrage (mot de passe demandé)…"
+    sudo "$(dirname "${BASH_SOURCE[0]}")/config/plymouth/install-boot-splash" --remove || true
+fi
 if [[ -d /usr/share/sddm/themes/liquid-glass ]]; then
     echo "  Retrait de l'écran de connexion (mot de passe demandé)…"
     sudo "$(dirname "${BASH_SOURCE[0]}")/config/sddm/install-login-screen" --remove || true
