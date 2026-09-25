@@ -1,0 +1,599 @@
+#!/usr/bin/env python3
+"""A native emoji / glyph picker for the Caelestia desktop."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Gdk", "4.0")
+from gi.repository import Gdk, Gio, GLib, Gtk
+
+
+APP_ID = "io.caelestia.EmojiPro"
+STATE_DIR = Path.home() / ".local/state/caelestia-emoji-pro"
+STATE_FILE = STATE_DIR / "state.json"
+CSS_FILE = Path.home() / ".config/caelestia-emoji-pro/style.css"
+MAX_VISIBLE = 360
+MAX_RECENTS = 48
+CELL = 54
+
+CATEGORIES = [
+    ("recents", "󰥔", "Récents"),
+    ("smileys", "󰱱", "Smileys"),
+    ("people", "󰀄", "Personnes"),
+    ("nature", "󰌪", "Nature"),
+    ("food", "󰉛", "Nourriture"),
+    ("travel", "󰿄", "Voyages"),
+    ("activities", "󰝚", "Activités"),
+    ("objects", "󰦬", "Objets"),
+    ("symbols", "󰘨", "Symboles"),
+    ("flags", "󰈻", "Drapeaux"),
+    ("kaomoji", "ツ", "Kaomoji"),
+    ("glyphs", "󰣇", "Glyphes"),
+]
+
+FR_ALIASES = {
+    "heart": "coeur cœur amour",
+    "love": "amour",
+    "fire": "feu flamme",
+    "laugh": "rire mdr ptdr lol",
+    "smile": "sourire",
+    "grin": "sourire rire",
+    "sad": "triste",
+    "cry": "pleure pleurer larme",
+    "angry": "colere colère énervé enerve",
+    "thumb": "pouce",
+    "ok": "ok daccord d'accord",
+    "eyes": "yeux regard",
+    "skull": "crane crâne mort",
+    "poop": "caca merde",
+    "party": "fete fête",
+    "star": "etoile étoile",
+    "moon": "lune",
+    "sun": "soleil",
+    "cat": "chat",
+    "dog": "chien",
+    "flag": "drapeau",
+    "kiss": "bisou baiser",
+    "clap": "applaudir bravo",
+    "wave": "coucou salut",
+    "check": "valide coche",
+    "warning": "attention",
+    "music": "musique",
+    "camera": "photo",
+    "phone": "telephone téléphone",
+    "computer": "ordinateur",
+    "book": "livre",
+    "money": "argent",
+    "gift": "cadeau",
+    "cake": "gateau gâteau",
+    "beer": "biere bière",
+    "coffee": "cafe café",
+    "wine": "vin",
+    "car": "voiture",
+    "plane": "avion",
+    "house": "maison",
+    "rain": "pluie",
+    "snow": "neige",
+    "tree": "arbre",
+    "flower": "fleur",
+    "ghost": "fantome fantôme",
+    "alien": "alien",
+    "robot": "robot",
+    "pray": "prier priere prière",
+    "sleep": "dodo dormir",
+    "think": "penser reflechir réfléchir",
+    "shrug": "idk bref",
+    "sparkle": "etincelle étincelle briller",
+}
+
+
+@dataclass
+class EmojiItem:
+    glyph: str
+    label: str
+    tags: str
+    category: str
+    search: str
+    favorite: bool = False
+
+
+def emoji_data_file() -> Path:
+    try:
+        from caelestia.utils.paths import cli_data_dir
+
+        path = cli_data_dir / "emojis.txt"
+        if path.exists():
+            return path
+    except Exception:
+        pass
+    for path in (
+        Path.home() / ".local/lib/python3.14/site-packages/caelestia/data/emojis.txt",
+        Path("/usr/share/caelestia/emojis.txt"),
+    ):
+        if path.exists():
+            return path
+    return Path.home() / ".local/share/caelestia/emojis.txt"
+
+
+def is_kaomoji(glyph: str) -> bool:
+    if len(glyph) < 3:
+        return False
+    return any(ch.isascii() and ch not in "©®™!?¿." for ch in glyph)
+
+
+def first_cp(glyph: str) -> int:
+    for ch in glyph:
+        cp = ord(ch)
+        if cp in {0xFE0F, 0x200D, 0x20E3}:
+            continue
+        if 0x1F3FB <= cp <= 0x1F3FF:
+            continue
+        return cp
+    return ord(glyph[0]) if glyph else 0
+
+
+def categorize(glyph: str, tags: str) -> str:
+    tags_l = tags.casefold()
+    if "nf-" in tags_l:
+        return "glyphs"
+    if is_kaomoji(glyph):
+        return "kaomoji"
+    cp = first_cp(glyph)
+    if 0xE000 <= cp <= 0xF8FF or cp >= 0xF0000:
+        return "glyphs"
+    if 0x1F1E6 <= cp <= 0x1F1FF or "flag:" in tags_l or tags_l.startswith("flag "):
+        return "flags"
+
+    ranges: list[tuple[str, list[tuple[int, int]]]] = [
+        ("smileys", [(0x1F600, 0x1F644), (0x1F910, 0x1F917), (0x1F920, 0x1F92F),
+                     (0x1F970, 0x1F97A), (0x1FAE0, 0x1FAEF), (0x2639, 0x263A)]),
+        ("people", [(0x1F90C, 0x1F90F), (0x1F918, 0x1F91F), (0x1F930, 0x1F93A),
+                    (0x1F466, 0x1F487), (0x1F9B0, 0x1F9B9), (0x1F9D0, 0x1F9E6),
+                    (0x1FAC0, 0x1FACF), (0x1F645, 0x1F64F), (0x270A, 0x270D),
+                    (0x1F446, 0x1F450), (0x1F590, 0x1F590), (0x1F574, 0x1F57A),
+                    (0x1F6B6, 0x1F6B6), (0x1F3C2, 0x1F3C4), (0x1F3FB, 0x1F3FF)]),
+        ("nature", [(0x1F300, 0x1F32C), (0x1F330, 0x1F343), (0x1F400, 0x1F43F),
+                    (0x1F980, 0x1F9AE), (0x1FAB0, 0x1FABF), (0x2600, 0x26C8)]),
+        ("food", [(0x1F32D, 0x1F37F), (0x1F950, 0x1F96F), (0x1F9C0, 0x1F9CB),
+                  (0x1FAD0, 0x1FADF)]),
+        ("travel", [(0x1F680, 0x1F6FF), (0x1F3D4, 0x1F3F0), (0x1F5FA, 0x1F5FF),
+                    (0x1F30D, 0x1F32C)]),
+        ("activities", [(0x1F3A0, 0x1F3CA), (0x1F3CF, 0x1F3D3), (0x1F940, 0x1F94F),
+                        (0x1FA70, 0x1FA73), (0x26BD, 0x26BE)]),
+        ("objects", [(0x1F4A0, 0x1F4FF), (0x1F50D, 0x1F53D), (0x1F570, 0x1F5C4),
+                     (0x1F9E7, 0x1F9FF), (0x1FA80, 0x1FAAF), (0x1F6E0, 0x1F6F0)]),
+        ("symbols", [(0x2000, 0x2BFF), (0x1F191, 0x1F251), (0x1F500, 0x1F54F),
+                     (0x1F7E0, 0x1F7EB), (0x3030, 0x3030)]),
+        ("flags", [(0x1F3F4, 0x1F3F4), (0x1F6A9, 0x1F6A9)]),
+    ]
+    for name, spans in ranges:
+        for start, end in spans:
+            if start <= cp <= end:
+                return name
+
+    blob = tags_l
+    if any(word in blob for word in ("face", "smile", "grin", "sad", "angry", "cry")):
+        return "smileys"
+    if any(word in blob for word in ("person", "people", "hand", "finger", "man", "woman")):
+        return "people"
+    if any(word in blob for word in ("animal", "cat", "dog", "plant", "flower", "tree")):
+        return "nature"
+    if any(word in blob for word in ("food", "fruit", "drink", "beer", "cake")):
+        return "food"
+    if any(word in blob for word in ("car", "train", "plane", "house", "building")):
+        return "travel"
+    if any(word in blob for word in ("sport", "ball", "game", "music", "trophy")):
+        return "activities"
+    return "symbols"
+
+
+def french_blob(tags: str) -> str:
+    extra = []
+    folded = tags.casefold()
+    for key, aliases in FR_ALIASES.items():
+        if key in folded:
+            extra.append(aliases)
+    return " ".join(extra)
+
+
+def load_items(favorites: set[str]) -> list[EmojiItem]:
+    path = emoji_data_file()
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    items: list[EmojiItem] = []
+    seen: set[str] = set()
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        glyph, _, rest = line.partition(" ")
+        glyph = glyph.strip()
+        rest = rest.strip()
+        if not glyph or glyph in seen:
+            continue
+        seen.add(glyph)
+        label = rest.split("  ")[0].strip() if rest else glyph
+        # Prefer a readable label: skip leading emoticons like ":D"
+        words = [part for part in rest.split() if not part.startswith(":")]
+        if words:
+            # Take a few descriptive words, drop nf- noise for the title
+            title_words = [w for w in words if not w.startswith("nf-")][:6]
+            label = " ".join(title_words) if title_words else words[0]
+        category = categorize(glyph, rest)
+        search = f"{glyph} {rest} {french_blob(rest)}".casefold()
+        items.append(EmojiItem(
+            glyph=glyph,
+            label=label,
+            tags=rest,
+            category=category,
+            search=search,
+            favorite=glyph in favorites,
+        ))
+    return items
+
+
+def load_state() -> dict:
+    try:
+        data = json.loads(STATE_FILE.read_text())
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_state(state: dict) -> None:
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2))
+
+
+def copy_glyph(glyph: str) -> bool:
+    try:
+        result = subprocess.run(
+            ["wl-copy"],
+            input=glyph.encode(),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=3,
+            check=False,
+        )
+        return result.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def schedule_paste() -> None:
+    subprocess.Popen(
+        ["sh", "-c", "sleep 0.18; ydotool key 29:1 47:1 47:0 29:0"],
+        start_new_session=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+class EmojiApp(Gtk.Application):
+    def __init__(self) -> None:
+        super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
+        self.window: Gtk.ApplicationWindow | None = None
+        self.state = load_state()
+        self.favorites = [str(x) for x in self.state.get("favorites", []) if x]
+        self.recents = [str(x) for x in self.state.get("recents", []) if x]
+        self.items = load_items(set(self.favorites))
+        self.by_glyph = {item.glyph: item for item in self.items}
+        self.category = "recents" if self.recents else "smileys"
+        self.filtered: list[EmojiItem] = []
+        self.selected: EmojiItem | None = None
+        self.category_buttons: dict[str, tuple[Gtk.ToggleButton, Gtk.Label]] = {}
+        self.filter_source = 0
+        self.cells: list[Gtk.FlowBoxChild] = []
+
+    def do_activate(self) -> None:
+        if self.window is not None:
+            self.window.close()
+            return
+        self.build_window()
+        self.apply_filter()
+        self.window.present()
+        self.search.grab_focus()
+
+    def load_css(self) -> None:
+        provider = Gtk.CssProvider()
+        try:
+            provider.load_from_path(str(CSS_FILE))
+            Gtk.StyleContext.add_provider_for_display(
+                Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+        except GLib.Error:
+            pass
+
+    def build_window(self) -> None:
+        self.load_css()
+        self.window = Gtk.ApplicationWindow(application=self)
+        self.window.set_title("Emojis")
+        self.window.set_default_size(760, 620)
+        self.window.set_size_request(560, 420)
+        self.window.connect("close-request", self.on_close)
+
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        root.add_css_class("app-root")
+        self.window.set_child(root)
+
+        header = Gtk.Box(spacing=14)
+        header.add_css_class("topbar")
+        root.append(header)
+        logo = Gtk.Label(label="󰱱")
+        logo.add_css_class("logo")
+        header.append(logo)
+        titles = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        title = Gtk.Label(label="Emojis", xalign=0)
+        title.add_css_class("title")
+        subtitle = Gtk.Label(label="Caelestia Emoji Pro", xalign=0)
+        subtitle.add_css_class("muted")
+        titles.append(title)
+        titles.append(subtitle)
+        header.append(titles)
+        spacer = Gtk.Box()
+        spacer.set_hexpand(True)
+        header.append(spacer)
+        self.search = Gtk.SearchEntry(placeholder_text="Rechercher un emoji, un mot, :), nf-cod…")
+        self.search.set_size_request(360, -1)
+        self.search.connect("search-changed", lambda *_: self.queue_filter())
+        self.search.connect("activate", lambda *_: self.insert_selected())
+        header.append(self.search)
+        close = Gtk.Button(label="󰅖")
+        close.add_css_class("icon-button")
+        close.set_tooltip_text("Fermer")
+        close.connect("clicked", lambda *_: self.window.close())
+        header.append(close)
+
+        split = Gtk.Box()
+        split.set_vexpand(True)
+        root.append(split)
+
+        sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        sidebar.add_css_class("sidebar")
+        sidebar.set_size_request(168, -1)
+        # Les libellés extensibles ne doivent pas élargir la barre latérale
+        sidebar.set_hexpand(False)
+        split.append(sidebar)
+        section = Gtk.Label(label="CATÉGORIES", xalign=0)
+        section.add_css_class("section-label")
+        sidebar.append(section)
+
+        counts = self.category_counts()
+        group = None
+        for key, icon, name in CATEGORIES:
+            button = Gtk.ToggleButton()
+            if group is not None:
+                button.set_group(group)
+            group = group or button
+            button.add_css_class("category")
+            row = Gtk.Box(spacing=10)
+            row.append(Gtk.Label(label=icon))
+            label = Gtk.Label(label=name, xalign=0)
+            label.set_hexpand(True)
+            row.append(label)
+            count = Gtk.Label(label=str(counts.get(key, 0)))
+            count.add_css_class("count")
+            row.append(count)
+            button.set_child(row)
+            button.connect("toggled", self.category_changed, key)
+            sidebar.append(button)
+            self.category_buttons[key] = (button, count)
+
+        center = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        center.set_hexpand(True)
+        center.add_css_class("list-panel")
+        split.append(center)
+        self.result_label = Gtk.Label(label="Chargement…", xalign=0)
+        self.result_label.add_css_class("result-label")
+        center.append(self.result_label)
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_vexpand(True)
+        self.flow = Gtk.FlowBox()
+        self.flow.set_valign(Gtk.Align.START)
+        self.flow.set_max_children_per_line(16)
+        self.flow.set_min_children_per_line(4)
+        self.flow.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        self.flow.set_activate_on_single_click(True)
+        self.flow.add_css_class("emoji-grid")
+        self.flow.connect("child-activated", self.child_activated)
+        self.flow.connect("selected-children-changed", self.selection_changed)
+        scroll.set_child(self.flow)
+        center.append(scroll)
+
+        self.status = Gtk.Label(
+            label="Clic : insérer  •  Entrée : insérer  •  Échap : fermer"
+        )
+        self.status.add_css_class("statusbar")
+        root.append(self.status)
+
+        keys = Gtk.EventControllerKey()
+        keys.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        keys.connect("key-pressed", self.key_pressed)
+        self.window.add_controller(keys)
+        self.category_buttons[self.category][0].set_active(True)
+
+    def category_counts(self) -> dict[str, int]:
+        counts = {key: 0 for key, *_ in CATEGORIES}
+        counts["recents"] = len(self.recents)
+        for item in self.items:
+            counts[item.category] = counts.get(item.category, 0) + 1
+        return counts
+
+    def update_counts(self) -> None:
+        counts = self.category_counts()
+        for key, (_button, label) in self.category_buttons.items():
+            label.set_text(str(counts.get(key, 0)))
+
+    def on_close(self, *_args) -> bool:
+        if self.filter_source:
+            GLib.source_remove(self.filter_source)
+            self.filter_source = 0
+        self.save()
+        self.window = None
+        GLib.idle_add(self.quit)
+        return False
+
+    def save(self) -> None:
+        save_state({"recents": self.recents, "favorites": self.favorites})
+
+    def category_changed(self, button: Gtk.ToggleButton, key: str) -> None:
+        if button.get_active() and hasattr(self, "flow"):
+            self.category = key
+            self.apply_filter()
+
+    def queue_filter(self) -> None:
+        if self.filter_source:
+            GLib.source_remove(self.filter_source)
+        self.filter_source = GLib.timeout_add(50, self.flush_filter)
+
+    def flush_filter(self) -> bool:
+        self.filter_source = 0
+        self.apply_filter()
+        return GLib.SOURCE_REMOVE
+
+    def current_pool(self) -> list[EmojiItem]:
+        query = self.search.get_text().strip().casefold()
+        if query:
+            return [item for item in self.items if query in item.search]
+        if self.category == "recents":
+            pool = []
+            for glyph in self.recents:
+                item = self.by_glyph.get(glyph)
+                if item:
+                    pool.append(item)
+            return pool
+        return [item for item in self.items if item.category == self.category]
+
+    def apply_filter(self) -> None:
+        pool = self.current_pool()
+        truncated = len(pool) > MAX_VISIBLE
+        self.filtered = pool[:MAX_VISIBLE]
+        self.rebuild_grid()
+        total = len(pool)
+        shown = len(self.filtered)
+        if truncated:
+            self.result_label.set_text(f"{shown} / {total} · affine la recherche pour voir le reste")
+        else:
+            self.result_label.set_text(f"{shown} emoji{'s' if shown != 1 else ''}")
+
+    def rebuild_grid(self) -> None:
+        while child := self.flow.get_first_child():
+            self.flow.remove(child)
+        self.cells = []
+        for item in self.filtered:
+            child = Gtk.FlowBoxChild()
+            child.item = item
+            glyph = Gtk.Label(label=item.glyph)
+            glyph.add_css_class("emoji-cell")
+            glyph.set_size_request(CELL, CELL)
+            glyph.set_tooltip_text(f"{item.glyph}  {item.label}")
+            child.set_child(glyph)
+            self.flow.append(child)
+            self.cells.append(child)
+        if self.cells:
+            self.flow.select_child(self.cells[0])
+            self.selected = self.cells[0].item
+        else:
+            self.selected = None
+
+    def selection_changed(self, *_args) -> None:
+        selected = self.flow.get_selected_children()
+        if not selected:
+            return
+        item = getattr(selected[0], "item", None)
+        if item is not None:
+            self.selected = item
+
+    def child_activated(self, _flow, child: Gtk.FlowBoxChild) -> None:
+        item = getattr(child, "item", None)
+        if item:
+            self.insert_item(item)
+
+    def insert_selected(self) -> None:
+        if self.selected:
+            self.insert_item(self.selected)
+
+    def insert_item(self, item: EmojiItem) -> None:
+        if not copy_glyph(item.glyph):
+            self.status.set_text("Impossible de copier cet emoji")
+            return
+        self.recents = [item.glyph] + [glyph for glyph in self.recents if glyph != item.glyph]
+        self.recents = self.recents[:MAX_RECENTS]
+        self.save()
+        schedule_paste()
+        if self.window:
+            self.window.close()
+
+    def grid_columns(self) -> int:
+        width = self.flow.get_allocated_width() or 600
+        return max(1, width // CELL)
+
+    def move_selection(self, dx: int, dy: int) -> None:
+        if not self.cells:
+            return
+        selected = self.flow.get_selected_children()
+        index = self.cells.index(selected[0]) if selected and selected[0] in self.cells else 0
+        cols = self.grid_columns()
+        index = max(0, min(len(self.cells) - 1, index + dx + dy * cols))
+        child = self.cells[index]
+        self.flow.select_child(child)
+        adj = None
+        parent = self.flow.get_parent()
+        while parent is not None and not isinstance(parent, Gtk.ScrolledWindow):
+            parent = parent.get_parent()
+        if isinstance(parent, Gtk.ScrolledWindow):
+            adj = parent.get_vadjustment()
+            alloc = child.get_allocation()
+            if adj is not None:
+                top = adj.get_value()
+                bottom = top + adj.get_page_size()
+                if alloc.y < top:
+                    adj.set_value(max(0, alloc.y))
+                elif alloc.y + alloc.height > bottom:
+                    adj.set_value(max(0, alloc.y + alloc.height - adj.get_page_size()))
+        self.selected = child.item
+
+    def key_pressed(self, _controller, keyval, _keycode, state) -> bool:
+        ctrl = bool(state & Gdk.ModifierType.CONTROL_MASK)
+        if keyval == Gdk.KEY_Escape:
+            self.window.close()
+            return True
+        if ctrl and keyval in (Gdk.KEY_f, Gdk.KEY_F):
+            self.search.grab_focus()
+            return True
+        if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+            self.insert_selected()
+            return True
+        if keyval == Gdk.KEY_Right:
+            self.move_selection(1, 0)
+            return True
+        if keyval == Gdk.KEY_Left:
+            self.move_selection(-1, 0)
+            return True
+        if keyval == Gdk.KEY_Down:
+            self.move_selection(0, 1)
+            return True
+        if keyval == Gdk.KEY_Up:
+            self.move_selection(0, -1)
+            return True
+        return False
+
+
+def main() -> int:
+    GLib.set_prgname("caelestia-emoji-pro")
+    return EmojiApp().run()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,13 @@
+/* Couleurs du thème Caelestia pour les outils (presse-papiers, emojis, affichage, recherche…).
+ * Généré automatiquement à chaque changement de thème — ne pas modifier le fichier généré. */
+@define-color t_surface #{{ surface.hex }};
+@define-color t_surface_high #{{ surfaceContainerHigh.hex }};
+@define-color t_on_surface #{{ onSurface.hex }};
+@define-color t_on_surface_variant #{{ onSurfaceVariant.hex }};
+@define-color t_outline #{{ outline.hex }};
+@define-color t_primary #{{ primary.hex }};
+@define-color t_on_primary #{{ onPrimary.hex }};
+@define-color t_primary_container #{{ primaryContainer.hex }};
+@define-color t_secondary #{{ secondary.hex }};
+@define-color t_tertiary #{{ tertiary.hex }};
+@define-color t_error #{{ error.hex }};

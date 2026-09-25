@@ -1,0 +1,285 @@
+/* ==========================================================================
+ * Base de design des outils Caelestia (presse-papiers, emojis, affichage…)
+ * Style « liquid glass » façon macOS. Les couleurs viennent du thème Caelestia
+ * (fichier généré ~/.local/state/caelestia/theme/caelestia-tools.css) et
+ * suivent donc automatiquement le fond d'écran.
+ * Le flou de l'arrière-plan est fourni par Hyprland.
+ * ========================================================================== */
+
+window {
+  background: alpha(@t_surface, 0.52);
+  color: @t_on_surface;
+  font-family: "Rubik", "Inter", sans-serif;
+  font-size: 13px;
+}
+
+/* Voile lumineux en haut, comme une plaque de verre éclairée */
+.app-root {
+  background-color: transparent;
+  background-image: linear-gradient(to bottom, alpha(white, 0.06), alpha(white, 0.012) 28%, transparent 60%);
+}
+
+/* ---------- En-tête ---------- */
+.topbar {
+  min-height: 0;
+  padding: 14px 16px 14px 18px;
+  background: transparent;
+  border-bottom: 1px solid alpha(@t_on_surface, 0.07);
+}
+.logo {
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 11px;
+  font-size: 18px;
+  color: @t_primary;
+  background: alpha(@t_primary, 0.14);
+  box-shadow: inset 0 1px alpha(white, 0.10);
+}
+.title {
+  font-size: 16px;
+  font-weight: 700;
+  color: @t_on_surface;
+}
+.muted {
+  font-size: 11.5px;
+  color: alpha(@t_on_surface_variant, 0.70);
+}
+.section-label {
+  margin: 4px 10px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  color: alpha(@t_on_surface_variant, 0.55);
+}
+
+/* ---------- Champs de saisie ---------- */
+searchentry,
+combobox button {
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 11px;
+  color: @t_on_surface;
+  background: alpha(@t_on_surface, 0.06);
+  border: 1px solid alpha(@t_on_surface, 0.08);
+  box-shadow: inset 0 1px alpha(white, 0.06);
+  transition: all 180ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+searchentry:focus-within {
+  background: alpha(@t_on_surface, 0.08);
+  border-color: alpha(@t_primary, 0.55);
+  box-shadow: 0 0 0 3px alpha(@t_primary, 0.14), inset 0 1px alpha(white, 0.06);
+}
+searchentry > text > placeholder {
+  color: alpha(@t_on_surface_variant, 0.45);
+}
+
+/* ---------- Boutons ---------- */
+button {
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 10px;
+  color: @t_on_surface;
+  background: alpha(@t_on_surface, 0.06);
+  border: none;
+  box-shadow: inset 0 1px alpha(white, 0.06);
+  transition: all 160ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+button:hover { background: alpha(@t_on_surface, 0.10); }
+button:active { background: alpha(@t_on_surface, 0.14); }
+button:disabled { opacity: 0.40; }
+
+.icon-button {
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0;
+  font-size: 15px;
+  color: alpha(@t_on_surface_variant, 0.85);
+  background: transparent;
+  box-shadow: none;
+}
+.icon-button:hover {
+  color: @t_on_surface;
+  background: alpha(@t_on_surface, 0.08);
+}
+
+.suggested-action {
+  color: @t_on_primary;
+  background: @t_primary;
+  font-weight: 600;
+  box-shadow: inset 0 1px alpha(white, 0.25), 0 2px 10px alpha(@t_primary, 0.25);
+}
+.suggested-action:hover { background: mix(@t_primary, white, 0.12); }
+
+.destructive-action {
+  color: @t_error;
+  background: alpha(@t_error, 0.12);
+  box-shadow: none;
+}
+.destructive-action:hover { background: alpha(@t_error, 0.20); }
+
+.danger-flat {
+  color: alpha(@t_error, 0.85);
+  background: transparent;
+  box-shadow: none;
+}
+.danger-flat:hover { background: alpha(@t_error, 0.10); }
+
+/* ---------- Barre latérale ---------- */
+.sidebar {
+  min-width: 0;
+  padding: 14px 10px 12px;
+  background: alpha(@t_on_surface, 0.025);
+  border-right: 1px solid alpha(@t_on_surface, 0.06);
+}
+.category {
+  min-height: 34px;
+  padding: 0 10px;
+  margin: 1px 0;
+  border-radius: 9px;
+  color: alpha(@t_on_surface, 0.85);
+  background: transparent;
+  box-shadow: none;
+  font-weight: 500;
+}
+.category:hover { background: alpha(@t_on_surface, 0.05); }
+.category:checked {
+  color: @t_primary;
+  background: alpha(@t_primary, 0.15);
+  box-shadow: inset 0 1px alpha(white, 0.06);
+  font-weight: 600;
+}
+.count {
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 500;
+  color: alpha(@t_on_surface_variant, 0.55);
+}
+.category:checked .count { color: alpha(@t_primary, 0.85); }
+
+/* ---------- Listes ---------- */
+.list-panel,
+.preview-panel,
+.body,
+.options {
+  background: transparent;
+}
+.result-label {
+  min-height: 34px;
+  padding: 0 16px;
+  font-size: 11px;
+  color: alpha(@t_on_surface_variant, 0.55);
+}
+.history-list {
+  padding: 0 10px 12px;
+  background: transparent;
+}
+.history-list row {
+  margin: 1px 0;
+  border-radius: 11px;
+  background: transparent;
+  outline: none;
+  transition: background 150ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+.history-list row:hover { background: alpha(@t_on_surface, 0.05); }
+.history-list row:selected {
+  background: alpha(@t_primary, 0.15);
+  box-shadow: inset 0 1px alpha(white, 0.06);
+  outline: none;
+}
+.history-row {
+  min-height: 56px;
+  padding: 7px 10px;
+}
+.item-icon {
+  min-width: 38px;
+  min-height: 38px;
+  border-radius: 10px;
+  font-size: 16px;
+  color: alpha(@t_on_surface_variant, 0.9);
+  background: alpha(@t_on_surface, 0.06);
+}
+.history-list row:selected .item-icon {
+  color: @t_primary;
+  background: alpha(@t_primary, 0.20);
+}
+.item-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: @t_on_surface;
+}
+.thumbnail {
+  border-radius: 8px;
+  background: alpha(black, 0.25);
+}
+.favorite-star { color: @t_primary; font-size: 15px; }
+
+/* Séparateur redimensionnable : un fil de lumière */
+.split-pane > separator {
+  min-width: 1px;
+  background: alpha(@t_on_surface, 0.07);
+  transition: background 150ms ease;
+}
+.split-pane > separator:hover { background: alpha(@t_primary, 0.55); }
+
+/* ---------- Aperçu ---------- */
+.preview-panel { padding: 20px 20px 16px; }
+.preview-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: @t_on_surface;
+}
+.preview-frame {
+  padding: 12px;
+  border-radius: 14px;
+  background: alpha(@t_on_surface, 0.04);
+  border: 1px solid alpha(@t_on_surface, 0.07);
+  box-shadow: inset 0 1px alpha(white, 0.05);
+}
+.preview-frame textview,
+.preview-frame textview text {
+  padding: 6px;
+  color: @t_on_surface;
+  background: transparent;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+}
+
+/* ---------- Pastilles ---------- */
+.badge {
+  padding: 3px 8px;
+  border-radius: 7px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  color: @t_primary;
+  background: alpha(@t_primary, 0.15);
+}
+.badge-off {
+  color: alpha(@t_on_surface_variant, 0.8);
+  background: alpha(@t_on_surface, 0.08);
+}
+.empty-icon {
+  font-size: 54px;
+  color: alpha(@t_primary, 0.35);
+}
+
+/* ---------- Barre d'état ---------- */
+.statusbar {
+  min-height: 30px;
+  font-size: 10.5px;
+  color: alpha(@t_on_surface_variant, 0.50);
+  background: transparent;
+  border-top: 1px solid alpha(@t_on_surface, 0.05);
+}
+
+/* ---------- Défilement ---------- */
+scrollbar { background: transparent; }
+scrollbar slider {
+  min-width: 4px;
+  min-height: 4px;
+  border-radius: 4px;
+  background: alpha(@t_on_surface, 0.18);
+}
+scrollbar slider:hover { background: alpha(@t_on_surface, 0.30); }

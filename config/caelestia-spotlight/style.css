@@ -1,0 +1,203 @@
+@import url("file://@HOME@/.local/state/caelestia/theme/caelestia-tools.css");
+
+/* Caelestia Spotlight — recherche et calculatrice en liquid glass.
+ * Le flou vient de Hyprland ; ici seuls les fonds sont translucides. */
+
+window {
+  background: alpha(@t_surface, 0.52);
+  color: @t_on_surface;
+  font-family: "Rubik", "Inter", sans-serif;
+}
+
+.spot-root {
+  padding: 10px 12px 10px;
+  background-image: linear-gradient(to bottom, alpha(white, 0.07), alpha(white, 0.015) 30%, transparent 60%);
+}
+
+/* Barre de saisie : grande, sans cadre, comme Spotlight */
+.spot-bar {
+  padding: 6px 8px 12px;
+  border-bottom: 1px solid alpha(white, 0.08);
+}
+.spot-icon {
+  font-size: 24px;
+  color: alpha(@t_on_surface_variant, 0.75);
+  min-width: 30px;
+}
+entry.spot-entry {
+  font-size: 24px;
+  font-weight: 400;
+  min-height: 44px;
+  padding: 0 4px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  outline: none;
+  color: @t_on_surface;
+  caret-color: @t_primary;
+}
+entry.spot-entry > text > placeholder {
+  color: alpha(@t_on_surface_variant, 0.38);
+}
+.spot-spinner {
+  color: alpha(white, 0.6);
+}
+
+/* Calculatrice */
+.calc-result {
+  margin: 10px 10px 0;
+  font-size: 44px;
+  font-weight: 300;
+  color: alpha(@t_on_surface, 0.35);
+  transition: color 160ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+.calc-result.has-result {
+  color: @t_on_surface;
+}
+.spot-hint {
+  margin: 2px 12px 8px;
+  font-size: 11px;
+  color: alpha(@t_on_surface_variant, 0.42);
+}
+.spot-footer {
+  margin: 8px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid alpha(white, 0.06);
+}
+.spot-sep {
+  min-height: 1px;
+  margin: 2px 6px 6px;
+  background: alpha(white, 0.07);
+}
+.section-label {
+  margin: 4px 10px 4px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: alpha(@t_on_surface_variant, 0.38);
+}
+
+/* Liste des résultats */
+list.spot-list {
+  background: transparent;
+  margin-top: 8px;
+}
+list.spot-list > row {
+  margin: 2px 0;
+  padding: 0;
+  border-radius: 12px;
+  background: transparent;
+  transition: background 160ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+list.spot-list > row:hover {
+  background: alpha(white, 0.06);
+}
+list.spot-list > row:selected {
+  background: alpha(@t_primary, 0.18);
+  box-shadow: inset 0 1px alpha(white, 0.12);
+}
+
+.result-row { padding: 9px 14px; }
+.card-row   { padding: 10px 14px; }
+.history-row { padding: 8px 14px; }
+
+.row-icon {
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 10px;
+  font-size: 18px;
+  color: @t_primary;
+  background: alpha(white, 0.07);
+  box-shadow: inset 0 1px alpha(white, 0.08);
+}
+.row-domain {
+  font-size: 11px;
+  color: alpha(@t_primary, 0.75);
+}
+.row-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: @t_on_surface;
+}
+.row-snippet {
+  font-size: 12px;
+  color: alpha(@t_on_surface, 0.62);
+}
+.calc-inline {
+  font-size: 22px;
+  font-weight: 500;
+  color: @t_on_surface;
+}
+
+/* Carte « meilleur résultat » (Wikipédia) */
+.tophit {
+  margin: 2px 0 6px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: alpha(white, 0.06);
+  border: 1px solid alpha(white, 0.08);
+  box-shadow: inset 0 1px alpha(white, 0.10);
+}
+.tophit-title {
+  font-size: 17px;
+  font-weight: 700;
+}
+.tophit-text {
+  font-size: 12.5px;
+  color: alpha(@t_on_surface, 0.78);
+}
+.badge {
+  padding: 2px 8px;
+  border-radius: 7px;
+  font-size: 9px;
+  font-weight: 850;
+  color: @t_primary;
+  background: alpha(@t_primary, 0.22);
+}
+
+/* Historique de la calculatrice */
+.history-expr {
+  font-size: 13px;
+  color: alpha(@t_on_surface, 0.72);
+}
+.history-result {
+  font-size: 14px;
+  font-weight: 600;
+  color: @t_on_surface;
+}
+
+.spot-placeholder {
+  margin: 28px 0;
+  font-size: 13px;
+  color: alpha(@t_on_surface_variant, 0.40);
+}
+
+scrollbar { background: transparent; }
+scrollbar slider {
+  min-width: 4px;
+  border-radius: 4px;
+  background: alpha(white, 0.18);
+}
+
+/* Suggestions pendant la frappe */
+.suggest-row {
+  padding: 7px 14px;
+}
+.suggest-icon {
+  font-size: 15px;
+  color: alpha(@t_on_surface_variant, 0.45);
+  min-width: 20px;
+}
+.suggest-text {
+  font-size: 14px;
+  color: alpha(@t_on_surface, 0.88);
+}
+
+/* Icônes des sites */
+image.favicon {
+  margin-top: 16px;
+  min-width: 20px;
+  min-height: 20px;
+  border-radius: 5px;
+  color: alpha(@t_on_surface_variant, 0.45);
+}

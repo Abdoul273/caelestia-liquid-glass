@@ -1,0 +1,413 @@
+#!/usr/bin/env bash
+# ============================================================================
+#  Caelestia Liquid Glass — installateur
+#  https://github.com/Abdoul273/caelestia-liquid-glass
+#
+#  Usage : ./install [--yes] [--no-deps] [--dry-run] [--help]
+# ============================================================================
+set -euo pipefail
+
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TESTED_SHELL_VERSION="2.3"
+MIN_HYPRLAND="0.56"
+STAMP="$(date +%Y%m%d-%H%M%S)"
+DATA_DIR="$HOME/.local/share/caelestia-liquid-glass"
+BACKUP_DIR="$DATA_DIR/backups/$STAMP"
+MANIFEST="$BACKUP_DIR/manifest"
+
+ASSUME_YES=0
+NO_DEPS=0
+DRY_RUN=0
+
+PACKAGES=(
+    python-gobject gtk4 gdk-pixbuf2   # outils (presse-papiers, emojis, recherche…)
+    wl-clipboard cliphist             # presse-papiers
+    libnotify xdg-utils xdg-user-dirs # notifications, ouverture de liens, dossiers
+    libpulse pipewire-pulse           # bascule audio Bluetooth automatique
+    kitty nautilus sushi              # terminal, fichiers, aperçu rapide (Espace)
+    ttf-jetbrains-mono-nerd noto-fonts-emoji
+)
+AUR_PACKAGES=(ttf-rubik-vf)
+
+# ---------------------------------------------------------------- affichage
+
+if [[ -t 1 ]]; then
+    B=$'\e[1m'; D=$'\e[2m'; R=$'\e[0m'
+    ACC=$'\e[38;5;180m'; OK=$'\e[38;5;114m'; WARN=$'\e[38;5;221m'; ERR=$'\e[38;5;203m'
+else
+    B=; D=; R=; ACC=; OK=; WARN=; ERR=
+fi
+
+title() { printf '\n%s━━ %s %s\n' "$ACC$B" "$1" "$R"; }
+info()  { printf '  %s•%s %s\n' "$ACC" "$R" "$1"; }
+ok()    { printf '  %s✓%s %s\n' "$OK" "$R" "$1"; }
+warn()  { printf '  %s!%s %s\n' "$WARN" "$R" "$1"; }
+fail()  { printf '\n  %s✗ %s%s\n\n' "$ERR$B" "$1" "$R" >&2; exit 1; }
+
+ask() {
+    # ask "question" [défaut o|n] → 0 si oui
+    local question=$1 default=${2:-o} answer hint
+    [[ $default == o ]] && hint="O/n" || hint="o/N"
+    if (( ASSUME_YES )); then
+        [[ $default == o ]]
+        return
+    fi
+    read -r -p "  ${B}?${R} $question [$hint] " answer || true
+    answer=${answer:-$default}
+    [[ ${answer,,} == o* || ${answer,,} == y* ]]
+}
+
+run() {
+    if (( DRY_RUN )); then
+        printf '  %s[simulation]%s %s\n' "$D" "$R" "$*"
+    else
+        "$@"
+    fi
+}
+
+banner() {
+    cat <<EOF
+
+${ACC}${B}   ╭──────────────────────────────────────────────╮
+   │        Caelestia · Liquid Glass              │
+   │   le verre de macOS sur Hyprland + Caelestia │
+   ╰──────────────────────────────────────────────╯${R}
+
+EOF
+}
+
+usage() {
+    cat <<EOF
+Usage : ./install [options]
+
+  --yes       répond « oui » à toutes les questions
+  --no-deps   n'installe aucun paquet (copie seulement la configuration)
+  --dry-run   montre ce qui serait fait, sans rien modifier
+  --help      affiche cette aide
+
+Pour désinstaller : ./uninstall
+EOF
+}
+
+for arg in "$@"; do
+    case $arg in
+        -y|--yes) ASSUME_YES=1 ;;
+        --no-deps) NO_DEPS=1 ;;
+        -n|--dry-run) DRY_RUN=1 ;;
+        -h|--help) usage; exit 0 ;;
+        *) usage; fail "Option inconnue : $arg" ;;
+    esac
+done
+
+# ---------------------------------------------------------------- vérifications
+
+aur_helper() {
+    for h in paru yay; do
+        command -v "$h" >/dev/null 2>&1 && { echo "$h"; return; }
+    done
+}
+
+version_ge() { [[ $(vercmp "$1" "$2") -ge 0 ]]; }
+
+check_system() {
+    title "Vérification du système"
+    [[ $EUID -ne 0 ]] || fail "Ne lance pas l'installateur en root (sans sudo) : il demandera ton mot de passe si besoin."
+    command -v pacman >/dev/null 2>&1 || fail "Cette configuration est prévue pour Arch Linux et ses dérivées (EndeavourOS, CachyOS, Manjaro…)."
+    ok "Arch Linux détecté"
+
+    local hypr
+    hypr=$( { pacman -Q hyprland hyprland-git 2>/dev/null || true; } | awk 'NR==1{print $2}' | sed 's/^[0-9]*://; s/-.*//; s/\.r[0-9].*//')
+    [[ -n $hypr ]] || fail "Hyprland n'est pas installé. Installe d'abord Caelestia (voir le README)."
+    version_ge "$hypr" "$MIN_HYPRLAND" || fail "Hyprland $hypr est trop ancien : il faut au moins la version $MIN_HYPRLAND (configuration en Lua)."
+    ok "Hyprland $hypr"
+}
+
+check_caelestia() {
+    title "Vérification de Caelestia"
+    local missing=()
+    command -v caelestia >/dev/null 2>&1 || missing+=("caelestia-cli")
+    pacman -Q caelestia-shell >/dev/null 2>&1 || pacman -Q caelestia-shell-git >/dev/null 2>&1 || missing+=("caelestia-shell")
+    [[ -f $HOME/.config/hypr/hyprland.lua ]] || missing+=("la configuration Hyprland de Caelestia (~/.config/hypr)")
+
+    if (( ${#missing[@]} == 0 )); then
+        ok "Caelestia est installé"
+    else
+        cat <<EOF
+
+  ${WARN}${B}Caelestia doit être installé avant cette configuration.${R}
+  Il manque : ${missing[*]}
+
+  Caelestia est le bureau (shell) sur lequel s'appuie Liquid Glass.
+  Pour l'installer à la main :
+
+      ${B}paru -S caelestia-cli${R}      ${D}(ou : yay -S caelestia-cli)${R}
+      ${B}caelestia install${R}
+
+  puis redémarre ta session sur Hyprland et relance ${B}./install${R}.
+
+EOF
+        local helper
+        helper=$(aur_helper)
+        if [[ -n $helper ]] && ask "Installer Caelestia automatiquement maintenant avec $helper ?" n; then
+            run "$helper" -S --needed caelestia-cli
+            run caelestia install
+            ok "Caelestia installé"
+            warn "Déconnecte-toi puis reconnecte-toi sur Hyprland, puis relance ./install."
+            exit 0
+        fi
+        exit 1
+    fi
+
+    local shell_version
+    shell_version=$( { pacman -Q caelestia-shell caelestia-shell-git 2>/dev/null || true; } | awk 'NR==1{print $2}' | sed 's/^[0-9]*://; s/-.*//')
+    if [[ $shell_version != "$TESTED_SHELL_VERSION"* ]]; then
+        warn "caelestia-shell $shell_version installé ; cette configuration est prévue pour la version $TESTED_SHELL_VERSION.x."
+        warn "Le shell modifié pourrait ne pas se charger avec une autre version."
+        ask "Continuer quand même ?" n || exit 1
+    else
+        ok "caelestia-shell $shell_version (version prévue)"
+    fi
+}
+
+# ---------------------------------------------------------------- dépendances
+
+install_deps() {
+    title "Dépendances"
+    if (( NO_DEPS )); then
+        info "ignorées (--no-deps)"
+        return
+    fi
+    local missing=()
+    for p in "${PACKAGES[@]}"; do
+        pacman -Qq "$p" >/dev/null 2>&1 || missing+=("$p")
+    done
+    if (( ${#missing[@]} )); then
+        info "À installer : ${missing[*]}"
+        run sudo pacman -S --needed --noconfirm "${missing[@]}"
+    fi
+    ok "Paquets officiels prêts"
+
+    local helper aur_missing=()
+    helper=$(aur_helper)
+    for p in "${AUR_PACKAGES[@]}"; do
+        pacman -Qq "$p" >/dev/null 2>&1 || aur_missing+=("$p")
+    done
+    if (( ${#aur_missing[@]} )); then
+        if [[ -n $helper ]]; then
+            run "$helper" -S --needed --noconfirm "${aur_missing[@]}"
+            ok "Police Rubik installée (AUR)"
+        else
+            warn "Pas de paru/yay : police Rubik non installée (une police de secours sera utilisée)."
+        fi
+    fi
+}
+
+# ---------------------------------------------------------------- copie
+
+backup_path() {
+    # Sauvegarde un fichier/dossier existant avant de le remplacer
+    local target=$1 rel
+    [[ -e $target || -L $target ]] || return 0
+    rel=${target#"$HOME"/}
+    run mkdir -p "$BACKUP_DIR/$(dirname "$rel")"
+    run cp -a "$target" "$BACKUP_DIR/$rel"
+}
+
+record() {
+    (( DRY_RUN )) || echo "$1" >> "$MANIFEST"
+}
+
+fill_placeholders() {
+    # Remplace @HOME@ par le vrai dossier personnel dans les fichiers texte copiés
+    local target=$1
+    (( DRY_RUN )) && return
+    { grep -rIl '@HOME@' "$target" 2>/dev/null || true; } | while read -r f; do
+        sed -i "s|@HOME@|$HOME|g" "$f"
+    done
+}
+
+install_item() {
+    # install_item <source dans le dépôt> <destination>
+    local src="$REPO_DIR/$1" dest=$2
+    backup_path "$dest"
+    run mkdir -p "$(dirname "$dest")"
+    if [[ -d $src ]]; then
+        run rm -rf "$dest"
+        run cp -a "$src" "$dest"
+    else
+        run install -m "$( [[ -x $src ]] && echo 755 || echo 644 )" "$src" "$dest"
+    fi
+    fill_placeholders "$dest"
+    record "$dest"
+}
+
+install_files() {
+    title "Installation de la configuration"
+    run mkdir -p "$BACKUP_DIR"
+    (( DRY_RUN )) || : > "$MANIFEST"
+    info "Sauvegarde de l'existant dans ${D}${BACKUP_DIR/#$HOME/~}${R}"
+
+    install_item config/quickshell/caelestia "$HOME/.config/quickshell/caelestia"
+    ok "Shell Caelestia (liquid glass, Mission Control, animations, traduction française)"
+
+    install_item config/caelestia/hypr-user.lua "$HOME/.config/caelestia/hypr-user.lua"
+    install_item config/caelestia/hypr-vars.lua "$HOME/.config/caelestia/hypr-vars.lua"
+    ok "Réglages Hyprland (raccourcis, gestes, verre, animations)"
+
+    install_item config/caelestia/tools-base.css "$HOME/.config/caelestia/tools-base.css"
+    install_item config/caelestia/templates/caelestia-tools.css "$HOME/.config/caelestia/templates/caelestia-tools.css"
+    for tool in caelestia-clipboard-pro caelestia-display-pro caelestia-emoji-pro caelestia-spotlight caelestia-shortcuts; do
+        install_item "config/$tool/style.css" "$HOME/.config/$tool/style.css"
+    done
+    for script in "$REPO_DIR"/bin/*; do
+        install_item "bin/$(basename "$script")" "$HOME/.local/bin/$(basename "$script")"
+    done
+    ok "Outils : presse-papiers, emojis, projection, recherche, calculatrice, raccourcis"
+
+    install_item config/kitty/kitty.conf "$HOME/.config/kitty/kitty.conf"
+    install_item config/kitty/liquid-glass.conf "$HOME/.config/kitty/liquid-glass.conf"
+    ok "kitty en verre"
+
+    install_item config/gtk-4.0/liquid-glass.css "$HOME/.config/gtk-4.0/liquid-glass.css"
+    backup_path "$HOME/.config/gtk-3.0/liquid-glass.css"
+    run mkdir -p "$HOME/.config/gtk-3.0"
+    run ln -sf "$HOME/.config/gtk-4.0/liquid-glass.css" "$HOME/.config/gtk-3.0/liquid-glass.css"
+    record "$HOME/.config/gtk-3.0/liquid-glass.css"
+    ok "Nautilus en verre"
+
+    for unit in "$REPO_DIR"/config/systemd/user/*; do
+        install_item "config/systemd/user/$(basename "$unit")" "$HOME/.config/systemd/user/$(basename "$unit")"
+    done
+    ok "Services (bascule audio Bluetooth, verre de Nautilus)"
+}
+
+# ---------------------------------------------------------------- finalisation
+
+generate_theme_colours() {
+    # Couleurs du thème Caelestia pour les outils ; ensuite régénérées à chaque changement de thème
+    (( DRY_RUN )) && { info "couleurs du thème : générées à l'installation"; return; }
+    local out="$HOME/.local/state/caelestia/theme/caelestia-tools.css"
+    mkdir -p "$(dirname "$out")"
+    if python3 - "$out" <<'PY' 2>/dev/null; then
+import json, sys
+from pathlib import Path
+from caelestia.utils.theme import gen_replace_dynamic
+scheme = json.loads((Path.home() / ".local/state/caelestia/scheme.json").read_text())
+template = Path.home() / ".config/caelestia/templates/caelestia-tools.css"
+Path(sys.argv[1]).write_text(gen_replace_dynamic(scheme["colours"], template, scheme["mode"]))
+PY
+        ok "Couleurs du thème générées"
+    else
+        # Pas encore de thème Caelestia : couleurs sombres par défaut
+        cat > "$out" <<'CSS'
+@define-color t_surface #131317;
+@define-color t_surface_high #2a292f;
+@define-color t_on_surface #e5e1e7;
+@define-color t_on_surface_variant #c8c5d0;
+@define-color t_outline #918f9a;
+@define-color t_primary #c2c1ff;
+@define-color t_on_primary #2a2a60;
+@define-color t_primary_container #414178;
+@define-color t_secondary #c6c4dd;
+@define-color t_tertiary #e9b9d3;
+@define-color t_error #ffb4ab;
+CSS
+        warn "Aucun thème Caelestia trouvé : couleurs par défaut (elles suivront ton thème dès le premier changement de fond d'écran)"
+    fi
+}
+
+enable_services() {
+    title "Activation"
+    generate_theme_colours
+    if (( ! DRY_RUN )); then
+        for v in gtk-3.0 gtk-4.0; do
+            local f="$HOME/.config/$v/gtk.css"
+            [[ -f $f ]] || continue
+            grep -q "liquid-glass.css" "$f" || printf '\n@import "liquid-glass.css";\n' >> "$f"
+        done
+    fi
+    run systemctl --user daemon-reload
+    run systemctl --user enable --now bt-audio-autoswitch.service caelestia-glass-gtk.path
+    ok "Services activés"
+}
+
+offer_wallpapers() {
+    local pictures dir
+    pictures=$(xdg-user-dir PICTURES 2>/dev/null || true)
+    [[ -n $pictures && $pictures != "$HOME" ]] || pictures="$HOME/Pictures"
+    dir="$pictures/Wallpapers"
+    ask "Télécharger les fonds d'écran de macOS 27 « Golden Gate » dans ${dir/#$HOME/~} ?" o || return 0
+    run mkdir -p "$dir"
+    local base="https://www.iclarified.com/images/news/101095"
+    local -a walls=(
+        "478420:Clair" "478458:Sombre" "479302:Coucher-de-soleil"
+        "479305:Nuit" "480630:Soir" "480631:Jour"
+    )
+    for w in "${walls[@]}"; do
+        local id=${w%%:*} name=${w#*:}
+        if run curl -sfL -A "Mozilla/5.0" -o "$dir/macOS-27-Golden-Gate-$name.jpg" "$base/$id/$id.jpg"; then
+            ok "macOS-27-Golden-Gate-$name.jpg"
+        else
+            warn "Téléchargement impossible : $name"
+        fi
+    done
+}
+
+reload_desktop() {
+    title "Rechargement du bureau"
+    if [[ -z ${HYPRLAND_INSTANCE_SIGNATURE:-} ]]; then
+        info "Tu n'es pas dans une session Hyprland : tout sera actif à ta prochaine connexion."
+        return
+    fi
+    run hyprctl reload >/dev/null
+    run caelestia shell -k >/dev/null 2>&1 || true
+    (( DRY_RUN )) || { sleep 0.5; setsid -f caelestia shell -d >/dev/null 2>&1 || true; }
+    run pkill -USR1 -x kitty || true
+    ok "Hyprland et le shell rechargés"
+}
+
+summary() {
+    cat <<EOF
+
+${OK}${B}  ✓ Caelestia Liquid Glass est installé !${R}
+
+  ${B}Les raccourcis essentiels${R}
+    ${ACC}Super + H${R}         tous les raccourcis (ouvre-la, tu vas l'adorer)
+    ${ACC}Super + Espace${R}    recherche façon Spotlight
+    ${ACC}Super + O${R}         calculatrice
+    ${ACC}Super + Tab${R}       Mission Control   ${D}(ou 3 doigts vers le haut)${R}
+    ${ACC}Super + I${R}         paramètres de Caelestia
+    ${ACC}Super + V${R}         presse-papiers
+    ${ACC}Super + .${R}         emojis
+    ${ACC}Super + P${R}         choisir l'affichage (écran externe)
+
+  ${D}Sauvegarde de ton ancienne config : ${BACKUP_DIR/#$HOME/~}
+  Pour tout désinstaller : ./uninstall${R}
+
+EOF
+}
+
+# ---------------------------------------------------------------- programme
+
+banner
+(( DRY_RUN )) && warn "Mode simulation : rien ne sera modifié."
+check_system
+check_caelestia
+
+title "Ce qui va être fait"
+cat <<EOF
+  • installer les paquets nécessaires (mot de passe demandé une fois)
+  • sauvegarder ta configuration actuelle
+  • remplacer ton shell Caelestia par la version Liquid Glass
+  • installer les réglages Hyprland dans ~/.config/caelestia (jamais dans ~/.config/hypr)
+  • installer les outils, kitty et Nautilus en verre, et les services
+EOF
+ask "On y va ?" o || { info "Installation annulée."; exit 0; }
+
+install_deps
+install_files
+enable_services
+title "Fonds d'écran"
+offer_wallpapers
+reload_desktop
+summary

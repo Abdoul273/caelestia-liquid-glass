@@ -1,0 +1,914 @@
+#!/usr/bin/env python3
+"""Win+P-style display projection for Caelestia / Hyprland."""
+
+from __future__ import annotations
+
+import json
+import re
+import subprocess
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Gdk", "4.0")
+from gi.repository import Gdk, Gio, GLib, Gtk
+
+
+APP_ID = "io.caelestia.DisplayPro"
+STATE_DIR = Path.home() / ".local/state/caelestia-display-pro"
+STATE_FILE = STATE_DIR / "layout.json"
+LAYOUT_LUA = STATE_DIR / "layout.lua"
+CSS_FILE = Path.home() / ".config/caelestia-display-pro/style.css"
+
+MODES = ("internal", "duplicate", "extend", "external")
+POSITIONS = ("left", "right", "up", "down")
+SCALES = (1.0, 1.25, 1.5, 1.75, 2.0)
+
+
+@dataclass
+class Output:
+    name: str
+    connected: bool = False
+    enabled: bool = False
+    internal: bool = False
+    description: str = ""
+    width: int = 0
+    height: int = 0
+    refresh: float = 0.0
+    x: int = 0
+    y: int = 0
+    scale: float = 1.0
+    mirror_of: str = "none"
+    modes: list[str] = field(default_factory=list)
+    disabled: bool = True
+
+    @property
+    def title(self) -> str:
+        if self.internal:
+            return "Écran du PC"
+        if self.name.upper().startswith("HDMI"):
+            tail = self.name.split("-")[-1]
+            return f"HDMI {tail}" if tail.isdigit() else "HDMI"
+        if self.name.upper().startswith(("DP", "DISPLAYPORT")):
+            tail = self.name.split("-")[-1]
+            return f"DisplayPort {tail}" if tail.isdigit() else "DisplayPort"
+        return self.name
+
+    @property
+    def subtitle(self) -> str:
+        bits = [self.name]
+        desc = self.description.strip()
+        if desc and desc not in bits:
+            bits.append(desc)
+        if self.enabled and self.width and self.height:
+            bits.append(f"{self.width}×{self.height}")
+        return " · ".join(bits)
+
+    @property
+    def status(self) -> str:
+        if self.enabled:
+            return "Actif"
+        if self.connected:
+            return "Branché"
+        return "Débranché"
+
+
+def is_internal_name(name: str) -> bool:
+    upper = name.upper()
+    return upper.startswith(("EDP", "LVDS", "DSI"))
+
+
+def command_text(args: list[str], timeout: float = 4) -> str:
+    try:
+        result = subprocess.run(
+            args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+            timeout=timeout,
+            text=True,
+        )
+        return (result.stdout or "").strip()
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
+def hypr_eval(code: str) -> bool:
+    try:
+        result = subprocess.run(
+            ["hyprctl", "eval", code],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+            timeout=4,
+            text=True,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    text = (result.stdout + result.stderr).strip().lower()
+    return result.returncode == 0 and "error" not in text and "fail" not in text
+
+
+def lua_str(value: str) -> str:
+    return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+
+def monitor_spec_lua(spec: dict) -> str:
+    parts: list[str] = []
+    for key, value in spec.items():
+        if value is None:
+            continue
+        if isinstance(value, bool):
+            parts.append(f"{key} = {'true' if value else 'false'}")
+        elif isinstance(value, (int, float)) and not isinstance(value, bool):
+            parts.append(f"{key} = {value}")
+        else:
+            parts.append(f"{key} = {lua_str(str(value))}")
+    return "hl.monitor({ " + ", ".join(parts) + " })"
+
+
+def apply_monitor(spec: dict) -> bool:
+    return hypr_eval(monitor_spec_lua(spec))
+
+
+def drm_outputs() -> list[Output]:
+    root = Path("/sys/class/drm")
+    found: list[Output] = []
+    if not root.exists():
+        return found
+    for path in sorted(root.iterdir()):
+        match = re.match(r"card\d+-(.+)", path.name)
+        if not match or not (path / "status").exists():
+            continue
+        name = match.group(1)
+        status = (path / "status").read_text().strip()
+        enabled = False
+        enabled_file = path / "enabled"
+        if enabled_file.exists():
+            enabled = enabled_file.read_text().strip() == "enabled"
+        modes: list[str] = []
+        modes_file = path / "modes"
+        if modes_file.exists():
+            modes = [line.strip() for line in modes_file.read_text().splitlines() if line.strip()]
+        found.append(Output(
+            name=name,
+            connected=status == "connected",
+            enabled=enabled,
+            internal=is_internal_name(name),
+            modes=modes,
+            disabled=not enabled,
+        ))
+    return found
+
+
+def hypr_outputs(all_outputs: bool = True) -> list[dict]:
+    args = ["hyprctl", "monitors"]
+    if all_outputs:
+        args.append("all")
+    args.append("-j")
+    raw = command_text(args)
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return []
+    return data if isinstance(data, list) else []
+
+
+def detect_outputs() -> list[Output]:
+    merged: dict[str, Output] = {item.name: item for item in drm_outputs()}
+    for info in hypr_outputs(True):
+        name = str(info.get("name") or "")
+        if not name:
+            continue
+        item = merged.get(name) or Output(name=name, internal=is_internal_name(name))
+        item.connected = True
+        item.enabled = not bool(info.get("disabled", False))
+        item.disabled = bool(info.get("disabled", False))
+        item.description = str(info.get("description") or "").strip()
+        item.width = int(info.get("width") or 0)
+        item.height = int(info.get("height") or 0)
+        item.refresh = float(info.get("refreshRate") or 0)
+        item.x = int(info.get("x") or 0)
+        item.y = int(info.get("y") or 0)
+        item.scale = float(info.get("scale") or 1) or 1.0
+        item.mirror_of = str(info.get("mirrorOf") or "none")
+        modes = info.get("availableModes") or []
+        cleaned = []
+        for mode in modes:
+            text = str(mode).replace("Hz", "").strip()
+            if text:
+                cleaned.append(text)
+        if cleaned:
+            item.modes = cleaned
+        merged[name] = item
+    items = list(merged.values())
+    items.sort(key=lambda item: (not item.internal, not item.connected, item.name))
+    return items
+
+
+def internals(outputs: list[Output]) -> list[Output]:
+    return [item for item in outputs if item.internal]
+
+
+def externals(outputs: list[Output], connected_only: bool = False) -> list[Output]:
+    items = [item for item in outputs if not item.internal]
+    if connected_only:
+        items = [item for item in items if item.connected]
+    return items
+
+
+def pick_internal(outputs: list[Output]) -> Output | None:
+    active = [item for item in internals(outputs) if item.enabled]
+    if active:
+        return active[0]
+    items = internals(outputs)
+    return items[0] if items else None
+
+
+def pick_external(outputs: list[Output], preferred: str = "") -> Output | None:
+    connected = externals(outputs, connected_only=True)
+    if preferred:
+        for item in connected:
+            if item.name == preferred:
+                return item
+    enabled = [item for item in connected if item.enabled]
+    if enabled:
+        return enabled[0]
+    return connected[0] if connected else None
+
+
+def guess_position(internal: Output | None, external: Output | None) -> str:
+    if not internal or not external or not internal.enabled or not external.enabled:
+        return "right"
+    internal_w = max(1, int(internal.width / (internal.scale or 1)))
+    internal_h = max(1, int(internal.height / (internal.scale or 1)))
+    external_w = max(1, int(external.width / (external.scale or 1)))
+    external_h = max(1, int(external.height / (external.scale or 1)))
+    if external.x >= internal.x + internal_w - 8:
+        return "right"
+    if external.x + external_w <= internal.x + 8:
+        return "left"
+    if external.y >= internal.y + internal_h - 8:
+        return "down"
+    if external.y + external_h <= internal.y + 8:
+        return "up"
+    return "right"
+
+
+def detect_mode(outputs: list[Output]) -> str:
+    internal = pick_internal(outputs)
+    external = pick_external(outputs)
+    internal_on = bool(internal and internal.enabled)
+    others_on = [item for item in externals(outputs, True) if item.enabled]
+    if internal_on and not others_on:
+        return "internal"
+    if not internal_on and others_on:
+        return "external"
+    if internal_on and others_on:
+        if any(item.mirror_of not in {"", "none"} for item in others_on):
+            return "duplicate"
+        return "extend"
+    return "internal"
+
+
+def load_state() -> dict:
+    try:
+        data = json.loads(STATE_FILE.read_text())
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_state(state: dict) -> None:
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2))
+
+
+def write_layout_lua(specs: list[dict]) -> None:
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    lines = ["-- Generated by caelestia-display-pro. Do not edit.\n"]
+    for spec in specs:
+        lines.append(monitor_spec_lua(spec) + "\n")
+    LAYOUT_LUA.write_text("".join(lines))
+
+
+def position_value(kind: str) -> str:
+    return {
+        "left": "auto-left",
+        "right": "auto-right",
+        "up": "auto-up",
+        "down": "auto-down",
+    }.get(kind, "auto-right")
+
+
+def mode_label(kind: str, output: Output | None = None) -> str:
+    names = {
+        "internal": "Écran du PC uniquement",
+        "duplicate": "Dupliquer",
+        "extend": "Étendre",
+        "external": "Deuxième écran uniquement",
+    }
+    label = names.get(kind, kind)
+    if kind == "external" and output:
+        return f"{output.title} uniquement"
+    return label
+
+
+def apply_layout(
+    mode: str,
+    outputs: list[Output] | None = None,
+    state: dict | None = None,
+) -> tuple[bool, str]:
+    outputs = outputs or detect_outputs()
+    state = dict(state or load_state())
+    internal = pick_internal(outputs)
+    if internal is None:
+        return False, "Aucun écran interne détecté"
+    external = pick_external(outputs, str(state.get("external") or ""))
+    position = str(state.get("position") or "right")
+    if position not in POSITIONS:
+        position = "right"
+    scale = float(state.get("scale") or 1)
+    if scale not in SCALES:
+        scale = 1.0
+    resolution = str(state.get("resolution") or "preferred")
+    if resolution in {"", "preferred"}:
+        resolution = "preferred"
+
+    specs: list[dict] = []
+    others = [item for item in externals(outputs) if not external or item.name != external.name]
+
+    if mode == "internal":
+        specs.append({
+            "output": internal.name,
+            "mode": "preferred",
+            "position": "0x0",
+            "scale": 1,
+            "disabled": False,
+        })
+        for item in externals(outputs):
+            specs.append({"output": item.name, "disabled": True})
+        message = "Écran du PC uniquement"
+    else:
+        if external is None or not external.connected:
+            return False, "Branche un écran HDMI ou DisplayPort"
+        if mode == "duplicate":
+            specs.append({
+                "output": internal.name,
+                "mode": "preferred",
+                "position": "0x0",
+                "scale": 1,
+                "disabled": False,
+            })
+            specs.append({
+                "output": external.name,
+                "mode": resolution,
+                "position": "auto",
+                "scale": scale,
+                "mirror": internal.name,
+                "disabled": False,
+            })
+            message = f"Dupliqué sur {external.title}"
+        elif mode == "extend":
+            specs.append({
+                "output": internal.name,
+                "mode": "preferred",
+                "position": "0x0",
+                "scale": 1,
+                "disabled": False,
+            })
+            specs.append({
+                "output": external.name,
+                "mode": resolution,
+                "position": position_value(position),
+                "scale": scale,
+                "disabled": False,
+            })
+            side = {"left": "à gauche", "right": "à droite", "up": "au-dessus", "down": "en dessous"}[position]
+            message = f"Étendu · {external.title} {side}"
+        elif mode == "external":
+            specs.append({
+                "output": external.name,
+                "mode": resolution,
+                "position": "0x0",
+                "scale": scale,
+                "disabled": False,
+            })
+            specs.append({"output": internal.name, "disabled": True})
+            message = f"{external.title} uniquement"
+        else:
+            return False, "Mode inconnu"
+        for item in others:
+            specs.append({"output": item.name, "disabled": True})
+
+    # Enable the destination first so "HDMI only" never blacks the laptop
+    # before the external output is actually up.
+    ordered = sorted(specs, key=lambda spec: spec.get("disabled") is True)
+    ok = True
+    target = external.name if external else ""
+    for spec in ordered:
+        if spec.get("disabled") is True:
+            apply_monitor({"output": spec["output"], "disabled": True})
+            continue
+        # Drop leftover mirroring when leaving "Duplicate".
+        if mode in {"extend", "external"} and spec.get("output") == target:
+            apply_monitor({"output": spec["output"], "disabled": True})
+        if not apply_monitor(spec):
+            ok = False
+
+    if mode == "external":
+        still = detect_outputs()
+        dest = pick_external(still, external.name if external else "")
+        if dest is None or not dest.enabled:
+            apply_monitor({
+                "output": internal.name,
+                "mode": "preferred",
+                "position": "0x0",
+                "scale": 1,
+                "disabled": False,
+            })
+            return False, "Impossible d’activer l’écran externe, PC conservé"
+
+    state.update({
+        "mode": mode,
+        "external": external.name if external else "",
+        "position": position,
+        "scale": scale,
+        "resolution": resolution,
+    })
+    save_state(state)
+    write_layout_lua(specs)
+    return ok, message
+
+
+def apply_saved() -> int:
+    state = load_state()
+    outputs = detect_outputs()
+    mode = str(state.get("mode") or "internal")
+    if mode != "internal" and not externals(outputs, connected_only=True):
+        apply_layout("internal", outputs, {"mode": "internal"})
+        return 0
+    if not state:
+        return 0
+    apply_layout(mode, outputs, state)
+    return 0
+
+
+class DisplayApp(Gtk.Application):
+    def __init__(self) -> None:
+        super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
+        self.window: Gtk.ApplicationWindow | None = None
+        self.outputs: list[Output] = []
+        self.mode = "internal"
+        self.position = "right"
+        self.scale = 1.0
+        self.resolution = "preferred"
+        self.external_name = ""
+        self.mode_buttons: dict[str, Gtk.ToggleButton] = {}
+        self.position_buttons: dict[str, Gtk.ToggleButton] = {}
+        self.applying = False
+        self.poll_source = 0
+
+    def do_activate(self) -> None:
+        if self.window is not None:
+            self.window.close()
+            self.quit()
+            return
+        self.build_window()
+        self.refresh(initial=True)
+        self.window.present()
+
+    def load_css(self) -> None:
+        provider = Gtk.CssProvider()
+        try:
+            provider.load_from_path(str(CSS_FILE))
+            Gtk.StyleContext.add_provider_for_display(
+                Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+        except GLib.Error:
+            pass
+
+    def build_window(self) -> None:
+        self.load_css()
+        self.window = Gtk.ApplicationWindow(application=self)
+        self.window.set_title("Projection")
+        self.window.set_default_size(540, 720)
+        self.window.set_size_request(460, 560)
+        self.window.connect("close-request", self.on_close)
+
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        root.add_css_class("app-root")
+        self.window.set_child(root)
+
+        header = Gtk.Box(spacing=14)
+        header.add_css_class("topbar")
+        root.append(header)
+        logo = Gtk.Label(label="󰍹")
+        logo.add_css_class("logo")
+        header.append(logo)
+        titles = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        title = Gtk.Label(label="Projection", xalign=0)
+        title.add_css_class("title")
+        subtitle = Gtk.Label(label="Écran PC · HDMI · DisplayPort", xalign=0)
+        subtitle.add_css_class("muted")
+        titles.append(title)
+        titles.append(subtitle)
+        header.append(titles)
+        spacer = Gtk.Box()
+        spacer.set_hexpand(True)
+        header.append(spacer)
+        refresh = Gtk.Button(label="󰑐")
+        refresh.add_css_class("icon-button")
+        refresh.set_tooltip_text("Actualiser les écrans")
+        refresh.connect("clicked", lambda *_: self.refresh())
+        header.append(refresh)
+        close = Gtk.Button(label="󰅖")
+        close.add_css_class("icon-button")
+        close.set_tooltip_text("Fermer")
+        close.connect("clicked", lambda *_: self.window.close())
+        header.append(close)
+
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_vexpand(True)
+        root.append(scroll)
+        body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        body.add_css_class("body")
+        scroll.set_child(body)
+
+        self.banner = Gtk.Label(xalign=0, wrap=True)
+        self.banner.add_css_class("banner")
+        self.banner.set_visible(False)
+        body.append(self.banner)
+
+        section = Gtk.Label(label="MODE DE PROJECTION", xalign=0)
+        section.add_css_class("section-label")
+        body.append(section)
+
+        grid = Gtk.Grid()
+        grid.set_column_spacing(10)
+        grid.set_row_spacing(10)
+        grid.set_column_homogeneous(True)
+        body.append(grid)
+
+        cards = [
+            ("internal", "󰌢", "Écran du PC", "Le portable uniquement"),
+            ("duplicate", "󰍺", "Dupliquer", "Le même image partout"),
+            ("extend", "󰍹", "Étendre", "Un bureau plus large"),
+            ("external", "󰡁", "Deuxième écran", "HDMI / DP uniquement"),
+        ]
+        group = None
+        for index, (key, icon, title, hint) in enumerate(cards):
+            button = Gtk.ToggleButton()
+            button.add_css_class("mode-card")
+            if group is not None:
+                button.set_group(group)
+            group = group or button
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+            box.set_halign(Gtk.Align.START)
+            glyph = Gtk.Label(label=icon, xalign=0)
+            glyph.add_css_class("mode-icon")
+            name = Gtk.Label(label=title, xalign=0)
+            name.add_css_class("mode-title")
+            detail = Gtk.Label(label=hint, xalign=0)
+            detail.add_css_class("muted")
+            box.append(glyph)
+            box.append(name)
+            box.append(detail)
+            button.set_child(box)
+            button.connect("toggled", self.mode_toggled, key)
+            grid.attach(button, index % 2, index // 2, 1, 1)
+            self.mode_buttons[key] = button
+
+        pos_label = Gtk.Label(label="POSITION DE L’ÉCRAN EXTERNE", xalign=0)
+        pos_label.add_css_class("section-label")
+        body.append(pos_label)
+        pos_row = Gtk.Box(spacing=8)
+        pos_row.add_css_class("choice-row")
+        body.append(pos_row)
+        pos_group = None
+        for key, icon, title in (
+            ("left", "󰁍", "Gauche"),
+            ("right", "󰁔", "Droite"),
+            ("up", "󰁝", "Haut"),
+            ("down", "󰁅", "Bas"),
+        ):
+            button = Gtk.ToggleButton(label=f"{icon}  {title}")
+            button.add_css_class("choice")
+            button.set_hexpand(True)
+            if pos_group is not None:
+                button.set_group(pos_group)
+            pos_group = pos_group or button
+            button.connect("toggled", self.position_toggled, key)
+            pos_row.append(button)
+            self.position_buttons[key] = button
+
+        out_label = Gtk.Label(label="ÉCRANS", xalign=0)
+        out_label.add_css_class("section-label")
+        body.append(out_label)
+        self.output_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        body.append(self.output_list)
+
+        opts = Gtk.Grid()
+        opts.set_column_spacing(10)
+        opts.set_row_spacing(10)
+        opts.add_css_class("options")
+        body.append(opts)
+
+        opts.attach(self.option_label("Écran externe"), 0, 0, 1, 1)
+        self.external_combo = Gtk.ComboBoxText()
+        self.external_combo.connect("changed", self.external_changed)
+        opts.attach(self.external_combo, 1, 0, 1, 1)
+
+        opts.attach(self.option_label("Résolution"), 0, 1, 1, 1)
+        self.resolution_combo = Gtk.ComboBoxText()
+        self.resolution_combo.connect("changed", self.resolution_changed)
+        opts.attach(self.resolution_combo, 1, 1, 1, 1)
+
+        opts.attach(self.option_label("Échelle"), 0, 2, 1, 1)
+        self.scale_combo = Gtk.ComboBoxText()
+        for value in SCALES:
+            percent = int(value * 100)
+            self.scale_combo.append(str(value), f"{percent} %")
+        self.scale_combo.set_active_id("1.0")
+        self.scale_combo.connect("changed", self.scale_changed)
+        opts.attach(self.scale_combo, 1, 2, 1, 1)
+
+        self.status = Gtk.Label(
+            label="1–4 : choisir un mode  •  ←→ : position  •  Échap : fermer"
+        )
+        self.status.add_css_class("statusbar")
+        root.append(self.status)
+
+        keys = Gtk.EventControllerKey()
+        keys.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        keys.connect("key-pressed", self.key_pressed)
+        self.window.add_controller(keys)
+        self.poll_source = GLib.timeout_add_seconds(2, self.poll_outputs)
+
+    def option_label(self, text: str) -> Gtk.Label:
+        label = Gtk.Label(label=text, xalign=0)
+        label.add_css_class("muted")
+        return label
+
+    def on_close(self, *_args) -> bool:
+        if self.poll_source:
+            GLib.source_remove(self.poll_source)
+            self.poll_source = 0
+        self.window = None
+        GLib.idle_add(self.quit)
+        return False
+
+    def poll_outputs(self) -> bool:
+        if self.window is None:
+            return GLib.SOURCE_REMOVE
+        current = tuple((item.name, item.connected, item.enabled) for item in self.outputs)
+        detected = detect_outputs()
+        nxt = tuple((item.name, item.connected, item.enabled) for item in detected)
+        if nxt != current:
+            self.refresh()
+        return GLib.SOURCE_CONTINUE
+
+    def refresh(self, initial: bool = False) -> None:
+        self.applying = True
+        self.outputs = detect_outputs()
+        saved = load_state()
+        self.mode = detect_mode(self.outputs)
+        if initial and saved.get("mode") in MODES:
+            self.mode = str(saved["mode"])
+        internal = pick_internal(self.outputs)
+        external = pick_external(self.outputs, str(saved.get("external") or self.external_name))
+        self.external_name = external.name if external else ""
+        self.position = guess_position(internal, external)
+        if saved.get("position") in POSITIONS:
+            self.position = str(saved["position"])
+        self.scale = float(saved.get("scale") or (external.scale if external and external.enabled else 1) or 1)
+        if self.scale not in SCALES:
+            self.scale = 1.0
+        self.resolution = str(saved.get("resolution") or "preferred")
+        self.rebuild_outputs()
+        self.rebuild_combos()
+        self.sync_buttons()
+        connected = externals(self.outputs, True)
+        if not connected:
+            self.banner.set_text("Aucun écran HDMI ou DisplayPort n’est branché. Branche un câble, le panneau se mettra à jour tout seul.")
+            self.banner.set_visible(True)
+        else:
+            names = ", ".join(item.title for item in connected)
+            self.banner.set_text(f"Écran externe détecté : {names}")
+            self.banner.set_visible(True)
+        self.applying = False
+
+    def rebuild_outputs(self) -> None:
+        while child := self.output_list.get_first_child():
+            self.output_list.remove(child)
+        if not self.outputs:
+            empty = Gtk.Label(label="Aucun écran détecté", xalign=0)
+            empty.add_css_class("muted")
+            self.output_list.append(empty)
+            return
+        for item in self.outputs:
+            row = Gtk.Box(spacing=10)
+            row.add_css_class("output-row")
+            if item.enabled:
+                row.add_css_class("output-active")
+            icon = Gtk.Label(label="󰌢" if item.internal else ("󰡁" if "HDMI" in item.name.upper() else "󰍹"))
+            icon.add_css_class("output-icon")
+            row.append(icon)
+            texts = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            texts.set_hexpand(True)
+            title = Gtk.Label(label=item.title, xalign=0)
+            title.add_css_class("item-title")
+            texts.append(title)
+            sub = Gtk.Label(label=item.subtitle, xalign=0, ellipsize=3)
+            sub.add_css_class("muted")
+            texts.append(sub)
+            row.append(texts)
+            pill = Gtk.Label(label=item.status)
+            pill.add_css_class("badge")
+            if not item.connected:
+                pill.add_css_class("badge-off")
+            row.append(pill)
+            self.output_list.append(row)
+
+    def rebuild_combos(self) -> None:
+        self.external_combo.remove_all()
+        connected = externals(self.outputs, True)
+        candidates = connected or externals(self.outputs)
+        for item in candidates:
+            suffix = " · branché" if item.connected else " · débranché"
+            self.external_combo.append(item.name, item.title + suffix)
+        if self.external_name:
+            self.external_combo.set_active_id(self.external_name)
+        elif candidates:
+            self.external_combo.set_active(0)
+            self.external_name = candidates[0].name
+
+        self.resolution_combo.remove_all()
+        self.resolution_combo.append("preferred", "Préférée (auto)")
+        selected = next((item for item in self.outputs if item.name == self.external_name), None)
+        valid = {"preferred"}
+        if selected:
+            for mode in selected.modes:
+                if mode not in valid:
+                    self.resolution_combo.append(mode, mode.replace("@", " @ "))
+                    valid.add(mode)
+        if self.resolution not in valid:
+            self.resolution = "preferred"
+        self.resolution_combo.set_active_id(self.resolution)
+        self.scale_combo.set_active_id(str(self.scale))
+
+    def sync_buttons(self) -> None:
+        connected = bool(externals(self.outputs, True))
+        for key, button in self.mode_buttons.items():
+            button.set_sensitive(key == "internal" or connected)
+            if button.get_active() != (key == self.mode):
+                button.set_active(key == self.mode)
+        for key, button in self.position_buttons.items():
+            button.set_sensitive(self.mode == "extend" and connected)
+            if button.get_active() != (key == self.position):
+                button.set_active(key == self.position)
+        self.external_combo.set_sensitive(connected)
+        self.resolution_combo.set_sensitive(connected and self.mode != "internal")
+        self.scale_combo.set_sensitive(connected and self.mode != "internal")
+
+    def current_state(self) -> dict:
+        return {
+            "mode": self.mode,
+            "external": self.external_name,
+            "position": self.position,
+            "scale": self.scale,
+            "resolution": self.resolution,
+        }
+
+    def apply_current(self, announce: bool = True) -> None:
+        if self.applying:
+            return
+        self.applying = True
+        ok, message = apply_layout(self.mode, detect_outputs(), self.current_state())
+        self.applying = False
+        self.refresh()
+        if announce:
+            self.flash(message if ok else f"Échec : {message}")
+            if ok:
+                subprocess.Popen(
+                    ["notify-send", "-u", "low", "-a", "Caelestia", "-i", "video-display", "Projection", message],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+
+    def mode_toggled(self, button: Gtk.ToggleButton, key: str) -> None:
+        if self.applying or not button.get_active():
+            return
+        self.mode = key
+        self.sync_buttons()
+        self.apply_current()
+
+    def position_toggled(self, button: Gtk.ToggleButton, key: str) -> None:
+        if self.applying or not button.get_active():
+            return
+        self.position = key
+        if self.mode == "extend":
+            self.apply_current()
+
+    def external_changed(self, combo: Gtk.ComboBoxText) -> None:
+        ident = combo.get_active_id()
+        if self.applying or not ident or ident == self.external_name:
+            return
+        self.external_name = ident
+        if self.mode != "internal":
+            self.apply_current()
+
+    def resolution_changed(self, combo: Gtk.ComboBoxText) -> None:
+        ident = combo.get_active_id()
+        if self.applying or not ident or ident == self.resolution:
+            return
+        self.resolution = ident
+        if self.mode != "internal":
+            self.apply_current()
+
+    def scale_changed(self, combo: Gtk.ComboBoxText) -> None:
+        ident = combo.get_active_id()
+        if self.applying or not ident:
+            return
+        try:
+            value = float(ident)
+        except ValueError:
+            return
+        if value == self.scale:
+            return
+        self.scale = value
+        if self.mode != "internal":
+            self.apply_current()
+
+    def flash(self, message: str) -> None:
+        self.status.set_text(message)
+        GLib.timeout_add_seconds(3, self.restore_status)
+
+    def restore_status(self) -> bool:
+        self.status.set_text("1–4 : choisir un mode  •  ←→ : position  •  Échap : fermer")
+        return GLib.SOURCE_REMOVE
+
+    def cycle_mode(self, delta: int) -> None:
+        available = [key for key in MODES if self.mode_buttons[key].get_sensitive()]
+        if not available:
+            return
+        index = available.index(self.mode) if self.mode in available else 0
+        nxt = available[(index + delta) % len(available)]
+        self.mode_buttons[nxt].set_active(True)
+
+    def cycle_position(self, delta: int) -> None:
+        if self.mode != "extend":
+            return
+        index = POSITIONS.index(self.position) if self.position in POSITIONS else 1
+        nxt = POSITIONS[(index + delta) % len(POSITIONS)]
+        self.position_buttons[nxt].set_active(True)
+
+    def key_pressed(self, _controller, keyval, _keycode, _state) -> bool:
+        mapping = {
+            Gdk.KEY_1: "internal",
+            Gdk.KEY_KP_1: "internal",
+            Gdk.KEY_2: "duplicate",
+            Gdk.KEY_KP_2: "duplicate",
+            Gdk.KEY_3: "extend",
+            Gdk.KEY_KP_3: "extend",
+            Gdk.KEY_4: "external",
+            Gdk.KEY_KP_4: "external",
+        }
+        if keyval == Gdk.KEY_Escape:
+            self.window.close()
+            return True
+        if keyval in mapping:
+            key = mapping[keyval]
+            if self.mode_buttons[key].get_sensitive():
+                self.mode_buttons[key].set_active(True)
+            return True
+        if keyval in (Gdk.KEY_Down, Gdk.KEY_Right, Gdk.KEY_Tab):
+            if keyval in (Gdk.KEY_Left, Gdk.KEY_Right) and self.mode == "extend":
+                self.cycle_position(1 if keyval == Gdk.KEY_Right else -1)
+            else:
+                self.cycle_mode(1 if keyval in (Gdk.KEY_Down, Gdk.KEY_Right, Gdk.KEY_Tab) else -1)
+            return True
+        if keyval in (Gdk.KEY_Up, Gdk.KEY_Left):
+            if keyval == Gdk.KEY_Left and self.mode == "extend":
+                self.cycle_position(-1)
+            else:
+                self.cycle_mode(-1)
+            return True
+        return False
+
+
+def main() -> int:
+    if "--apply-saved" in sys.argv:
+        return apply_saved()
+    GLib.set_prgname("caelestia-display-pro")
+    return DisplayApp().run()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

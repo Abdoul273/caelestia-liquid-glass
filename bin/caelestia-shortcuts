@@ -1,0 +1,316 @@
+#!/usr/bin/env python3
+"""Aide-mémoire de tous les raccourcis du système (Super + H).
+
+Relancer la commande ferme la fenêtre. Tape pour filtrer.
+Pour ajouter un raccourci, complète la liste SHORTCUTS ci-dessous.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Gdk", "4.0")
+from gi.repository import Gdk, Gio, GLib, Gtk, Pango
+
+
+CSS_FILE = Path.home() / ".config/caelestia-shortcuts/style.css"
+
+# (catégorie, icône, [(touches, description), …])
+# Plusieurs combinaisons pour la même action sont séparées par « | ».
+SHORTCUTS = [
+    ("Essentiels", "󰌌", [
+        ("Super", "Ouvrir le lanceur d'applications (appui seul, puis relâcher)"),
+        ("Super + Espace", "Recherche façon Spotlight (web + calculs)"),
+        ("Super + O", "Calculatrice rapide"),
+        ("Super + Tab", "Mission Control : voir toutes les fenêtres et bureaux"),
+        ("Super + H", "Afficher cette fenêtre des raccourcis"),
+        ("Super + I", "Ouvrir les paramètres de Caelestia"),
+        ("Super + Retour arrière", "Menu éteindre / redémarrer / verrouiller"),
+        ("Super + L", "Verrouiller l'écran"),
+        ("Super + Q", "Fermer la fenêtre active"),
+    ]),
+    ("Applications", "󰀻", [
+        ("Super + T", "Terminal (kitty)"),
+        ("Super + W", "Navigateur web"),
+        ("Super + E", "Fichiers (Nautilus)"),
+        ("Super + C", "Éditeur de code"),
+        ("Ctrl + Alt + V", "Réglages audio (pwvucontrol)"),
+        ("Super + P", "Choisir l'affichage (écran externe, dupliquer…)"),
+    ]),
+    ("Panneaux du shell", "󰕮", [
+        ("Super + A", "Tableau de bord (météo, calendrier, média…)"),
+        ("Super + N", "Barre latérale et centre de notifications"),
+        ("Super + K", "Afficher/masquer lanceur, tableau de bord et OSD ensemble"),
+        ("Ctrl + Alt + C", "Effacer toutes les notifications"),
+    ]),
+    ("Bureaux", "󰍹", [
+        ("Super + 1 … 0", "Aller au bureau 1 à 10"),
+        ("Super + Alt + 1 … 0", "Envoyer la fenêtre active au bureau 1 à 10"),
+        ("Super + Page↓ | Ctrl + Super + → | Super + molette ↓", "Bureau suivant"),
+        ("Super + Page↑ | Ctrl + Super + ← | Super + molette ↑", "Bureau précédent"),
+        ("Super + Alt + Page↓ | Ctrl + Super + Maj + →", "Envoyer la fenêtre au bureau suivant"),
+        ("Super + Alt + Page↑ | Ctrl + Super + Maj + ←", "Envoyer la fenêtre au bureau précédent"),
+        ("Ctrl + Super + 1 … 0", "Aller au groupe de bureaux 1 à 10 (bureaux 1-10, 11-20…)"),
+        ("Ctrl + Super + Alt + 1 … 0", "Envoyer la fenêtre dans un groupe de bureaux"),
+    ]),
+    ("Bureaux spéciaux", "󰮔", [
+        ("Super + S", "Afficher/masquer le bureau spécial (scratchpad)"),
+        ("Super + Alt + S | Ctrl + Super + Maj + ↑", "Envoyer la fenêtre dans le bureau spécial"),
+        ("Ctrl + Super + Maj + ↓", "Ramener la fenêtre du bureau spécial"),
+        ("Super + M", "Bureau musique (Spotify…)"),
+        ("Super + D", "Bureau discussions (Discord, WhatsApp)"),
+        ("Super + R", "Bureau tâches (Todoist)"),
+        ("Ctrl + Maj + Échap", "Moniteur système"),
+    ]),
+    ("Fenêtres", "󱂬", [
+        ("Super + ← → ↑ ↓", "Passer à la fenêtre voisine"),
+        ("Super + Maj + ← → ↑ ↓", "Déplacer la fenêtre dans cette direction"),
+        ("Alt + Tab | Maj + Alt + Tab", "Fenêtre suivante / précédente"),
+        ("Super + F", "Plein écran"),
+        ("Super + Alt + F", "Agrandir (plein écran avec bordures)"),
+        ("Super + Alt + Espace", "Fenêtre flottante / en tuile"),
+        ("Super + Maj + P", "Épingler la fenêtre sur tous les bureaux"),
+        ("Super + Alt + \\", "Image dans l'image (flottante, épinglée, dans un coin)"),
+        ("Ctrl + Super + \\", "Centrer la fenêtre"),
+        ("Ctrl + Super + Alt + \\", "Taille normale (55 × 70 % de l'écran) et centrée"),
+        ("Super + − | Super + Alt + ←", "Réduire la largeur"),
+        ("Super + = | Super + Alt + →", "Augmenter la largeur"),
+        ("Super + Maj + − | Super + Alt + ↑", "Réduire la hauteur"),
+        ("Super + Maj + = | Super + Alt + ↓", "Augmenter la hauteur"),
+        ("Super + Z | Super + clic gauche", "Déplacer la fenêtre à la souris"),
+        ("Super + X | Super + clic droit", "Redimensionner la fenêtre à la souris"),
+    ]),
+    ("Groupes d'onglets", "󰓩", [
+        ("Super + ,", "Grouper / dégrouper les fenêtres (onglets)"),
+        ("Super + U", "Sortir la fenêtre du groupe"),
+        ("Super + Maj + ,", "Verrouiller le groupe actif"),
+        ("Ctrl + Alt + Tab | Ctrl + Maj + Alt + Tab", "Onglet suivant / précédent du groupe"),
+    ]),
+    ("Captures et enregistrement", "󰄀", [
+        ("Impr. écran", "Capture de tout l'écran"),
+        ("Super + Maj + S", "Capture d'une zone (écran figé)"),
+        ("Super + Maj + Alt + S", "Capture d'une zone"),
+        ("Ctrl + Alt + R", "Enregistrer l'écran"),
+        ("Super + Alt + R", "Enregistrer l'écran avec le son"),
+        ("Ctrl + Super + R", "Enregistrer l'écran avec le micro"),
+        ("Ctrl + Alt + M", "Enregistrer l'écran avec le son et le micro"),
+        ("Super + Maj + Alt + R", "Enregistrer une zone de l'écran"),
+        ("Super + Maj + C", "Pipette : copier une couleur de l'écran"),
+    ]),
+    ("Presse-papiers et saisie", "󰅌", [
+        ("Super + V", "Historique du presse-papiers"),
+        ("Super + Alt + V", "Supprimer une entrée du presse-papiers"),
+        ("Super + Maj + V", "Épingler une entrée du presse-papiers"),
+        ("Ctrl + Maj + Alt + V", "Taper le dernier élément copié"),
+        ("Super + .", "Emojis et symboles"),
+    ]),
+    ("Média et son", "󰝚", [
+        ("Ctrl + Super + Espace | ⏯", "Lecture / pause"),
+        ("Ctrl + Super + = | ⏭", "Piste suivante"),
+        ("Ctrl + Super + − | ⏮", "Piste précédente"),
+        ("Ctrl + Super + Retour arrière | ⏹", "Arrêter la lecture"),
+        ("Super + Maj + M | 🔇", "Couper / remettre le son"),
+        ("Touches volume", "Monter / baisser le volume"),
+        ("Touche micro", "Couper / remettre le micro"),
+        ("Touches luminosité", "Monter / baisser la luminosité"),
+    ]),
+    ("Pavé tactile", "󰟸", [
+        ("3 doigts ← →", "Changer de bureau (la page suit le doigt)"),
+        ("3 doigts ↑", "Ouvrir Mission Control"),
+        ("3 doigts ↓", "Fermer Mission Control"),
+        ("4 doigts ← →", "Changer de bureau"),
+        ("4 doigts ↑", "Bureau spécial (scratchpad)"),
+        ("4 doigts ↓", "Mettre en veille"),
+    ]),
+    ("Système", "󰒓", [
+        ("Super + Maj + L", "Mettre en veille"),
+        ("Super + Alt + L", "Relancer le shell puis verrouiller (si l'écran de verrouillage a planté)"),
+        ("Super + Maj + R", "Recharger Hyprland et Caelestia"),
+        ("Ctrl + Super + Alt + R", "Redémarrer le shell Caelestia"),
+        ("Ctrl + Super + Maj + R", "Arrêter le shell Caelestia"),
+        ("Super + Alt + F12", "Envoyer une notification de test"),
+    ]),
+    ("Dans Mission Control", "󰕰", [
+        ("Clic sur une fenêtre", "Aller à cette fenêtre"),
+        ("Clic sur un bureau", "Aller à ce bureau"),
+        ("1 … 9", "Aller au bureau correspondant"),
+        ("Échap | clic dans le vide", "Fermer"),
+    ]),
+    ("Dans la recherche (Super + Espace)", "󰍉", [
+        ("Entrée", "Ouvrir le résultat sélectionné"),
+        ("↑ ↓", "Naviguer dans les résultats"),
+        ("Ctrl + Entrée", "Chercher directement sur Google"),
+        ("Échap", "Fermer"),
+    ]),
+]
+
+
+class ShortcutsApp(Gtk.Application):
+    def __init__(self) -> None:
+        super().__init__(application_id="io.caelestia.Shortcuts", flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
+        self.window: Gtk.ApplicationWindow | None = None
+        self.cards: list[tuple[Gtk.Widget, list[tuple[Gtk.Widget, str]]]] = []
+
+    def do_activate(self) -> None:
+        if self.window is not None:
+            self.window.close()
+            return
+        provider = Gtk.CssProvider()
+        try:
+            provider.load_from_path(str(CSS_FILE))
+            Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        except GLib.Error:
+            pass
+        self.build()
+        self.window.present()
+        self.search.grab_focus()
+
+    def build(self) -> None:
+        self.window = Gtk.ApplicationWindow(application=self)
+        self.window.set_title("Raccourcis")
+        self.window.set_default_size(1120, 760)
+        self.window.connect("close-request", self.on_close)
+
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        root.add_css_class("sc-root")
+        self.window.set_child(root)
+
+        header = Gtk.Box(spacing=14)
+        header.add_css_class("sc-header")
+        root.append(header)
+        logo = Gtk.Label(label="󰌌")
+        logo.add_css_class("sc-logo")
+        header.append(logo)
+        titles = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        title = Gtk.Label(label="Raccourcis clavier", xalign=0)
+        title.add_css_class("sc-title")
+        sub = Gtk.Label(label="Tout ce que tu peux faire au clavier et au pavé tactile", xalign=0)
+        sub.add_css_class("sc-sub")
+        titles.append(title)
+        titles.append(sub)
+        header.append(titles)
+        spacer = Gtk.Box()
+        spacer.set_hexpand(True)
+        header.append(spacer)
+        self.search = Gtk.SearchEntry(placeholder_text="Chercher une action ou une touche…")
+        self.search.add_css_class("sc-search")
+        self.search.set_size_request(340, -1)
+        self.search.connect("search-changed", self.on_search)
+        header.append(self.search)
+
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_vexpand(True)
+        root.append(scroll)
+        # Deux colonnes en mosaïque : chaque carte va dans la colonne la moins remplie
+        columns = Gtk.Box(spacing=14, homogeneous=True)
+        columns.add_css_class("sc-columns")
+        columns.set_valign(Gtk.Align.START)
+        scroll.set_child(columns)
+        cols = []
+        for _ in range(2):
+            col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+            col.set_valign(Gtk.Align.START)
+            columns.append(col)
+            cols.append([col, 0])
+        for name, icon, items in SHORTCUTS:
+            target = min(cols, key=lambda c: c[1])
+            target[0].append(self.make_card(name, icon, items))
+            target[1] += len(items) + 2
+
+        self.empty = Gtk.Label(label="Aucun raccourci ne correspond à ta recherche.")
+        self.empty.add_css_class("sc-empty")
+        self.empty.set_visible(False)
+        root.append(self.empty)
+
+        footer = Gtk.Label(label="Échap : fermer  •  Super + H : ouvrir / fermer cette fenêtre")
+        footer.add_css_class("sc-footer")
+        root.append(footer)
+
+        keys = Gtk.EventControllerKey()
+        keys.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        keys.connect("key-pressed", self.on_key)
+        self.window.add_controller(keys)
+
+    def make_card(self, name: str, icon: str, items) -> Gtk.Widget:
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        card.add_css_class("sc-card")
+        head = Gtk.Box(spacing=10)
+        ic = Gtk.Label(label=icon)
+        ic.add_css_class("sc-card-icon")
+        head.append(ic)
+        t = Gtk.Label(label=name, xalign=0)
+        t.add_css_class("sc-card-title")
+        head.append(t)
+        card.append(head)
+        rows = []
+        for keys, desc in items:
+            row = Gtk.Box(spacing=12)
+            row.add_css_class("sc-row")
+            label = Gtk.Label(label=desc, xalign=0)
+            label.add_css_class("sc-desc")
+            label.set_hexpand(True)
+            label.set_wrap(True)
+            label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+            label.set_max_width_chars(34)
+            row.append(label)
+            row.append(self.make_keys(keys))
+            card.append(row)
+            rows.append((row, f"{keys} {desc} {name}".lower()))
+        self.cards.append((card, rows))
+        return card
+
+    @staticmethod
+    def make_keys(keys: str) -> Gtk.Widget:
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        box.set_halign(Gtk.Align.END)
+        box.set_valign(Gtk.Align.CENTER)
+        for combo in keys.split(" | "):
+            line = Gtk.Box(spacing=4)
+            line.set_halign(Gtk.Align.END)
+            parts = combo.split(" + ")
+            for i, part in enumerate(parts):
+                if i:
+                    plus = Gtk.Label(label="+")
+                    plus.add_css_class("sc-plus")
+                    line.append(plus)
+                cap = Gtk.Label(label=part.strip())
+                cap.add_css_class("sc-key")
+                line.append(cap)
+            box.append(line)
+        return box
+
+    def on_search(self, *_args) -> None:
+        q = self.search.get_text().strip().lower()
+        words = q.split()
+        any_visible = False
+        for child, rows in self.cards:
+            visible_rows = 0
+            for row, text in rows:
+                show = all(w in text for w in words)
+                row.set_visible(show)
+                visible_rows += show
+            child.set_visible(visible_rows > 0)
+            any_visible |= visible_rows > 0
+        self.empty.set_visible(not any_visible)
+
+    def on_key(self, _ctrl, keyval, _code, _state) -> bool:
+        if keyval == Gdk.KEY_Escape:
+            if self.search.get_text():
+                self.search.set_text("")
+            else:
+                self.window.close()
+            return True
+        return False
+
+    def on_close(self, *_args) -> bool:
+        self.window = None
+        return False
+
+
+if __name__ == "__main__":
+    raise SystemExit(ShortcutsApp().run([sys.argv[0]]))

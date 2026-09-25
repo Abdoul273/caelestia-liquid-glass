@@ -1,0 +1,86 @@
+@import url("file://@HOME@/.local/state/caelestia/theme/caelestia-tools.css");
+
+/* Aide-mémoire des raccourcis — liquid glass (le flou vient de Hyprland) */
+window {
+  background: alpha(@t_surface, 0.52);
+  color: @t_on_surface;
+  font-family: "Rubik", "Inter", sans-serif;
+}
+.sc-root {
+  padding: 18px 20px 12px;
+  background-image: linear-gradient(to bottom, alpha(white, 0.06), alpha(white, 0.012) 25%, transparent 55%);
+}
+.sc-header {
+  padding: 0 4px 16px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid alpha(white, 0.07);
+}
+.sc-logo {
+  min-width: 46px;
+  min-height: 46px;
+  border-radius: 14px;
+  font-size: 24px;
+  color: @t_primary;
+  background: alpha(white, 0.07);
+  box-shadow: inset 0 1px alpha(white, 0.10);
+}
+.sc-title { font-size: 20px; font-weight: 800; }
+.sc-sub { font-size: 12px; color: alpha(@t_on_surface_variant, 0.55); }
+searchentry.sc-search {
+  min-height: 40px;
+  border-radius: 12px;
+  background: alpha(white, 0.06);
+  border: 1px solid alpha(white, 0.10);
+  box-shadow: inset 0 1px alpha(white, 0.08);
+  color: @t_on_surface;
+}
+searchentry.sc-search:focus-within {
+  background: alpha(white, 0.09);
+  border-color: alpha(@t_primary, 0.55);
+}
+.sc-columns { padding: 2px 6px 2px 2px; }
+.sc-card {
+  padding: 14px 16px 10px;
+  border-radius: 18px;
+  background: alpha(white, 0.045);
+  border: 1px solid alpha(white, 0.07);
+  box-shadow: inset 0 1px alpha(white, 0.09);
+}
+.sc-card-icon {
+  min-width: 30px;
+  min-height: 30px;
+  border-radius: 9px;
+  font-size: 16px;
+  color: @t_primary;
+  background: alpha(@t_primary, 0.18);
+}
+.sc-card-title {
+  font-size: 14px;
+  font-weight: 750;
+  margin-bottom: 4px;
+}
+.sc-row {
+  padding: 7px 4px;
+  border-top: 1px solid alpha(white, 0.05);
+}
+.sc-desc { font-size: 12.5px; color: alpha(@t_on_surface, 0.86); }
+.sc-key {
+  padding: 2px 8px;
+  min-width: 14px;
+  border-radius: 7px;
+  font-size: 11.5px;
+  font-weight: 650;
+  color: @t_on_surface;
+  background: alpha(white, 0.10);
+  border: 1px solid alpha(white, 0.12);
+  box-shadow: inset 0 -2px alpha(black, 0.18), inset 0 1px alpha(white, 0.10);
+}
+.sc-plus { font-size: 11px; color: alpha(@t_on_surface_variant, 0.40); }
+.sc-empty { margin: 40px; font-size: 14px; color: alpha(@t_on_surface_variant, 0.5); }
+.sc-footer {
+  margin-top: 10px;
+  font-size: 11px;
+  color: alpha(@t_on_surface_variant, 0.40);
+}
+scrollbar { background: transparent; }
+scrollbar slider { min-width: 4px; border-radius: 4px; background: alpha(white, 0.18); }

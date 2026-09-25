@@ -1,0 +1,7 @@
+@import url("file://@HOME@/.local/state/caelestia/theme/caelestia-tools.css");
+@import url("file://@HOME@/.config/caelestia/tools-base.css");
+
+/* Presse-papiers — spécificités (la base commune est dans ~/.config/caelestia/tools-base.css) */
+.sidebar { min-width: 164px; }
+.history-row .muted { font-size: 11px; }
+.preview-frame { min-height: 200px; }

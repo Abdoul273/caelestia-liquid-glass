@@ -1,0 +1,856 @@
+#!/usr/bin/env python3
+"""A native, tabbed clipboard manager for the Caelestia desktop."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+import subprocess
+import threading
+from dataclasses import dataclass, field
+from pathlib import Path
+
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Gdk", "4.0")
+from gi.repository import Gdk, Gio, GLib, Gtk
+
+try:
+    gi.require_version("GdkPixbuf", "2.0")
+    from gi.repository import GdkPixbuf
+except (ValueError, ImportError):
+    GdkPixbuf = None
+
+
+APP_ID = "io.caelestia.ClipboardPro"
+STATE_DIR = Path.home() / ".local/state/caelestia-clipboard-pro"
+FAV_DIR = STATE_DIR / "favorites"
+INDEX_FILE = STATE_DIR / "favorites.json"
+UI_STATE_FILE = STATE_DIR / "ui-state.json"
+CSS_FILE = Path.home() / ".config/caelestia-clipboard-pro/style.css"
+MAX_ITEMS = 750
+PREVIEW_DEBOUNCE_MS = 70
+IMAGE_PREVIEW_MAX = 960
+
+IMAGE_MIMES = {
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "webp": "image/webp",
+    "gif": "image/gif",
+    "bmp": "image/bmp",
+    "tif": "image/tiff",
+    "tiff": "image/tiff",
+}
+
+
+@dataclass
+class ClipboardItem:
+    item_id: str
+    raw: str
+    preview: str
+    kind: str
+    mime: str
+    digest: str = ""
+    data: bytes | None = None
+    favorite: bool = False
+    stored_only: bool = False
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
+
+    @property
+    def title(self) -> str:
+        if self.kind == "image":
+            match = re.search(r"(\d+x\d+)", self.preview)
+            return f"Image · {match.group(1)}" if match else "Image du presse-papiers"
+        text = self._text().strip()
+        return (text.splitlines()[0] if text else "Texte vide")[:100]
+
+    @property
+    def subtitle(self) -> str:
+        if self.kind == "image":
+            return self.preview.removeprefix("[[ ").removesuffix(" ]]")
+        if self.data is not None:
+            text = self.data.decode("utf-8", "replace").strip()
+            lines = max(1, len(text.splitlines()))
+            return f"{len(text)} caractères · {lines} ligne{'s' if lines != 1 else ''}"
+        return (self.preview.strip() or "Texte")[:80]
+
+    def _text(self) -> str:
+        if self.data is not None and self.kind != "image":
+            return self.data.decode("utf-8", "replace")
+        return self.preview
+
+    def search_blob(self) -> str:
+        parts = [self.preview]
+        if self.data is not None and self.kind != "image":
+            parts.append(self.data.decode("utf-8", "replace"))
+        return "\n".join(parts).casefold()
+
+
+def command_bytes(args: list[str], stdin: bytes | None = None, timeout: float = 8) -> bytes:
+    try:
+        result = subprocess.run(
+            args,
+            input=stdin,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=timeout,
+        )
+        return result.stdout if result.returncode == 0 else b""
+    except (OSError, subprocess.TimeoutExpired):
+        return b""
+
+
+def decode_entry(raw: str) -> bytes:
+    return command_bytes(["cliphist", "decode"], (raw + "\n").encode())
+
+
+def classify(preview: str, data: bytes = b"") -> tuple[str, str]:
+    if preview.startswith("[[ binary data"):
+        lower = preview.lower()
+        for extension, mime in IMAGE_MIMES.items():
+            if re.search(rf"\b{extension}\b", lower):
+                return "image", mime
+        return "binary", "application/octet-stream"
+    text = (data.decode("utf-8", "replace") if data else preview).strip()
+    if re.match(r"^(?:https?://|www\.)\S+$", text, re.IGNORECASE):
+        return "link", "text/plain;charset=utf-8"
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if lines and all(re.match(r"^(?:file:/{1,3}|mtp:/|/)", line, re.IGNORECASE) for line in lines):
+        mime = "text/uri-list" if all(line.lower().startswith("file:") for line in lines) else "text/plain;charset=utf-8"
+        return "file", mime
+    return "text", "text/plain;charset=utf-8"
+
+
+def texture_from_bytes(data: bytes) -> Gdk.Texture | None:
+    try:
+        return Gdk.Texture.new_from_bytes(GLib.Bytes.new(data))
+    except GLib.Error:
+        return None
+
+
+def scaled_texture(data: bytes, max_w: int, max_h: int) -> Gdk.Texture | None:
+    if GdkPixbuf is not None:
+        try:
+            loader = GdkPixbuf.PixbufLoader()
+            loader.write(data)
+            loader.close()
+            pixbuf = loader.get_pixbuf()
+        except GLib.Error:
+            pixbuf = None
+        if pixbuf is not None:
+            width, height = pixbuf.get_width(), pixbuf.get_height()
+            if width > 0 and height > 0:
+                scale = min(max_w / width, max_h / height, 1.0)
+                if scale < 1.0:
+                    pixbuf = pixbuf.scale_simple(
+                        max(1, int(width * scale)),
+                        max(1, int(height * scale)),
+                        GdkPixbuf.InterpType.BILINEAR,
+                    )
+                return Gdk.Texture.new_for_pixbuf(pixbuf)
+    return texture_from_bytes(data)
+
+
+class ClipboardApp(Gtk.Application):
+    def __init__(self) -> None:
+        super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
+        self.window: Gtk.ApplicationWindow | None = None
+        self.items: list[ClipboardItem] = []
+        self.filtered: list[ClipboardItem] = []
+        self.favorites: dict[str, dict] = self.load_favorites()
+        self.ui_state = self.load_ui_state()
+        self.category = "all"
+        self.selected: ClipboardItem | None = None
+        self.category_buttons: dict[str, tuple[Gtk.ToggleButton, Gtk.Label]] = {}
+        self.clear_armed = False
+        self.ui_save_source = 0
+        self.preview_source = 0
+        self.preview_gen = 0
+        self.list_scroll: Gtk.ScrolledWindow | None = None
+
+    def do_activate(self) -> None:
+        # Repeated launches focus the existing single-instance window.
+        if self.window is not None:
+            self.window.present()
+            return
+        self.build_window()
+        self.window.present()
+        self.search.grab_focus()
+        self.refresh()
+
+    def build_window(self) -> None:
+        self.load_css()
+        self.window = Gtk.ApplicationWindow(application=self)
+        self.window.set_title("Caelestia Clipboard Pro")
+        self.window.set_default_size(1120, 700)
+        self.window.set_size_request(820, 520)
+        self.window.connect("close-request", self.on_close)
+
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        root.add_css_class("app-root")
+        self.window.set_child(root)
+
+        header = Gtk.Box(spacing=14)
+        header.add_css_class("topbar")
+        root.append(header)
+
+        logo = Gtk.Label(label="󰅍")
+        logo.add_css_class("logo")
+        header.append(logo)
+
+        titles = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        title = Gtk.Label(label="Presse-papiers", xalign=0)
+        title.add_css_class("title")
+        subtitle = Gtk.Label(label="Caelestia Clipboard Pro", xalign=0)
+        subtitle.add_css_class("muted")
+        titles.append(title)
+        titles.append(subtitle)
+        header.append(titles)
+
+        spacer = Gtk.Box()
+        spacer.set_hexpand(True)
+        header.append(spacer)
+
+        self.search = Gtk.SearchEntry(placeholder_text="Rechercher dans l’historique…")
+        self.search.set_size_request(340, -1)
+        self.search.connect("search-changed", lambda *_: self.apply_filter())
+        self.search.connect("activate", lambda *_: self.copy_selected())
+        header.append(self.search)
+
+        refresh = self.icon_button("󰑐", "Actualiser", self.refresh)
+        header.append(refresh)
+        close = self.icon_button("󰅖", "Fermer", lambda *_: self.window.close())
+        header.append(close)
+
+        self.main_paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
+        self.main_paned.set_vexpand(True)
+        self.main_paned.set_wide_handle(True)
+        self.main_paned.set_resize_start_child(False)
+        self.main_paned.set_shrink_start_child(False)
+        self.main_paned.set_resize_end_child(True)
+        self.main_paned.set_shrink_end_child(False)
+        self.main_paned.set_position(int(self.ui_state.get("categories_width", 210)))
+        self.main_paned.add_css_class("split-pane")
+        root.append(self.main_paned)
+
+        sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        sidebar.add_css_class("sidebar")
+        sidebar.set_size_request(150, -1)
+        self.main_paned.set_start_child(sidebar)
+
+        section = Gtk.Label(label="CATÉGORIES", xalign=0)
+        section.add_css_class("section-label")
+        sidebar.append(section)
+
+        group = None
+        categories = [
+            ("all", "󰈙", "Tout"),
+            ("text", "󰦪", "Textes"),
+            ("image", "󰋩", "Images"),
+            ("link", "󰌷", "Liens"),
+            ("file", "󰉋", "Fichiers"),
+            ("favorite", "󰓎", "Favoris"),
+        ]
+        for key, icon, label in categories:
+            button = Gtk.ToggleButton()
+            button.set_group(group)
+            group = group or button
+            button.add_css_class("category")
+            row = Gtk.Box(spacing=10)
+            row.append(Gtk.Label(label=icon))
+            name = Gtk.Label(label=label, xalign=0)
+            name.set_hexpand(True)
+            row.append(name)
+            count = Gtk.Label(label="0")
+            count.add_css_class("count")
+            row.append(count)
+            button.set_child(row)
+            button.connect("toggled", self.category_changed, key)
+            sidebar.append(button)
+            self.category_buttons[key] = (button, count)
+        self.category_buttons["all"][0].set_active(True)
+
+        side_spacer = Gtk.Box()
+        side_spacer.set_vexpand(True)
+        sidebar.append(side_spacer)
+
+        self.clear_button = Gtk.Button(label="󰩺  Vider l’historique")
+        self.clear_button.add_css_class("danger-flat")
+        self.clear_button.connect("clicked", self.confirm_clear)
+        sidebar.append(self.clear_button)
+
+        self.content_paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
+        self.content_paned.set_hexpand(True)
+        self.content_paned.set_wide_handle(True)
+        self.content_paned.set_resize_start_child(True)
+        self.content_paned.set_shrink_start_child(False)
+        self.content_paned.set_resize_end_child(True)
+        self.content_paned.set_shrink_end_child(False)
+        history_width = int(self.ui_state.get("history_width", 440))
+        self.content_paned.set_position(max(history_width, 360))
+        self.content_paned.add_css_class("split-pane")
+        self.main_paned.set_end_child(self.content_paned)
+        self.main_paned.connect("notify::position", self.queue_ui_state_save)
+        self.content_paned.connect("notify::position", self.queue_ui_state_save)
+
+        list_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        list_panel.set_size_request(280, -1)
+        list_panel.add_css_class("list-panel")
+        self.result_label = Gtk.Label(label="Chargement…", xalign=0)
+        self.result_label.add_css_class("result-label")
+        list_panel.append(self.result_label)
+        self.list_scroll = Gtk.ScrolledWindow()
+        self.list_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.list_scroll.set_vexpand(True)
+        self.listbox = Gtk.ListBox()
+        self.listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        self.listbox.set_activate_on_single_click(False)
+        self.listbox.add_css_class("history-list")
+        self.listbox.connect("row-selected", self.row_selected)
+        self.listbox.connect("row-activated", lambda *_: self.copy_selected())
+        self.list_scroll.set_child(self.listbox)
+        list_panel.append(self.list_scroll)
+        self.content_paned.set_start_child(list_panel)
+
+        self.preview_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        self.preview_panel.add_css_class("preview-panel")
+        self.preview_panel.set_hexpand(True)
+        self.preview_panel.set_size_request(320, -1)
+        self.content_paned.set_end_child(self.preview_panel)
+        self.show_empty_preview("Sélectionne un élément", "Son contenu apparaîtra ici")
+
+        self.status = Gtk.Label(
+            label="↑↓ : parcourir  •  Entrée / double-clic : copier  •  Suppr : effacer  •  Échap : fermer"
+        )
+        self.status.add_css_class("statusbar")
+        root.append(self.status)
+
+        keys = Gtk.EventControllerKey()
+        keys.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        keys.connect("key-pressed", self.key_pressed)
+        self.window.add_controller(keys)
+
+    def load_css(self) -> None:
+        provider = Gtk.CssProvider()
+        try:
+            provider.load_from_path(str(CSS_FILE))
+            Gtk.StyleContext.add_provider_for_display(
+                Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+        except GLib.Error:
+            pass
+
+    def icon_button(self, icon: str, tooltip: str, callback) -> Gtk.Button:
+        button = Gtk.Button(label=icon)
+        button.add_css_class("icon-button")
+        button.set_tooltip_text(tooltip)
+        button.connect("clicked", callback)
+        return button
+
+    def on_close(self, *_args) -> bool:
+        if self.ui_save_source:
+            GLib.source_remove(self.ui_save_source)
+            self.ui_save_source = 0
+        if self.preview_source:
+            GLib.source_remove(self.preview_source)
+            self.preview_source = 0
+        self.save_ui_state()
+        self.window = None
+        return False
+
+    def refresh(self, *_args) -> None:
+        self.result_label.set_text("Chargement de l’historique…")
+        self.listbox.set_sensitive(False)
+        threading.Thread(target=self.load_history_worker, daemon=True).start()
+
+    def load_history_worker(self) -> None:
+        output = command_bytes(["cliphist", "list"]).decode("utf-8", "replace")
+        items: list[ClipboardItem] = []
+        seen_previews: set[str] = set()
+        fav_by_preview = {
+            str(meta.get("preview", "")): digest
+            for digest, meta in self.favorites.items()
+            if meta.get("preview")
+        }
+        for raw in output.splitlines()[:MAX_ITEMS]:
+            if "\t" not in raw:
+                continue
+            item_id, preview = raw.split("\t", 1)
+            kind, mime = classify(preview)
+            digest = fav_by_preview.get(preview, "")
+            seen_previews.add(preview)
+            items.append(ClipboardItem(
+                item_id=item_id,
+                raw=raw,
+                preview=preview,
+                kind=kind,
+                mime=mime,
+                digest=digest,
+                favorite=digest in self.favorites or preview in fav_by_preview,
+            ))
+
+        # Keep pinned entries available even after cliphist removes them.
+        for digest, meta in self.favorites.items():
+            preview = str(meta.get("preview", "Favori"))
+            if preview in seen_previews:
+                continue
+            path = FAV_DIR / f"{digest}.bin"
+            try:
+                data = path.read_bytes()
+            except OSError:
+                continue
+            items.append(ClipboardItem(
+                item_id="★",
+                raw="",
+                preview=preview,
+                kind=meta.get("kind", "text"),
+                mime=meta.get("mime", "text/plain"),
+                digest=digest,
+                data=data,
+                favorite=True,
+                stored_only=True,
+            ))
+        GLib.idle_add(self.history_loaded, items)
+
+    def history_loaded(self, items: list[ClipboardItem]) -> bool:
+        self.items = items
+        self.listbox.set_sensitive(True)
+        self.update_counts()
+        self.apply_filter()
+        return GLib.SOURCE_REMOVE
+
+    def update_counts(self) -> None:
+        counts = {
+            "all": len([item for item in self.items if not item.stored_only]),
+            "text": len([item for item in self.items if item.kind == "text" and not item.stored_only]),
+            "image": len([item for item in self.items if item.kind == "image" and not item.stored_only]),
+            "link": len([item for item in self.items if item.kind == "link" and not item.stored_only]),
+            "file": len([item for item in self.items if item.kind == "file" and not item.stored_only]),
+            "favorite": len([item for item in self.items if item.favorite]),
+        }
+        for key, count in counts.items():
+            self.category_buttons[key][1].set_text(str(count))
+
+    def category_changed(self, button: Gtk.ToggleButton, key: str) -> None:
+        if button.get_active():
+            self.category = key
+            if hasattr(self, "listbox"):
+                self.apply_filter()
+
+    def apply_filter(self) -> None:
+        query = self.search.get_text().strip().casefold()
+        filtered = []
+        for item in self.items:
+            if self.category == "all" and item.stored_only:
+                continue
+            if self.category == "favorite":
+                if not item.favorite:
+                    continue
+            elif self.category != "all" and item.kind != self.category:
+                continue
+            if query and query not in item.search_blob():
+                continue
+            filtered.append(item)
+        self.filtered = filtered
+        self.rebuild_list()
+
+    def rebuild_list(self) -> None:
+        current_id = self.selected.item_id if self.selected else None
+        while child := self.listbox.get_first_child():
+            self.listbox.remove(child)
+        for item in self.filtered:
+            self.listbox.append(self.make_row(item))
+        count = len(self.filtered)
+        self.result_label.set_text(f"{count} élément{'s' if count != 1 else ''}")
+        if not self.filtered:
+            self.selected = None
+            self.show_empty_preview("Aucun résultat", "Essaie une autre catégorie ou recherche")
+            return
+        index = 0
+        if current_id:
+            for i, item in enumerate(self.filtered):
+                if item.item_id == current_id:
+                    index = i
+                    break
+        row = self.listbox.get_row_at_index(index)
+        if row is not None:
+            self.listbox.select_row(row)
+
+    def make_row(self, item: ClipboardItem) -> Gtk.ListBoxRow:
+        row = Gtk.ListBoxRow()
+        row.item = item
+        box = Gtk.Box(spacing=12)
+        box.add_css_class("history-row")
+        icon_name = {"image": "󰋩", "link": "󰌷", "file": "󰉋", "binary": "󰆓"}.get(item.kind, "󰦪")
+        icon = Gtk.Label(label=icon_name)
+        icon.add_css_class("item-icon")
+        box.append(icon)
+
+        labels = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        labels.set_hexpand(True)
+        title = Gtk.Label(label=item.title, xalign=0, ellipsize=3)
+        title.add_css_class("item-title")
+        labels.append(title)
+        subtitle = Gtk.Label(label=item.subtitle, xalign=0, ellipsize=3)
+        subtitle.add_css_class("muted")
+        labels.append(subtitle)
+        box.append(labels)
+        if item.favorite:
+            star = Gtk.Label(label="󰓎")
+            star.add_css_class("favorite-star")
+            box.append(star)
+        row.set_child(box)
+        return row
+
+    def row_selected(self, _listbox, row: Gtk.ListBoxRow | None) -> None:
+        if row is None:
+            return
+        self.selected = row.item
+        if self.preview_source:
+            GLib.source_remove(self.preview_source)
+        self.preview_source = GLib.timeout_add(PREVIEW_DEBOUNCE_MS, self.flush_preview)
+
+    def flush_preview(self) -> bool:
+        self.preview_source = 0
+        if self.selected is not None:
+            self.show_preview(self.selected)
+        return GLib.SOURCE_REMOVE
+
+    def move_selection(self, delta: int) -> bool:
+        n = len(self.filtered)
+        if n == 0:
+            return True
+        row = self.listbox.get_selected_row()
+        index = row.get_index() if row is not None else -1
+        if index < 0:
+            index = 0 if delta > 0 else n - 1
+        else:
+            index = max(0, min(n - 1, index + delta))
+        new_row = self.listbox.get_row_at_index(index)
+        if new_row is None:
+            return True
+        self.listbox.select_row(new_row)
+        self.ensure_row_visible(new_row)
+        return True
+
+    def ensure_row_visible(self, row: Gtk.ListBoxRow) -> None:
+        def _scroll() -> bool:
+            if self.list_scroll is None:
+                return GLib.SOURCE_REMOVE
+            adj = self.list_scroll.get_vadjustment()
+            if adj is None:
+                return GLib.SOURCE_REMOVE
+            alloc = row.get_allocation()
+            top = adj.get_value()
+            bottom = top + adj.get_page_size()
+            if alloc.y < top:
+                adj.set_value(max(0, alloc.y))
+            elif alloc.y + alloc.height > bottom:
+                adj.set_value(max(0, alloc.y + alloc.height - adj.get_page_size()))
+            return GLib.SOURCE_REMOVE
+
+        GLib.idle_add(_scroll)
+
+    def ensure_data(self, item: ClipboardItem) -> bytes:
+        if item.data:
+            return item.data
+        with item._lock:
+            if item.data:
+                return item.data
+            if item.stored_only and item.digest:
+                path = FAV_DIR / f"{item.digest}.bin"
+                try:
+                    item.data = path.read_bytes()
+                except OSError:
+                    item.data = b""
+            elif item.raw:
+                item.data = decode_entry(item.raw)
+            else:
+                item.data = b""
+            if item.data:
+                item.digest = hashlib.sha256(item.data).hexdigest()
+                if item.kind in {"text", "link", "file"}:
+                    item.kind, item.mime = classify(item.preview, item.data)
+                if item.digest in self.favorites:
+                    item.favorite = True
+            return item.data or b""
+
+    def clear_preview(self) -> None:
+        while child := self.preview_panel.get_first_child():
+            self.preview_panel.remove(child)
+
+    def show_empty_preview(self, title: str, subtitle: str) -> None:
+        self.clear_preview()
+        empty = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        empty.set_valign(Gtk.Align.CENTER)
+        empty.set_vexpand(True)
+        icon = Gtk.Label(label="󰅍")
+        icon.add_css_class("empty-icon")
+        empty.append(icon)
+        heading = Gtk.Label(label=title)
+        heading.add_css_class("preview-title")
+        empty.append(heading)
+        detail = Gtk.Label(label=subtitle)
+        detail.add_css_class("muted")
+        empty.append(detail)
+        self.preview_panel.append(empty)
+
+    def show_preview(self, item: ClipboardItem) -> None:
+        self.preview_gen += 1
+        gen = self.preview_gen
+        loading = item.data is None and not item.stored_only
+        self.render_preview(item, loading=loading)
+        if loading:
+            threading.Thread(target=self.decode_then_preview, args=(item, gen), daemon=True).start()
+
+    def decode_then_preview(self, item: ClipboardItem, gen: int) -> None:
+        self.ensure_data(item)
+        GLib.idle_add(self.preview_ready, item, gen)
+
+    def preview_ready(self, item: ClipboardItem, gen: int) -> bool:
+        if gen != self.preview_gen or self.selected is not item:
+            return GLib.SOURCE_REMOVE
+        self.render_preview(item, loading=False)
+        return GLib.SOURCE_REMOVE
+
+    def render_preview(self, item: ClipboardItem, loading: bool = False) -> None:
+        self.clear_preview()
+        top = Gtk.Box(spacing=10)
+        type_name = {"image": "IMAGE", "link": "LIEN", "file": "FICHIER", "text": "TEXTE", "binary": "DONNÉE"}.get(item.kind, "ÉLÉMENT")
+        badge = Gtk.Label(label=type_name)
+        badge.add_css_class("badge")
+        top.append(badge)
+        identifier = Gtk.Label(label=f"ID {item.item_id}")
+        identifier.add_css_class("muted")
+        top.append(identifier)
+        if loading:
+            wait = Gtk.Label(label="chargement…")
+            wait.add_css_class("muted")
+            top.append(wait)
+        spacer = Gtk.Box()
+        spacer.set_hexpand(True)
+        top.append(spacer)
+        self.preview_panel.append(top)
+
+        title = Gtk.Label(label=item.title, xalign=0, wrap=True)
+        title.add_css_class("preview-title")
+        self.preview_panel.append(title)
+
+        frame = Gtk.Frame()
+        frame.add_css_class("preview-frame")
+        frame.set_vexpand(True)
+        if item.kind == "image":
+            if item.data:
+                picture = Gtk.Picture()
+                picture.set_content_fit(Gtk.ContentFit.CONTAIN)
+                picture.set_can_shrink(True)
+                texture = scaled_texture(item.data, IMAGE_PREVIEW_MAX, IMAGE_PREVIEW_MAX)
+                if texture:
+                    picture.set_paintable(texture)
+                frame.set_child(picture)
+            else:
+                placeholder = Gtk.Label(label="Chargement de l’image…")
+                placeholder.add_css_class("muted")
+                placeholder.set_vexpand(True)
+                frame.set_child(placeholder)
+        else:
+            scroll = Gtk.ScrolledWindow()
+            text = Gtk.TextView()
+            text.set_editable(False)
+            text.set_cursor_visible(False)
+            text.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+            text.set_monospace(True)
+            body = item._text()
+            if loading and item.data is None and len(body) >= 90:
+                body = body.rstrip("…") + "\n\n…"
+            text.get_buffer().set_text(body)
+            scroll.set_child(text)
+            frame.set_child(scroll)
+        self.preview_panel.append(frame)
+
+        actions = Gtk.Box(spacing=8)
+        copy = Gtk.Button(label="󰆏  Copier")
+        copy.add_css_class("suggested-action")
+        copy.connect("clicked", lambda *_: self.copy_selected())
+        actions.append(copy)
+        pin = Gtk.Button(label=("󰓎  Retirer" if item.favorite else "󰓎  Épingler"))
+        pin.connect("clicked", lambda *_: self.toggle_favorite())
+        actions.append(pin)
+        delete = Gtk.Button(label="󰆴  Supprimer")
+        delete.add_css_class("destructive-action")
+        delete.connect("clicked", lambda *_: self.delete_selected())
+        actions.append(delete)
+        self.preview_panel.append(actions)
+
+    def copy_selected(self) -> None:
+        item = self.selected
+        if not item:
+            return
+        data = self.ensure_data(item)
+        if not data:
+            self.flash("Impossible de lire cet élément")
+            return
+        args = ["wl-copy"]
+        if item.mime:
+            args.extend(["--type", item.mime])
+        try:
+            subprocess.Popen(args, stdin=subprocess.PIPE).communicate(data, timeout=5)
+        except (OSError, subprocess.TimeoutExpired):
+            self.flash("Impossible de copier cet élément")
+            return
+        self.window.close()
+
+    def delete_selected(self) -> None:
+        item = self.selected
+        if not item:
+            return
+        if item.raw:
+            command_bytes(["cliphist", "delete"], (item.raw + "\n").encode())
+        elif item.favorite:
+            self.remove_favorite(item)
+        self.flash("Élément supprimé")
+        self.refresh()
+
+    def toggle_favorite(self) -> None:
+        item = self.selected
+        if not item:
+            return
+        if item.favorite:
+            self.remove_favorite(item)
+            self.flash("Retiré des favoris")
+        else:
+            data = self.ensure_data(item)
+            if not data:
+                self.flash("Impossible d’épingler cet élément")
+                return
+            FAV_DIR.mkdir(parents=True, exist_ok=True)
+            (FAV_DIR / f"{item.digest}.bin").write_bytes(data)
+            self.favorites[item.digest] = {
+                "kind": item.kind,
+                "mime": item.mime,
+                "preview": item.preview,
+            }
+            self.save_favorites()
+            item.favorite = True
+            self.flash("Ajouté aux favoris")
+        self.update_counts()
+        self.apply_filter()
+
+    def remove_favorite(self, item: ClipboardItem) -> None:
+        digest = item.digest
+        if not digest:
+            data = self.ensure_data(item)
+            if data:
+                digest = item.digest
+        self.favorites.pop(digest, None)
+        try:
+            (FAV_DIR / f"{digest}.bin").unlink()
+        except (FileNotFoundError, OSError):
+            pass
+        self.save_favorites()
+        item.favorite = False
+
+    def load_favorites(self) -> dict[str, dict]:
+        try:
+            data = json.loads(INDEX_FILE.read_text())
+            return data if isinstance(data, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def save_favorites(self) -> None:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        INDEX_FILE.write_text(json.dumps(self.favorites, ensure_ascii=False, indent=2))
+
+    def load_ui_state(self) -> dict[str, int]:
+        try:
+            data = json.loads(UI_STATE_FILE.read_text())
+            return data if isinstance(data, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def save_ui_state(self) -> None:
+        if not hasattr(self, "main_paned") or not hasattr(self, "content_paned"):
+            return
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        state = {
+            "categories_width": self.main_paned.get_position(),
+            "history_width": self.content_paned.get_position(),
+        }
+        UI_STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2))
+
+    def queue_ui_state_save(self, *_args) -> None:
+        if self.ui_save_source:
+            GLib.source_remove(self.ui_save_source)
+        self.ui_save_source = GLib.timeout_add(350, self.flush_ui_state)
+
+    def flush_ui_state(self) -> bool:
+        self.ui_save_source = 0
+        self.save_ui_state()
+        return GLib.SOURCE_REMOVE
+
+    def confirm_clear(self, *_args) -> None:
+        if not self.clear_armed:
+            self.clear_armed = True
+            self.clear_button.set_label("󰗖  Cliquer pour confirmer")
+            self.clear_button.add_css_class("destructive-action")
+            GLib.timeout_add_seconds(4, self.disarm_clear)
+            return
+        command_bytes(["cliphist", "wipe"])
+        self.disarm_clear()
+        self.flash("Historique vidé · favoris conservés")
+        self.refresh()
+
+    def disarm_clear(self) -> bool:
+        self.clear_armed = False
+        self.clear_button.set_label("󰩺  Vider l’historique")
+        self.clear_button.remove_css_class("destructive-action")
+        return GLib.SOURCE_REMOVE
+
+    def flash(self, message: str) -> None:
+        self.status.set_text(message)
+        GLib.timeout_add_seconds(3, self.restore_status)
+
+    def restore_status(self) -> bool:
+        self.status.set_text(
+            "↑↓ : parcourir  •  Entrée / double-clic : copier  •  Suppr : effacer  •  Échap : fermer"
+        )
+        return GLib.SOURCE_REMOVE
+
+    def key_pressed(self, _controller, keyval, _keycode, state) -> bool:
+        ctrl = bool(state & Gdk.ModifierType.CONTROL_MASK)
+        alt = bool(state & Gdk.ModifierType.ALT_MASK)
+        if keyval == Gdk.KEY_Escape:
+            self.window.close()
+            return True
+        if ctrl and keyval in (Gdk.KEY_f, Gdk.KEY_F):
+            self.search.grab_focus()
+            return True
+        if ctrl and keyval in (Gdk.KEY_p, Gdk.KEY_P):
+            self.toggle_favorite()
+            return True
+        if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+            self.copy_selected()
+            return True
+        if keyval == Gdk.KEY_Delete and not self.search.has_focus():
+            self.delete_selected()
+            return True
+        if ctrl or alt:
+            return False
+        if keyval in (Gdk.KEY_Down, Gdk.KEY_KP_Down):
+            return self.move_selection(1)
+        if keyval in (Gdk.KEY_Up, Gdk.KEY_KP_Up):
+            return self.move_selection(-1)
+        if keyval == Gdk.KEY_Page_Down:
+            return self.move_selection(8)
+        if keyval == Gdk.KEY_Page_Up:
+            return self.move_selection(-8)
+        return False
+
+
+if __name__ == "__main__":
+    GLib.set_prgname("caelestia-clipboard-pro")
+    raise SystemExit(ClipboardApp().run())

@@ -1,0 +1,12 @@
+[Unit]
+Description=Bascule audio automatique vers les appareils Bluetooth
+After=pipewire-pulse.service wireplumber.service
+Wants=pipewire-pulse.service
+
+[Service]
+ExecStart=%h/.local/bin/bt-audio-autoswitch
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target

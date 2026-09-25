@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Bascule automatiquement la sortie et l'entrée audio vers un appareil Bluetooth dès sa connexion.
+
+switch_to_bt() {
+    local sink source
+    sink=$(pactl list short sinks | awk '$2 ~ /^bluez_output\./ {print $2; exit}')
+    source=$(pactl list short sources | awk '$2 ~ /^bluez_input\./ && $2 !~ /\.monitor$/ {print $2; exit}')
+    [[ -n $sink ]] && pactl set-default-sink "$sink"
+    [[ -n $source ]] && pactl set-default-source "$source"
+    # Déplace les flux déjà en cours vers le casque
+    if [[ -n $sink ]]; then
+        pactl list short sink-inputs | awk '{print $1}' | while read -r id; do
+            pactl move-sink-input "$id" "$sink" 2>/dev/null
+        done
+    fi
+}
+
+# Attendre que le serveur audio soit prêt
+until pactl info >/dev/null 2>&1; do sleep 1; done
+
+switch_to_bt
+
+pactl subscribe | while read -r line; do
+    if [[ $line == *"'new' on sink #"* || $line == *"'new' on source #"* ]]; then
+        sleep 1
+        switch_to_bt
+    fi
+done

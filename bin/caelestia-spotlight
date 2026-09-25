@@ -1,0 +1,956 @@
+#!/usr/bin/env python3
+"""Recherche et calculatrice façon Spotlight pour Caelestia.
+
+    caelestia-spotlight            recherche web instantanée (Super + Espace)
+    caelestia-spotlight calc       calculatrice rapide (Super + O)
+
+Relancer la même commande ferme la fenêtre. Les résultats web s'affichent
+sans ouvrir le navigateur ; seul un clic (ou Entrée) ouvre la page.
+"""
+
+from __future__ import annotations
+
+import ast
+import html
+import json
+import math
+import operator
+import re
+import subprocess
+import sys
+import threading
+import urllib.error
+import urllib.parse
+import urllib.request
+from dataclasses import dataclass
+from html.parser import HTMLParser
+from pathlib import Path
+
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Gdk", "4.0")
+from gi.repository import Gdk, Gio, GLib, Gtk, Pango
+
+
+CSS_FILE = Path.home() / ".config/caelestia-spotlight/style.css"
+# Clé API Brave Search (gratuite, 2 000 recherches/mois) : https://api-dashboard.search.brave.com
+API_KEY_FILE = Path.home() / ".config/caelestia-spotlight/brave-api-key"
+STATE_DIR = Path.home() / ".local/state/caelestia-spotlight"
+HISTORY_FILE = STATE_DIR / "calc-history.json"
+USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36"
+TIMEOUT = 6
+MAX_RESULTS = 14
+MAX_HISTORY = 6
+
+
+# ---------------------------------------------------------------- calculatrice
+
+class CalcError(Exception):
+    pass
+
+
+def _fact(n: float) -> float:
+    if n < 0 or n != int(n) or n > 170:
+        raise CalcError("factorielle invalide")
+    return float(math.factorial(int(n)))
+
+
+def _deg(fn):
+    return lambda x: fn(math.radians(x))
+
+
+def _adeg(fn):
+    return lambda x: math.degrees(fn(x))
+
+
+FUNCTIONS = {
+    "sqrt": math.sqrt, "racine": math.sqrt, "cbrt": lambda x: math.copysign(abs(x) ** (1 / 3), x),
+    # Trigonométrie en degrés, comme une calculatrice classique
+    "sin": _deg(math.sin), "cos": _deg(math.cos), "tan": _deg(math.tan),
+    "asin": _adeg(math.asin), "acos": _adeg(math.acos), "atan": _adeg(math.atan),
+    "ln": math.log, "log": math.log10, "log2": math.log2, "exp": math.exp,
+    "abs": abs, "round": round, "arrondi": round, "floor": math.floor, "ceil": math.ceil,
+    "fact": _fact, "factorielle": _fact,
+}
+CONSTANTS = {"pi": math.pi, "π": math.pi, "e": math.e, "tau": math.tau, "phi": (1 + 5 ** 0.5) / 2}
+BINOPS = {
+    ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
+    ast.Div: operator.truediv, ast.FloorDiv: operator.floordiv, ast.Mod: operator.mod, ast.Pow: operator.pow,
+}
+UNOPS = {ast.UAdd: operator.pos, ast.USub: operator.neg}
+
+
+def normalise(expr: str) -> str:
+    s = expr.strip().lower()
+    s = s.replace("×", "*").replace("÷", "/").replace("−", "-").replace("^", "**").replace("√", "sqrt")
+    s = re.sub(r"(?<=\d)\s+(?=\d{3}\b)", "", s)          # 1 000 000 → 1000000
+    s = re.sub(r"(?<=\d),(?=\d)", ".", s)                # virgule décimale
+    s = re.sub(r"(?<=[\d)])\s*x\s*(?=[\d(])", "*", s)    # 3 x 4 → 3*4
+    # « 50 + 20 % » = 60 et « 50 - 20 % » = 40, comme sur macOS
+    m = re.fullmatch(r"(.+?)\s*([+-])\s*(\d+(?:\.\d+)?)\s*%\s*", s)
+    if m and not m.group(1).rstrip().endswith(("*", "/", "+", "-", "(")):
+        s = f"({m.group(1)})*(1{m.group(2)}{m.group(3)}/100)"
+    s = re.sub(r"(\d+(?:\.\d+)?)\s*%\s*(?:de|of)\s*", r"(\1/100)*", s)  # 20% de 150
+    s = re.sub(r"(\d+(?:\.\d+)?)\s*%", r"(\1/100)", s)   # 15% → 0.15
+    s = re.sub(r"(\d+(?:\.\d+)?)\s*!", r"fact(\1)", s)   # 5! → fact(5)
+    s = re.sub(r"(?<![a-z\d.])(\d+(?:\.\d+)?)\s*(?=[a-zπ(])", r"\1*", s)  # 2pi, 2(3+4) mais pas log2(
+    s = re.sub(r"\)\s*(?=[\d(a-zπ])", ")*", s)           # (1+2)(3+4)
+    return s
+
+
+def _eval(node: ast.AST) -> float:
+    if isinstance(node, ast.Expression):
+        return _eval(node.body)
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        return node.value
+    if isinstance(node, ast.BinOp) and type(node.op) in BINOPS:
+        left, right = _eval(node.left), _eval(node.right)
+        if isinstance(node.op, ast.Pow) and abs(right) > 1000:
+            raise CalcError("exposant trop grand")
+        return BINOPS[type(node.op)](left, right)
+    if isinstance(node, ast.UnaryOp) and type(node.op) in UNOPS:
+        return UNOPS[type(node.op)](_eval(node.operand))
+    if isinstance(node, ast.Name) and node.id in CONSTANTS:
+        return CONSTANTS[node.id]
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in FUNCTIONS and len(node.args) == 1 and not node.keywords:
+        return FUNCTIONS[node.func.id](_eval(node.args[0]))
+    raise CalcError("expression non reconnue")
+
+
+def calculate(expr: str) -> float | None:
+    """Renvoie le résultat, ou None si le texte n'est pas un calcul."""
+    s = normalise(expr)
+    if not s or not re.search(r"\d|pi|π|\be\b|tau|phi", s):
+        return None
+    if not re.fullmatch(r"[\d\s.+\-*/%()a-zπ,]*", s):
+        return None
+    try:
+        tree = ast.parse(s, mode="eval")
+        value = _eval(tree)
+    except (SyntaxError, CalcError, ValueError, ZeroDivisionError, OverflowError, TypeError):
+        return None
+    if isinstance(value, complex) or math.isnan(value) or math.isinf(value):
+        return None
+    return float(value)
+
+
+def is_calculation(expr: str) -> bool:
+    """Vrai si le texte ressemble à un calcul (et pas juste à un nombre seul)."""
+    s = normalise(expr)
+    return bool(re.search(r"[+\-*/%()]|\b(?:sqrt|sin|cos|tan|ln|log|exp|fact|racine)\b|!", s)) and calculate(expr) is not None
+
+
+def format_number(value: float) -> str:
+    """Format français : espaces pour les milliers, virgule décimale."""
+    if abs(value) >= 1e15 or (value != 0 and abs(value) < 1e-9):
+        mant, exp = f"{value:.10e}".split("e")
+        mant = mant.rstrip("0").rstrip(".").replace(".", ",")
+        return f"{mant} × 10^{int(exp)}"
+    rounded = round(value, 10)
+    if rounded == int(rounded):
+        text = f"{int(rounded):,}".replace(",", " ")
+    else:
+        text = f"{rounded:,.10f}".rstrip("0").rstrip(".")
+        whole, _, frac = text.partition(".")
+        text = whole.replace(",", " ") + ("," + frac if frac else "")
+    return text
+
+
+# ---------------------------------------------------------------- recherche web
+
+@dataclass
+class WebResult:
+    title: str
+    url: str
+    snippet: str
+    icon: str = ""
+
+    @property
+    def icon_url(self) -> str:
+        # Icône fournie par le moteur, sinon celle du site via le service d'icônes de Google
+        return self.icon or "https://www.google.com/s2/favicons?" + urllib.parse.urlencode({"domain": self.domain, "sz": 64})
+
+    @property
+    def domain(self) -> str:
+        host = urllib.parse.urlparse(self.url).netloc
+        return host[4:] if host.startswith("www.") else host
+
+
+@dataclass
+class TopHit:
+    title: str
+    text: str
+    url: str
+    source: str
+
+
+class _DDGParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.results: list[WebResult] = []
+        self._field: str | None = None
+        self._buf: list[str] = []
+        self._current: dict[str, str] = {}
+        self._in_ad = False
+        self._depth = 0
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        cls = a.get("class") or ""
+        if tag == "div" and "result" in cls.split():
+            self._in_ad = "result--ad" in cls
+        if tag == "a" and "result__a" in cls:
+            self._flush()
+            self._current = {"url": self._clean(a.get("href", ""))}
+            self._field, self._buf = "title", []
+        elif tag == "a" and "result__snippet" in cls:
+            self._field, self._buf = "snippet", []
+
+    def handle_endtag(self, tag):
+        if tag == "a" and self._field:
+            self._current[self._field] = html.unescape("".join(self._buf)).strip()
+            self._field = None
+
+    def handle_data(self, data):
+        if self._field:
+            self._buf.append(data)
+
+    def close(self):
+        super().close()
+        self._flush()
+
+    def _flush(self):
+        c = self._current
+        if c.get("url") and c.get("title") and not self._in_ad:
+            self.results.append(WebResult(c["title"], c["url"], c.get("snippet", "")))
+        self._current = {}
+
+    @staticmethod
+    def _clean(href: str) -> str:
+        if href.startswith("//"):
+            href = "https:" + href
+        parsed = urllib.parse.urlparse(href)
+        if parsed.netloc.endswith("duckduckgo.com") and parsed.path.startswith("/l/"):
+            target = urllib.parse.parse_qs(parsed.query).get("uddg", [""])[0]
+            return target or href
+        return href
+
+
+def _get(url: str) -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.6"})
+    with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+        return resp.read()
+
+
+_TAG = re.compile(r"<[^>]+>")
+
+
+def _text(fragment: str) -> str:
+    return re.sub(r"\s+", " ", html.unescape(_TAG.sub("", fragment))).strip()
+
+
+def search_brave(query: str) -> list[WebResult]:
+    """Brave Search : index propre, résultats de qualité, avec icônes des sites."""
+    page = _get("https://search.brave.com/search?" + urllib.parse.urlencode({"q": query, "source": "web"})).decode("utf-8", "replace")
+    results = []
+    for block in page.split('data-type="web"')[1:]:
+        url = re.search(r'<a href="(https?://[^"]+)"', block)
+        title = re.search(r'search-snippet-title[^"]*"[^>]*title="([^"]*)"', block)
+        if not url or not title:
+            continue
+        snippet = re.search(r'class="content[^"]*"[^>]*>(.*?)</div>', block, re.S)
+        icon = re.search(r'<img src="(https://imgs\.search\.brave\.com/[^"]+)"[^>]*class="favicon', block)
+        results.append(WebResult(html.unescape(title.group(1)), html.unescape(url.group(1)),
+                                 _text(snippet.group(1)) if snippet else "", icon.group(1) if icon else ""))
+    return results
+
+
+def _bing_url(href: str) -> str:
+    href = html.unescape(href)
+    parsed = urllib.parse.urlparse(href)
+    if parsed.netloc.endswith("bing.com") and parsed.path.startswith("/ck/"):
+        u = urllib.parse.parse_qs(parsed.query).get("u", [""])[0]
+        if u.startswith("a1"):
+            import base64
+            try:
+                return base64.urlsafe_b64decode(u[2:] + "=" * (-len(u[2:]) % 4)).decode()
+            except ValueError:
+                pass
+    return href
+
+
+def search_bing(query: str) -> list[WebResult]:
+    page = _get("https://www.bing.com/search?" + urllib.parse.urlencode({"q": query, "setlang": "fr", "cc": "FR"})).decode("utf-8", "replace")
+    results = []
+    for block in page.split('<li class="b_algo')[1:]:
+        link = re.search(r'<h2[^>]*>\s*<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>', block, re.S)
+        if not link:
+            continue
+        snippet = re.search(r'<p[^>]*>(.*?)</p>', block, re.S)
+        results.append(WebResult(_text(link.group(2)), _bing_url(link.group(1)), _text(snippet.group(1)) if snippet else ""))
+    return results
+
+
+def search_ddg(query: str) -> list[WebResult]:
+    url = "https://html.duckduckgo.com/html/?" + urllib.parse.urlencode({"q": query, "kl": "fr-fr"})
+    parser = _DDGParser()
+    parser.feed(_get(url).decode("utf-8", "replace"))
+    parser.close()
+    return [r for r in parser.results if "duckduckgo.com/y.js" not in r.url]
+
+
+def search_brave_api(query: str) -> list[WebResult]:
+    """API officielle Brave Search : fiable, rapide, sans blocage."""
+    key = API_KEY_FILE.read_text().strip()
+    url = "https://api.search.brave.com/res/v1/web/search?" + urllib.parse.urlencode(
+        {"q": query, "count": 15, "search_lang": "fr", "country": "FR", "safesearch": "moderate"})
+    req = urllib.request.Request(url, headers={"Accept": "application/json", "X-Subscription-Token": key, "User-Agent": USER_AGENT})
+    with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+        data = json.loads(resp.read())
+    return [WebResult(_text(r.get("title", "")), r.get("url", ""), _text(r.get("description", "")),
+                      (r.get("profile") or {}).get("img", ""))
+            for r in data.get("web", {}).get("results", []) if r.get("url")]
+
+
+def has_api_key() -> bool:
+    try:
+        return bool(API_KEY_FILE.read_text().strip())
+    except OSError:
+        return False
+
+
+def suggestions(query: str) -> list[str]:
+    """Suggestions Google instantanées pendant la saisie."""
+    url = "https://suggestqueries.google.com/complete/search?" + urllib.parse.urlencode({"client": "firefox", "hl": "fr", "q": query})
+    data = json.loads(_get(url).decode("utf-8", "replace"))
+    return [x for x in data[1] if x.lower() != query.lower()][:5]
+
+
+# Un moteur qui nous bloque (429, captcha) est mis en pause quelques minutes
+_blocked_until: dict[str, float] = {}
+
+
+def _engine_ok(engine) -> bool:
+    import time
+    return time.time() >= _blocked_until.get(engine.__name__, 0)
+
+
+def _engine_failed(engine, exc: Exception) -> None:
+    import time
+    if isinstance(exc, urllib.error.HTTPError) and exc.code in (403, 429):
+        _blocked_until[engine.__name__] = time.time() + 300
+
+
+ENGINES = (search_brave, search_bing, search_ddg)
+_cache: dict[str, list[WebResult]] = {}
+
+
+def _norm_url(url: str) -> str:
+    p = urllib.parse.urlparse(url)
+    host = p.netloc.lower().removeprefix("www.")
+    return host + p.path.rstrip("/")
+
+
+def web_search(query: str) -> list[WebResult]:
+    """Interroge plusieurs moteurs en parallèle et fusionne leurs résultats."""
+    key = query.lower()
+    if key in _cache:
+        return _cache[key]
+    buckets: dict[str, list[WebResult]] = {}
+    errors = []
+
+    engines = (search_brave_api,) if has_api_key() else tuple(e for e in ENGINES if _engine_ok(e)) or ENGINES
+
+    def run(engine):
+        try:
+            buckets[engine.__name__] = engine(query)
+        except Exception as exc:
+            _engine_failed(engine, exc)
+            errors.append(exc)
+
+    threads = [threading.Thread(target=run, args=(e,), daemon=True) for e in engines]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=TIMEOUT + 1)
+    merged: list[WebResult] = []
+    seen: dict[str, WebResult] = {}
+    # Entrelace les moteurs (Brave d'abord) pour garder les meilleurs de chacun
+    lists = [buckets.get(e.__name__, []) for e in engines]
+    for i in range(max((len(l) for l in lists), default=0)):
+        for l in lists:
+            if i < len(l):
+                r = l[i]
+                k = _norm_url(r.url)
+                if k in seen:
+                    if not seen[k].snippet and r.snippet:
+                        seen[k].snippet = r.snippet
+                    if not seen[k].icon and r.icon:
+                        seen[k].icon = r.icon
+                    continue
+                seen[k] = r
+                merged.append(r)
+    if not merged and errors:
+        raise errors[0]
+    merged = merged[:MAX_RESULTS]
+    if merged:
+        _cache[key] = merged
+    return merged
+
+
+def fetch_icon(url: str) -> bytes | None:
+    try:
+        return _get(url)
+    except Exception:
+        return None
+
+
+def top_hit(query: str) -> TopHit | None:
+    """Résumé Wikipédia (en français) du sujet recherché, comme la carte de Spotlight."""
+    try:
+        api = "https://fr.wikipedia.org/w/api.php?" + urllib.parse.urlencode(
+            {"action": "query", "list": "search", "srsearch": query, "srlimit": 1, "format": "json"})
+        hits = json.loads(_get(api)).get("query", {}).get("search", [])
+        if not hits:
+            return None
+        title = hits[0]["title"]
+        summary = json.loads(_get("https://fr.wikipedia.org/api/rest_v1/page/summary/" + urllib.parse.quote(title.replace(" ", "_"))))
+        text = (summary.get("extract") or "").strip()
+        if not text or summary.get("type") == "disambiguation":
+            return None
+        return TopHit(summary.get("title", title), text,
+                      summary.get("content_urls", {}).get("desktop", {}).get("page", ""), "Wikipédia")
+    except Exception:
+        return None
+
+
+def open_url(url: str) -> None:
+    subprocess.Popen(["xdg-open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+
+
+def copy_text(text: str) -> None:
+    try:
+        subprocess.run(["wl-copy", text], check=False, timeout=2)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
+# ---------------------------------------------------------------- interface
+
+class Spotlight(Gtk.Application):
+    def __init__(self, mode: str) -> None:
+        app_id = "io.caelestia.Calc" if mode == "calc" else "io.caelestia.Spotlight"
+        super().__init__(application_id=app_id, flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
+        self.mode = mode
+        self.window: Gtk.ApplicationWindow | None = None
+        self.debounce = 0
+        self.suggest_debounce = 0
+        self.query_seq = 0
+        self.suggest_seq = 0
+        # Contenu affiché pour la recherche, reconstruit à chaque mise à jour
+        self.view = {"query": "", "calc": None, "suggest": [], "hit": None, "results": [], "loading": False, "error": False}
+        self.icon_cache: dict[str, Gdk.Texture | None] = {}
+        self.rows: list[tuple[Gtk.ListBoxRow, str]] = []
+        self.history: list[tuple[str, str]] = self.load_history() if mode == "calc" else []
+        self.last_result: str | None = None
+        self.was_active = False
+
+    # -- cycle de vie
+
+    def do_activate(self) -> None:
+        if self.window is not None:
+            self.window.close()
+            return
+        self.load_css()
+        self.build()
+        self.window.present()
+        self.entry.grab_focus()
+
+    def load_css(self) -> None:
+        provider = Gtk.CssProvider()
+        try:
+            provider.load_from_path(str(CSS_FILE))
+            Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        except GLib.Error:
+            pass
+
+    def close(self, *_args) -> None:
+        if self.window is not None:
+            self.window.close()
+
+    # -- construction
+
+    def build(self) -> None:
+        calc = self.mode == "calc"
+        self.window = Gtk.ApplicationWindow(application=self)
+        self.window.set_title("Calculatrice" if calc else "Recherche")
+        self.window.set_default_size(560 if calc else 720, 380 if calc else 640)
+        self.window.set_resizable(False)
+        self.window.connect("close-request", self.on_close)
+        # Comme Spotlight : la fenêtre se ferme dès qu'elle perd le focus
+        self.window.connect("notify::is-active", self.on_active_changed)
+
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        root.add_css_class("spot-root")
+        root.add_css_class("calc" if calc else "search")
+        self.window.set_child(root)
+
+        bar = Gtk.Box(spacing=12)
+        bar.add_css_class("spot-bar")
+        root.append(bar)
+        icon = Gtk.Label(label="󰃬" if calc else "󰍉")
+        icon.add_css_class("spot-icon")
+        bar.append(icon)
+        self.entry = Gtk.Entry(placeholder_text="Tape un calcul…  (ex. 12,5 × 4 + 20 %)" if calc else "Rechercher sur le web…")
+        self.entry.add_css_class("spot-entry")
+        self.entry.set_hexpand(True)
+        self.entry.connect("changed", self.on_changed)
+        self.entry.connect("activate", self.on_activate_entry)
+        bar.append(self.entry)
+        self.spinner = Gtk.Spinner()
+        self.spinner.add_css_class("spot-spinner")
+        bar.append(self.spinner)
+
+        if calc:
+            self.result = Gtk.Label(label="", xalign=1)
+            self.result.add_css_class("calc-result")
+            self.result.set_selectable(True)
+            self.result.set_ellipsize(Pango.EllipsizeMode.START)
+            root.append(self.result)
+            self.hint = Gtk.Label(label="Entrée : copier le résultat  •  Échap : fermer", xalign=1)
+            self.hint.add_css_class("spot-hint")
+            root.append(self.hint)
+            sep = Gtk.Box()
+            sep.add_css_class("spot-sep")
+            root.append(sep)
+            head = Gtk.Label(label="HISTORIQUE", xalign=0)
+            head.add_css_class("section-label")
+            root.append(head)
+
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_vexpand(True)
+        root.append(scroll)
+        self.list = Gtk.ListBox()
+        self.list.add_css_class("spot-list")
+        self.list.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        self.list.set_activate_on_single_click(True)
+        self.list.connect("row-activated", self.on_row_activated)
+        scroll.set_child(self.list)
+
+        if not calc:
+            self.status = Gtk.Label(label="Entrée : ouvrir  •  ↑↓ : naviguer  •  Ctrl+Entrée : Google  •  Échap : fermer")
+            self.status.add_css_class("spot-hint")
+            self.status.add_css_class("spot-footer")
+            root.append(self.status)
+            self.show_placeholder("Tape ta recherche : les résultats s'affichent ici.")
+        else:
+            self.render_history()
+
+        keys = Gtk.EventControllerKey()
+        keys.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        keys.connect("key-pressed", self.on_key)
+        self.window.add_controller(keys)
+
+    # -- événements
+
+    def on_active_changed(self, window, _param) -> None:
+        # Ne se ferme sur perte de focus qu'après avoir vraiment eu le focus
+        # (sinon le relâchement de Super pendant l'ouverture la refermait aussitôt)
+        if window.is_active():
+            self.was_active = True
+        elif self.was_active:
+            GLib.timeout_add(250, self._close_if_inactive)
+
+    def _close_if_inactive(self) -> bool:
+        if self.window is not None and not self.window.is_active():
+            self.window.close()
+        return False
+
+    def on_close(self, *_args) -> bool:
+        for attr in ("debounce", "suggest_debounce"):
+            if getattr(self, attr):
+                GLib.source_remove(getattr(self, attr))
+                setattr(self, attr, 0)
+        self.window = None
+        return False
+
+    def on_key(self, _ctrl, keyval, _code, state) -> bool:
+        if keyval == Gdk.KEY_Escape:
+            self.close()
+            return True
+        if keyval in (Gdk.KEY_Down, Gdk.KEY_Up) and self.rows:
+            self.move_selection(1 if keyval == Gdk.KEY_Down else -1)
+            return True
+        if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter) and state & Gdk.ModifierType.CONTROL_MASK and self.mode == "search":
+            text = self.entry.get_text().strip()
+            if text:
+                open_url("https://www.google.com/search?" + urllib.parse.urlencode({"q": text}))
+                self.close()
+            return True
+        return False
+
+    def on_changed(self, *_args) -> None:
+        if self.mode == "calc":
+            self.update_calc()
+            return
+        query = self.entry.get_text().strip()
+        self.view.update(query=query, calc=None, hit=None, results=[], error=False)
+        if query and is_calculation(query):
+            self.view["calc"] = format_number(calculate(query))
+        if not query:
+            self.view.update(suggest=[], loading=False)
+        for attr in ("debounce", "suggest_debounce"):
+            if getattr(self, attr):
+                GLib.source_remove(getattr(self, attr))
+                setattr(self, attr, 0)
+        if query:
+            self.suggest_debounce = GLib.timeout_add(110, self.start_suggest)
+            self.debounce = GLib.timeout_add(650, self.start_search)
+            self.view["loading"] = True
+        self.render()
+
+    def on_activate_entry(self, *_args) -> None:
+        if self.mode == "calc":
+            if self.last_result is not None:
+                expr = self.entry.get_text().strip()
+                copy_text(self.last_result.replace(" ", ""))
+                self.add_history(expr, self.last_result)
+                self.hint.set_text("Copié dans le presse-papiers ✓")
+                GLib.timeout_add(900, self.close)
+            return
+        # Entrée : si les résultats ne sont pas encore là, on les lance tout de suite ;
+        # sinon on ouvre le résultat sélectionné
+        if self.view["loading"] and self.view["query"]:
+            if self.debounce:
+                GLib.source_remove(self.debounce)
+                self.debounce = 0
+            self.start_search()
+            return
+        selected = self.list.get_selected_row()
+        row = selected or (self.rows[0][0] if self.rows else None)
+        if row is not None:
+            self.on_row_activated(self.list, row)
+
+    def on_row_activated(self, _list, row) -> None:
+        for r, action in self.rows:
+            if r is row:
+                if self.mode == "calc":
+                    self.entry.set_text(action)
+                    self.entry.set_position(-1)
+                    return
+                if action.startswith("suggest:"):
+                    # Une suggestion lance la recherche dans la fenêtre, sans navigateur
+                    self.entry.set_text(action[8:])
+                    self.entry.set_position(-1)
+                    if self.debounce:
+                        GLib.source_remove(self.debounce)
+                        self.debounce = 0
+                    self.start_search()
+                    return
+                if action.startswith("copy:"):
+                    copy_text(action[5:])
+                else:
+                    open_url(action)
+                self.close()
+                return
+
+    def move_selection(self, step: int) -> None:
+        current = self.list.get_selected_row()
+        idx = current.get_index() + step if current else (0 if step > 0 else len(self.rows) - 1)
+        idx = max(0, min(len(self.rows) - 1, idx))
+        row = self.rows[idx][0]
+        self.list.select_row(row)
+        row.grab_focus()
+        self.entry.grab_focus_without_selecting()
+
+    # -- calculatrice
+
+    def update_calc(self) -> None:
+        text = self.entry.get_text()
+        value = calculate(text) if text.strip() else None
+        if value is None:
+            self.last_result = None
+            self.result.set_text("" if not text.strip() else "…")
+            self.result.remove_css_class("has-result")
+        else:
+            self.last_result = format_number(value)
+            self.result.set_text("= " + self.last_result)
+            self.result.add_css_class("has-result")
+
+    def load_history(self) -> list[tuple[str, str]]:
+        try:
+            return [tuple(x) for x in json.loads(HISTORY_FILE.read_text())][:MAX_HISTORY]
+        except (OSError, ValueError, TypeError):
+            return []
+
+    def add_history(self, expr: str, result: str) -> None:
+        self.history = [(expr, result)] + [h for h in self.history if h[0] != expr]
+        self.history = self.history[:MAX_HISTORY]
+        try:
+            STATE_DIR.mkdir(parents=True, exist_ok=True)
+            HISTORY_FILE.write_text(json.dumps(self.history, ensure_ascii=False))
+        except OSError:
+            pass
+
+    def render_history(self) -> None:
+        self.clear_list()
+        if not self.history:
+            self.show_placeholder("Tes derniers calculs apparaîtront ici.")
+            return
+        for expr, result in self.history:
+            row = Gtk.ListBoxRow()
+            box = Gtk.Box(spacing=12)
+            box.add_css_class("history-row")
+            left = Gtk.Label(label=expr, xalign=0)
+            left.set_hexpand(True)
+            left.set_ellipsize(Pango.EllipsizeMode.END)
+            left.add_css_class("history-expr")
+            right = Gtk.Label(label="= " + result, xalign=1)
+            right.add_css_class("history-result")
+            box.append(left)
+            box.append(right)
+            row.set_child(box)
+            self.list.append(row)
+            self.rows.append((row, expr))
+
+    # -- recherche
+
+    def start_suggest(self) -> bool:
+        self.suggest_debounce = 0
+        query = self.view["query"]
+        self.suggest_seq += 1
+        seq = self.suggest_seq
+
+        def work():
+            try:
+                items = suggestions(query)
+            except Exception:
+                items = []
+            GLib.idle_add(self.got_suggestions, query, seq, items)
+
+        threading.Thread(target=work, daemon=True).start()
+        return False
+
+    def got_suggestions(self, query, seq, items) -> bool:
+        if seq == self.suggest_seq and query == self.view["query"] and self.window is not None:
+            self.view["suggest"] = items
+            self.render()
+        return False
+
+    def start_search(self) -> bool:
+        self.debounce = 0
+        query = self.view["query"]
+        if not query:
+            return False
+        self.query_seq += 1
+        seq = self.query_seq
+        self.view["loading"] = True
+        self.spinner.start()
+        threading.Thread(target=self.search_worker, args=(query, seq), daemon=True).start()
+        return False
+
+    def search_worker(self, query: str, seq: int) -> None:
+        results: list[WebResult] = []
+        error = False
+        hit_holder: list[TopHit | None] = [None]
+        wiki = threading.Thread(target=lambda: hit_holder.__setitem__(0, top_hit(query)), daemon=True)
+        wiki.start()
+        try:
+            results = web_search(query)
+        except Exception:
+            error = True
+        wiki.join(timeout=TIMEOUT)
+        GLib.idle_add(self.show_results, query, seq, results, hit_holder[0], error)
+
+    def show_results(self, query: str, seq: int, results, hit, error) -> bool:
+        if seq != self.query_seq or self.window is None or query != self.view["query"]:
+            return False
+        self.view.update(results=results, hit=hit, error=error and not results, loading=False)
+        self.render()
+        self.load_icons(results)
+        return False
+
+    # -- icônes des sites
+
+    def load_icons(self, results) -> None:
+        todo = [r.icon_url for r in results if r.icon_url not in self.icon_cache]
+        if not todo:
+            return
+
+        def work(url):
+            data = fetch_icon(url)
+            GLib.idle_add(self.got_icon, url, data)
+
+        for url in todo:
+            self.icon_cache[url] = None
+            threading.Thread(target=work, args=(url,), daemon=True).start()
+
+    def got_icon(self, url, data) -> bool:
+        if data:
+            try:
+                self.icon_cache[url] = Gdk.Texture.new_from_bytes(GLib.Bytes.new(data))
+            except GLib.Error:
+                return False
+            for image, icon_url in getattr(self, "icon_widgets", []):
+                if icon_url == url:
+                    image.set_from_paintable(self.icon_cache[url])
+        return False
+
+    # -- rendu de la liste
+
+    def render(self) -> None:
+        v = self.view
+        self.clear_list()
+        self.icon_widgets = []
+        if v["loading"]:
+            self.spinner.start()
+        else:
+            self.spinner.stop()
+        if not v["query"]:
+            self.show_placeholder("Tape ta recherche : les résultats s'affichent ici.")
+            return
+        if v["calc"]:
+            self.add_card("󰃬", f"= {v['calc']}", "Calcul  •  Entrée pour copier", f"copy:{v['calc'].replace(chr(0x202f), '')}", big=True)
+        if v["hit"] is not None:
+            self.add_top_hit(v["hit"])
+        # Quand les résultats sont là, on garde seulement 3 suggestions pour leur laisser la place
+        for text in v["suggest"][:3] if v["results"] else v["suggest"]:
+            self.add_suggestion(text)
+        if v["results"]:
+            head = Gtk.Label(label="RÉSULTATS WEB", xalign=0)
+            head.add_css_class("section-label")
+            row = Gtk.ListBoxRow(selectable=False, activatable=False)
+            row.set_child(head)
+            self.list.append(row)
+        for r in v["results"]:
+            self.add_result(r)
+        if v["error"]:
+            self.add_card("󰖪", "Résultats indisponibles pour le moment", "Les moteurs ne répondent pas — Entrée ouvre la recherche Google.",
+                          "https://www.google.com/search?" + urllib.parse.urlencode({"q": v["query"]}))
+        elif v["loading"] and not v["results"]:
+            label = Gtk.Label(label="Recherche en cours…")
+            label.add_css_class("spot-placeholder")
+            row = Gtk.ListBoxRow(selectable=False, activatable=False)
+            row.set_child(label)
+            self.list.append(row)
+        self.add_card("󰊭", f"Rechercher « {v['query']} » sur Google", "Ouvre le navigateur",
+                      "https://www.google.com/search?" + urllib.parse.urlencode({"q": v["query"]}))
+        if self.rows:
+            first = next((r for r, a in self.rows if not a.startswith("suggest:")), self.rows[0][0]) if v["results"] or v["hit"] else self.rows[0][0]
+            self.list.select_row(first)
+
+    def clear_list(self) -> None:
+        child = self.list.get_first_child()
+        while child is not None:
+            nxt = child.get_next_sibling()
+            self.list.remove(child)
+            child = nxt
+        self.rows = []
+
+    def show_placeholder(self, text: str) -> None:
+        self.clear_list()
+        label = Gtk.Label(label=text)
+        label.add_css_class("spot-placeholder")
+        row = Gtk.ListBoxRow(selectable=False, activatable=False)
+        row.set_child(label)
+        self.list.append(row)
+
+    def _append(self, widget: Gtk.Widget, action: str, css: str) -> None:
+        row = Gtk.ListBoxRow()
+        row.add_css_class(css)
+        row.set_child(widget)
+        self.list.append(row)
+        self.rows.append((row, action))
+
+    def add_suggestion(self, text: str) -> None:
+        box = Gtk.Box(spacing=12)
+        box.add_css_class("suggest-row")
+        ic = Gtk.Label(label="󰍉")
+        ic.add_css_class("suggest-icon")
+        box.append(ic)
+        label = Gtk.Label(label=text, xalign=0)
+        label.add_css_class("suggest-text")
+        label.set_ellipsize(Pango.EllipsizeMode.END)
+        box.append(label)
+        self._append(box, "suggest:" + text, "suggest")
+
+    def add_card(self, icon: str, title: str, subtitle: str, action: str, big: bool = False) -> None:
+        box = Gtk.Box(spacing=14)
+        box.add_css_class("card-row")
+        ic = Gtk.Label(label=icon)
+        ic.add_css_class("row-icon")
+        box.append(ic)
+        texts = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        t = Gtk.Label(label=title, xalign=0)
+        t.add_css_class("calc-inline" if big else "row-title")
+        t.set_ellipsize(Pango.EllipsizeMode.END)
+        sub = Gtk.Label(label=subtitle, xalign=0)
+        sub.add_css_class("row-domain")
+        texts.append(t)
+        texts.append(sub)
+        box.append(texts)
+        self._append(box, action, "card")
+
+    def add_top_hit(self, hit: TopHit) -> None:
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        box.add_css_class("tophit")
+        head = Gtk.Box(spacing=8)
+        badge = Gtk.Label(label=hit.source.upper())
+        badge.add_css_class("badge")
+        head.append(badge)
+        title = Gtk.Label(label=hit.title, xalign=0)
+        title.add_css_class("tophit-title")
+        title.set_ellipsize(Pango.EllipsizeMode.END)
+        head.append(title)
+        box.append(head)
+        text = Gtk.Label(label=hit.text, xalign=0)
+        text.add_css_class("tophit-text")
+        text.set_wrap(True)
+        text.set_lines(3)
+        text.set_ellipsize(Pango.EllipsizeMode.END)
+        box.append(text)
+        self._append(box, hit.url or "https://fr.wikipedia.org", "tophit-row")
+
+    def add_result(self, r: WebResult) -> None:
+        outer = Gtk.Box(spacing=12)
+        outer.add_css_class("result-row")
+        image = Gtk.Image()
+        image.set_pixel_size(20)
+        image.add_css_class("favicon")
+        image.set_valign(Gtk.Align.START)
+        cached = self.icon_cache.get(r.icon_url)
+        if cached is not None:
+            image.set_from_paintable(cached)
+        else:
+            image.set_from_icon_name("web-browser-symbolic")
+        self.icon_widgets.append((image, r.icon_url))
+        outer.append(image)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        box.set_hexpand(True)
+        domain = Gtk.Label(label=r.domain, xalign=0)
+        domain.add_css_class("row-domain")
+        title = Gtk.Label(label=r.title, xalign=0)
+        title.add_css_class("row-title")
+        title.set_ellipsize(Pango.EllipsizeMode.END)
+        box.append(domain)
+        box.append(title)
+        if r.snippet:
+            snip = Gtk.Label(label=r.snippet, xalign=0)
+            snip.add_css_class("row-snippet")
+            snip.set_wrap(True)
+            snip.set_lines(2)
+            snip.set_ellipsize(Pango.EllipsizeMode.END)
+            box.append(snip)
+        outer.append(box)
+        self._append(outer, r.url, "result")
+
+
+def main() -> int:
+    mode = "calc" if len(sys.argv) > 1 and sys.argv[1] in ("calc", "calculatrice", "-c") else "search"
+    return Spotlight(mode).run([sys.argv[0]])
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

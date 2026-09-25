@@ -1,0 +1,205 @@
+<div align="center">
+
+# 🫧 Caelestia · Liquid Glass
+
+**Le « liquid glass » de macOS sur Hyprland, construit sur [Caelestia](https://github.com/caelestia-dots/caelestia).**
+
+Verre translucide partout, Mission Control, Spotlight, animations fluides façon macOS, gestes du pavé tactile — installé en **une seule commande**.
+
+![Arch Linux](https://img.shields.io/badge/Arch_Linux-1793D1?style=flat&logo=archlinux&logoColor=white)
+![Hyprland](https://img.shields.io/badge/Hyprland-0.56+-58E1FF?style=flat)
+![Caelestia](https://img.shields.io/badge/caelestia--shell-2.3-e6c093?style=flat)
+![Licence](https://img.shields.io/badge/licence-GPL--3.0-blue?style=flat)
+
+[English summary below](#-english)
+
+</div>
+
+---
+
+## ✨ Ce que tu obtiens
+
+### 🫧 Liquid glass partout
+- **Tout le shell en verre** : barre, cadre de l'écran, barre latérale, tableau de bord, lanceur, menus, OSD volume/luminosité, menu de session, écran de verrouillage, paramètres.
+- **Une seule pièce de verre** : les panneaux sortent du cadre et s'y fondent, avec un **liseré lumineux** qui suit toutes les courbes et un **reflet qui suit la souris**.
+- **Deux shaders écrits sur mesure** (biseau éclairé, légère aberration chromatique, reflet spéculaire), le flou venant de Hyprland.
+- **Notifications en verre**, avec une arrivée en douceur.
+- **kitty, Nautilus et les outils en verre** : fond translucide et flouté, **texte toujours net**, et le même liseré de verre sur le bord des fenêtres.
+- **Les couleurs suivent ton fond d'écran** : tout est régénéré automatiquement à chaque changement de thème.
+
+### 🪟 Façon macOS
+- **Mission Control** (`Super + Tab` ou **3 doigts vers le haut**) : tes fenêtres glissent en grille, tes bureaux s'affichent en haut, et un clic t'y emmène.
+- **Spotlight** (`Super + Espace`) : suggestions Google instantanées, fiche Wikipédia, résultats web, calculs.
+- **Calculatrice** (`Super + O`) : le résultat s'affiche pendant que tu tapes (`12,5 × 4 + 20 %`), et Entrée le copie.
+- **Aperçu rapide** : dans Nautilus, sélectionne un fichier et appuie sur **Espace**.
+- **Indicateur de bureau** en verre pendant les changements de bureau.
+- **Animations façon macOS** : ressorts courts et nets, léger rebond, glissade visible entre les bureaux. Consommation identique au Caelestia d'origine.
+
+### ⌨️ Outils intégrés
+| Outil | Raccourci |
+|---|---|
+| **Tous les raccourcis** (fenêtre de recherche) | `Super + H` |
+| Presse-papiers (texte, images, liens, favoris) | `Super + V` |
+| Emojis et symboles | `Super + .` |
+| Choix de l'affichage (écran externe, dupliquer…) | `Super + P` |
+| Paramètres de Caelestia | `Super + I` |
+
+### 🎧 Petits plus
+- **Bascule audio Bluetooth automatique** : tes écouteurs deviennent la sortie et l'entrée dès qu'ils se connectent.
+- **Tout le shell en français**.
+- **Sons originaux** (libres de droits) pour les notifications et les branchements.
+
+---
+
+## 📋 Prérequis
+
+- **Arch Linux** ou une dérivée (EndeavourOS, CachyOS, Manjaro…)
+- **Hyprland 0.56 ou plus récent** (configuration en Lua)
+- **Caelestia installé et fonctionnel**
+
+> [!IMPORTANT]
+> **Installe d'abord Caelestia**, puis connecte-toi une fois à ta session Hyprland avant d'installer Liquid Glass :
+>
+> ```sh
+> paru -S caelestia-cli     # ou : yay -S caelestia-cli
+> caelestia install
+> ```
+>
+> Si Caelestia n'est pas détecté, l'installateur te le dira et pourra l'installer pour toi.
+
+---
+
+## 🚀 Installation
+
+```sh
+git clone https://github.com/Abdoul273/caelestia-liquid-glass.git
+cd caelestia-liquid-glass
+./install
+```
+
+C'est tout. L'installateur :
+
+1. **vérifie** ton système (Arch, version de Hyprland, présence et version de Caelestia) ;
+2. **installe les paquets nécessaires** (ton mot de passe est demandé une seule fois) ;
+3. **sauvegarde toute ta configuration actuelle** avant de toucher à quoi que ce soit ;
+4. installe le shell Liquid Glass, les réglages Hyprland, les outils, kitty et Nautilus en verre ;
+5. **active les services** (bascule audio Bluetooth, verre de Nautilus) ;
+6. **te propose les fonds d'écran macOS 27 « Golden Gate »** ;
+7. **recharge ton bureau** : tout est actif immédiatement.
+
+Options :
+
+```sh
+./install --dry-run   # montre ce qui serait fait, sans rien modifier
+./install --yes       # répond « oui » à tout
+./install --no-deps   # n'installe aucun paquet
+```
+
+> [!NOTE]
+> L'installateur **ne modifie jamais `~/.config/hypr/`**, comme le recommande Caelestia. Tous les réglages vont dans `~/.config/caelestia/hypr-user.lua` et `hypr-vars.lua`, donc les mises à jour de Caelestia restent sans conflit.
+
+---
+
+## ⌨️ Raccourcis et gestes
+
+Appuie sur **`Super + H`** : une fenêtre en verre liste **tous** les raccourcis du système, avec une recherche.
+
+### Essentiels
+| Raccourci | Action |
+|---|---|
+| `Super` | Lanceur d'applications |
+| `Super + Espace` | Recherche façon Spotlight |
+| `Super + O` | Calculatrice |
+| `Super + Tab` | Mission Control |
+| `Super + H` | Tous les raccourcis |
+| `Super + I` | Paramètres de Caelestia |
+| `Super + A` | Tableau de bord |
+| `Super + Retour arrière` | Éteindre / redémarrer / verrouiller |
+| `Super + Maj + R` | Recharger Hyprland et le shell |
+
+### Pavé tactile
+| Geste | Action |
+|---|---|
+| 3 doigts ← → | Changer de bureau (la page suit le doigt) |
+| 3 doigts ↑ | Mission Control |
+| 3 doigts ↓ | Fermer Mission Control |
+| 4 doigts ← → | Changer de bureau |
+| 4 doigts ↑ | Bureau spécial |
+
+---
+
+## 🎛️ Personnaliser
+
+| Tu veux… | Où |
+|---|---|
+| Retirer le verre des panneaux (les notifications restent en verre) | `~/.config/quickshell/caelestia/services/Glass.qml` → `panels: false` |
+| Revenir aux animations d'origine de Caelestia | `~/.config/quickshell/caelestia/services/Motion.qml` → `enabled: false` |
+| Changer d'applis par défaut, de raccourcis, d'espacement | `~/.config/caelestia/hypr-vars.lua` |
+| Ajouter tes propres réglages Hyprland | à la fin de `~/.config/caelestia/hypr-user.lua` |
+| Changer le style de tous les outils d'un coup | `~/.config/caelestia/tools-base.css` |
+| Rendre kitty plus ou moins transparent | `~/.config/kitty/liquid-glass.conf` → `background_opacity` |
+
+Après une modification : `Super + Maj + R` pour tout recharger.
+
+---
+
+## 🧹 Désinstaller
+
+```sh
+./uninstall
+```
+
+Retire tout ce que l'installateur a posé et **restaure ta configuration d'avant** depuis la sauvegarde (`~/.local/share/caelestia-liquid-glass/backups/`). Les paquets installés sont conservés.
+
+---
+
+## ❓ Questions fréquentes
+
+**Est-ce que ça ralentit mon PC ?**
+Non. Les shaders ne calculent presque rien en dehors des bords du verre. Mesuré : même consommation que le Caelestia d'origine, environ 7 % d'un cœur au repos.
+
+**Ma version de caelestia-shell est différente.**
+Liquid Glass remplace le shell de Caelestia par une version modifiée, prévue pour `caelestia-shell` 2.3. Avec une autre version, l'installateur te prévient avant de continuer. En cas de problème, `./uninstall` remet tout comme avant.
+
+**Le verre de Nautilus a disparu après un changement de fond d'écran.**
+Un petit service le remet automatiquement. Vérifie qu'il est actif : `systemctl --user status caelestia-glass-gtk.path`.
+
+**Ma disposition de clavier / ma langue est différente.**
+Rien n'est imposé : ta disposition reste celle de ta config Hyprland, et les dossiers de captures suivent tes dossiers utilisateur (Images, Pictures…).
+
+---
+
+## 🙏 Crédits
+
+- **[Caelestia](https://github.com/caelestia-dots)** par soramanew et ses contributeurs : le shell et les dotfiles sur lesquels tout repose (GPL-3.0).
+- **Google Sans Flex** (SIL Open Font License), fournie avec Caelestia.
+- Fonds d'écran macOS 27 : © Apple. Ils **ne sont pas inclus** dans ce dépôt ; l'installateur propose seulement de les télécharger depuis leur source publique.
+
+## 📄 Licence
+
+[GPL-3.0](LICENSE), comme Caelestia dont ce projet est dérivé.
+
+---
+
+## 🇬🇧 English
+
+**Caelestia · Liquid Glass** brings a macOS-style liquid glass look to Hyprland, on top of the [Caelestia](https://github.com/caelestia-dots/caelestia) shell. You get:
+- the whole shell in glass (two custom shaders, a light rim and a highlight that follows the cursor) ;
+- Mission Control and a Spotlight-style search ;
+- a live calculator, clipboard, emoji and display pickers ;
+- a searchable shortcuts window (`Super + H`) ;
+- macOS-like animations and trackpad gestures ;
+- kitty and Nautilus in glass ;
+- automatic Bluetooth audio switching.
+
+The interface is in French.
+
+**Requirements:** Arch Linux, Hyprland ≥ 0.56, and **Caelestia already installed** (`paru -S caelestia-cli && caelestia install`).
+
+**Install:**
+```sh
+git clone https://github.com/Abdoul273/caelestia-liquid-glass.git
+cd caelestia-liquid-glass
+./install
+```
+The installer checks your system, installs dependencies, **backs up your current config**, installs everything (never touching `~/.config/hypr/`) and reloads your desktop. Run `./uninstall` to restore your previous setup.
