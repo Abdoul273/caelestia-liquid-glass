@@ -26,7 +26,11 @@ printf '  Sauvegarde restaurée : %s%s%s\n' "$D" "${backup/#$HOME/~}" "$R"
 read -r -p "  Continuer ? [o/N] " answer || true
 [[ ${answer,,} == o* || ${answer,,} == y* ]] || { echo "  Annulé."; exit 0; }
 
-systemctl --user disable --now bt-audio-autoswitch.service caelestia-glass-gtk.path 2>/dev/null || true
+systemctl --user disable --now bt-audio-autoswitch.service caelestia-glass-gtk.path caelestia-login-sync.path 2>/dev/null || true
+if [[ -d /usr/share/sddm/themes/liquid-glass ]]; then
+    echo "  Retrait de l'écran de connexion (mot de passe demandé)…"
+    sudo "$(dirname "${BASH_SOURCE[0]}")/config/sddm/install-login-screen" --remove || true
+fi
 
 # Retire les fichiers installés, puis remet ceux qui existaient avant
 while read -r path; do

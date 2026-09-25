@@ -1,0 +1,10 @@
+[Unit]
+Description=Caelestia Liquid Glass : surveille le fond d'écran et la photo de profil
+
+[Path]
+PathChanged=%h/.local/state/caelestia/wallpaper/path.txt
+PathChanged=%h/.face
+Unit=caelestia-login-sync.service
+
+[Install]
+WantedBy=default.target

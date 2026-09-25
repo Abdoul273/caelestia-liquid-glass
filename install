@@ -327,7 +327,7 @@ enable_services() {
         done
     fi
     run systemctl --user daemon-reload
-    run systemctl --user enable --now bt-audio-autoswitch.service caelestia-glass-gtk.path
+    run systemctl --user enable --now bt-audio-autoswitch.service caelestia-glass-gtk.path caelestia-login-sync.path
     ok "Services activés"
 }
 
@@ -351,6 +351,21 @@ offer_wallpapers() {
             warn "Téléchargement impossible : $name"
         fi
     done
+}
+
+install_login_screen() {
+    title "Écran de connexion"
+    if ! command -v sddm >/dev/null 2>&1; then
+        info "SDDM n'est pas installé : l'écran de connexion en verre est ignoré."
+        return
+    fi
+    ask "Installer l'écran de connexion Liquid Glass (horloge, photo, mot de passe en verre) ?" o || return 0
+    if [[ ! -f $HOME/.face ]]; then
+        warn "Pas de photo de profil (~/.face) : l'initiale de ton nom sera affichée."
+        info "Pour en ajouter une : copie une image en ~/.face, elle sera reprise automatiquement."
+    fi
+    run sudo "$REPO_DIR/config/sddm/install-login-screen"
+    ok "Écran de connexion installé (visible à ta prochaine connexion)"
 }
 
 reload_desktop() {
@@ -401,6 +416,7 @@ cat <<EOF
   • remplacer ton shell Caelestia par la version Liquid Glass
   • installer les réglages Hyprland dans ~/.config/caelestia (jamais dans ~/.config/hypr)
   • installer les outils, kitty et Nautilus en verre, et les services
+  • proposer l'écran de connexion en verre (SDDM)
 EOF
 ask "On y va ?" o || { info "Installation annulée."; exit 0; }
 
@@ -409,5 +425,6 @@ install_files
 enable_services
 title "Fonds d'écran"
 offer_wallpapers
+install_login_screen
 reload_desktop
 summary

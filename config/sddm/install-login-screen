@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# ============================================================================
+#  Caelestia Liquid Glass — écran de connexion SDDM (à lancer avec sudo)
+#    sudo ./config/sddm/install-login-screen            installe
+#    sudo ./config/sddm/install-login-screen --remove   désinstalle
+# ============================================================================
+set -euo pipefail
+
+[[ $EUID -eq 0 ]] || { echo "Lance ce script avec sudo." >&2; exit 1; }
+USER_NAME=${SUDO_USER:-}
+[[ -n $USER_NAME && $USER_NAME != root ]] || { echo "Lance-le avec sudo depuis ton compte (pas en root direct)." >&2; exit 1; }
+USER_HOME=$(getent passwd "$USER_NAME" | cut -d: -f6)
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+THEME_DIR=/usr/share/sddm/themes/liquid-glass
+DATA_DIR=/var/lib/caelestia-login
+CONF=/etc/sddm.conf.d/10-liquid-glass.conf
+
+if [[ ${1:-} == --remove ]]; then
+    rm -rf "$THEME_DIR" "$CONF" "$DATA_DIR"
+    echo "✓ Écran de connexion Liquid Glass retiré (SDDM reprend son thème par défaut)."
+    exit 0
+fi
+
+command -v sddm >/dev/null || { echo "SDDM n'est pas installé : écran de connexion ignoré." >&2; exit 0; }
+
+# Thème
+rm -rf "$THEME_DIR"
+cp -r "$HERE/liquid-glass" "$THEME_DIR"
+chmod -R a+rX "$THEME_DIR"
+
+# Dossier lisible par SDDM, modifiable par l'utilisateur (fond d'écran et photo
+# se mettent ensuite à jour tout seuls, sans sudo)
+install -d -m 755 -o "$USER_NAME" "$DATA_DIR"
+wall=$(cat "$USER_HOME/.local/state/caelestia/wallpaper/path.txt" 2>/dev/null || true)
+[[ -f $wall ]] && install -m 644 -o "$USER_NAME" "$wall" "$DATA_DIR/background.jpg"
+if [[ -f $USER_HOME/.face ]]; then
+    install -m 644 -o "$USER_NAME" "$USER_HOME/.face" "$DATA_DIR/avatar.png"
+    # Photo de profil officielle du compte (AccountsService)
+    if [[ -d /var/lib/AccountsService ]]; then
+        install -d /var/lib/AccountsService/icons /var/lib/AccountsService/users
+        install -m 644 "$USER_HOME/.face" "/var/lib/AccountsService/icons/$USER_NAME"
+        users_file="/var/lib/AccountsService/users/$USER_NAME"
+        if [[ -f $users_file ]] && grep -q '^Icon=' "$users_file"; then
+            sed -i "s|^Icon=.*|Icon=/var/lib/AccountsService/icons/$USER_NAME|" "$users_file"
+        else
+            [[ -f $users_file ]] || printf '[User]\n' > "$users_file"
+            echo "Icon=/var/lib/AccountsService/icons/$USER_NAME" >> "$users_file"
+        fi
+    fi
+fi
+
+# Activation du thème
+install -d /etc/sddm.conf.d
+cat > "$CONF" <<CONFEOF
+# Caelestia Liquid Glass
+[Theme]
+Current=liquid-glass
+CONFEOF
+
+echo "✓ Écran de connexion Liquid Glass installé : il apparaîtra à ta prochaine connexion."

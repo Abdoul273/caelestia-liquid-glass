@@ -24,6 +24,7 @@ Verre translucide partout, Mission Control, Spotlight, animations fluides façon
 - **Une seule pièce de verre** : les panneaux sortent du cadre et s'y fondent, avec un **liseré lumineux** qui suit toutes les courbes et un **reflet qui suit la souris**.
 - **Deux shaders écrits sur mesure** (biseau éclairé, légère aberration chromatique, reflet spéculaire), le flou venant de Hyprland.
 - **Notifications en verre**, avec une arrivée en douceur.
+- **Écran de connexion façon macOS** (SDDM) : ton fond d'écran avec une grande horloge, puis, à la première touche, un flou, ta photo et un champ de mot de passe en verre. Le fond d'écran et la photo se synchronisent tout seuls avec ton bureau.
 - **kitty, Nautilus et les outils en verre** : fond translucide et flouté, **texte toujours net**, et le même liseré de verre sur le bord des fenêtres.
 - **Les couleurs suivent ton fond d'écran** : tout est régénéré automatiquement à chaque changement de thème.
 
@@ -85,7 +86,8 @@ C'est tout. L'installateur :
 4. installe le shell Liquid Glass, les réglages Hyprland, les outils, kitty et Nautilus en verre ;
 5. **active les services** (bascule audio Bluetooth, verre de Nautilus) ;
 6. **te propose les fonds d'écran macOS 27 « Golden Gate »** ;
-7. **recharge ton bureau** : tout est actif immédiatement.
+7. **te propose l'écran de connexion en verre** (si tu utilises SDDM) ;
+8. **recharge ton bureau** : tout est actif immédiatement.
 
 Options :
 
@@ -138,6 +140,7 @@ Appuie sur **`Super + H`** : une fenêtre en verre liste **tous** les raccourcis
 | Ajouter tes propres réglages Hyprland | à la fin de `~/.config/caelestia/hypr-user.lua` |
 | Changer le style de tous les outils d'un coup | `~/.config/caelestia/tools-base.css` |
 | Rendre kitty plus ou moins transparent | `~/.config/kitty/liquid-glass.conf` → `background_opacity` |
+| Changer ta photo (écran de connexion, tableau de bord) | remplace l'image `~/.face` |
 
 Après une modification : `Super + Maj + R` pour tout recharger.
 

@@ -1,0 +1,6 @@
+[Unit]
+Description=Caelestia Liquid Glass : synchronise le fond d'écran et la photo avec l'écran de connexion
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'd=/var/lib/caelestia-login; [ -w "$d" ] || exit 0; w=$(cat "$HOME/.local/state/caelestia/wallpaper/path.txt" 2>/dev/null); [ -f "$w" ] && cp -f "$w" "$d/background.jpg"; [ -f "$HOME/.face" ] && cp -f "$HOME/.face" "$d/avatar.png"; exit 0'
