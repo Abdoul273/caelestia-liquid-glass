@@ -96,6 +96,30 @@ StyledWindow {
         dispatchTimer.restart();
     }
 
+    // Aperçu en grand façon Quick Look : voir une fenêtre avant d'y aller
+    property var hoveredWindow: null
+    property var previewWindow: null
+    property var shownPreview: null
+
+    onPreviewWindowChanged: {
+        if (previewWindow)
+            shownPreview = previewWindow;
+    }
+
+    function openPreview(t: var): void {
+        if (t)
+            previewWindow = t;
+    }
+
+    Connections {
+        target: win.mc
+
+        function onOpenChanged(): void {
+            if (!win.mc.open)
+                win.previewWindow = null;
+        }
+    }
+
     function focusWindow(t: var): void {
         runAfterClose(Hypr.usingLua ? `hl.dsp.focus({ window = "address:0x${t.address}" })` : `focuswindow address:0x${t.address}`, t.workspace?.id ?? -1);
     }
@@ -171,8 +195,27 @@ StyledWindow {
     Item {
         anchors.fill: parent
         focus: true
-        Keys.onEscapePressed: win.mc.close()
+        Keys.onEscapePressed: {
+            if (win.previewWindow)
+                win.previewWindow = null;
+            else
+                win.mc.close();
+        }
         Keys.onPressed: event => {
+            // Espace : aperçu en grand de la fenêtre survolée (ou retour)
+            if (event.key === Qt.Key_Space) {
+                if (win.previewWindow)
+                    win.previewWindow = null;
+                else
+                    win.openPreview(win.hoveredWindow);
+                event.accepted = true;
+                return;
+            }
+            if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && win.previewWindow) {
+                win.focusWindow(win.previewWindow);
+                event.accepted = true;
+                return;
+            }
             // 1…9 : aller à l'espace correspondant
             const n = event.key - Qt.Key_1 + 1;
             if (n >= 1 && n <= 9) {
@@ -253,10 +296,18 @@ StyledWindow {
                                 asynchronous: true
                             }
 
-                            // Clic sur une mini-fenêtre : aller directement à cette fenêtre
+                            // Clic sur une mini-fenêtre d'un bureau : aperçu en grand avant d'y aller
                             TapHandler {
                                 gesturePolicy: TapHandler.ReleaseWithinBounds
-                                onTapped: win.focusWindow(parent.modelData)
+                                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                onTapped: win.openPreview(parent.modelData)
+                            }
+
+                            HoverHandler {
+                                onHoveredChanged: {
+                                    if (hovered)
+                                        win.hoveredWindow = parent.modelData;
+                                }
                             }
                         }
                     }
@@ -369,11 +420,22 @@ StyledWindow {
                 id: hover
 
                 cursorShape: Qt.PointingHandCursor
+                onHoveredChanged: {
+                    if (hovered)
+                        win.hoveredWindow = tile.modelData;
+                }
             }
 
             TapHandler {
                 gesturePolicy: TapHandler.ReleaseWithinBounds
                 onTapped: win.focusWindow(tile.modelData)
+            }
+
+            // Clic droit : aperçu en grand
+            TapHandler {
+                gesturePolicy: TapHandler.ReleaseWithinBounds
+                acceptedButtons: Qt.RightButton
+                onTapped: win.openPreview(tile.modelData)
             }
         }
     }
@@ -385,5 +447,135 @@ StyledWindow {
         text: qsTr("Aucune fenêtre sur ce bureau")
         color: "white"
         font.pointSize: 16
+    }
+
+    // ---- Aperçu en grand (Quick Look)
+    Item {
+        id: previewLayer
+
+        readonly property var t: win.shownPreview
+        readonly property var ipc: t?.lastIpcObject ?? null
+        readonly property real ratio: ipc ? ipc.size[0] / Math.max(1, ipc.size[1]) : 16 / 9
+        readonly property real maxW: win.width * 0.74
+        readonly property real maxH: win.height * 0.68
+
+        anchors.fill: parent
+        z: 100
+        opacity: win.previewWindow ? 1 : 0
+        visible: opacity > 0
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 220
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            color: Qt.alpha("#05060c", 0.72)
+        }
+
+        // Clic à côté de l'aperçu : retour à Mission Control
+        MouseArea {
+            anchors.fill: parent
+            onClicked: win.previewWindow = null
+        }
+
+        Item {
+            id: pv
+
+            width: Math.min(previewLayer.maxW, previewLayer.maxH * previewLayer.ratio)
+            height: width / previewLayer.ratio
+            anchors.centerIn: parent
+            anchors.verticalCenterOffset: -24
+            scale: win.previewWindow ? 1 : 0.9
+
+            Behavior on scale {
+                NumberAnimation {
+                    duration: 380
+                    easing.type: Easing.OutBack
+                    easing.overshoot: 1.2
+                }
+            }
+
+            LiquidGlass {
+                anchors.fill: parent
+                anchors.margins: -14
+                radius: 28
+                tintColour: Colours.palette.m3surfaceContainer
+                tintOpacity: 0.35
+                hovered: pvHover.hovered
+                pointer: Qt.point(pvHover.point.position.x / Math.max(1, width), pvHover.point.position.y / Math.max(1, height))
+            }
+
+            ClippingRectangle {
+                anchors.fill: parent
+                radius: 16
+                // Fond opaque : les fenêtres elles-mêmes en verre restent lisibles
+                color: Colours.palette.m3surface
+
+                // Capture en direct : la fenêtre bouge dans l'aperçu
+                ScreencopyView {
+                    anchors.fill: parent
+                    captureSource: win.previewWindow ? previewLayer.t?.wayland ?? null : null // qmllint disable unresolved-type
+                    live: true
+                }
+            }
+
+            HoverHandler {
+                id: pvHover
+
+                cursorShape: Qt.PointingHandCursor
+            }
+
+            TapHandler {
+                gesturePolicy: TapHandler.ReleaseWithinBounds
+                onTapped: win.focusWindow(previewLayer.t)
+            }
+        }
+
+        Column {
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: pv.bottom
+            anchors.topMargin: 28
+            spacing: 6
+
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 10
+
+                IconImage {
+                    anchors.verticalCenter: parent.verticalCenter
+                    implicitSize: 24
+                    source: Icons.getAppIcon(previewLayer.ipc?.class ?? "", "application-x-executable")
+                    asynchronous: true
+                }
+
+                StyledText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.min(implicitWidth, win.width * 0.6)
+                    elide: Text.ElideRight
+                    text: previewLayer.ipc?.title ?? ""
+                    color: "white"
+                    font.pointSize: 13
+                    font.weight: Font.DemiBold
+                }
+
+                StyledText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: previewLayer.t?.workspace ? qsTr("Bureau %1").arg(previewLayer.t.workspace.id) : ""
+                    color: Qt.alpha("white", 0.6)
+                    font.pointSize: 11
+                }
+            }
+
+            StyledText {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: qsTr("Clic ou Entrée : y aller  •  Espace ou Échap : revenir")
+                color: Qt.alpha("white", 0.5)
+                font.pointSize: 9.5
+            }
+        }
     }
 }

@@ -25,7 +25,7 @@ SHORTCUTS = [
     ("Essentiels", "󰌌", [
         ("Super", "Ouvrir le lanceur d'applications (appui seul, puis relâcher)"),
         ("Super + Espace", "Recherche façon Spotlight (web + calculs)"),
-        ("Super + O", "Calculatrice rapide"),
+        ("Super + O", "Calculatrice (tape ou clique ; conversions : « 10 km en miles »)"),
         ("Super + Tab", "Mission Control : voir toutes les fenêtres et bureaux"),
         ("Super + H", "Afficher cette fenêtre des raccourcis"),
         ("Super + I", "Ouvrir les paramètres de Caelestia"),
@@ -136,6 +136,8 @@ SHORTCUTS = [
     ]),
     ("Dans Mission Control", "󰕰", [
         ("Clic sur une fenêtre", "Aller à cette fenêtre"),
+        ("Espace | clic droit", "Aperçu en grand de la fenêtre survolée"),
+        ("Clic sur une mini-fenêtre d'un bureau", "Aperçu en grand avant d'y aller"),
         ("Clic sur un bureau", "Aller à ce bureau"),
         ("1 … 9", "Aller au bureau correspondant"),
         ("Échap | clic dans le vide", "Fermer"),

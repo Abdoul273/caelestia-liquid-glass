@@ -144,8 +144,8 @@ hl.window_rule({
 hl.window_rule({
     match        = { class = "io.caelestia.Calc" },
     float        = true,
-    size         = "560 380",
-    move         = "(monitor_w*0.5-280) (monitor_h*0.22)",
+    size         = "380 640",
+    move         = "(monitor_w*0.5-190) (monitor_h*0.16)",
     opacity      = "1.0 override 1.0 override",
     border_size  = 2,
     border_color = glass_border,

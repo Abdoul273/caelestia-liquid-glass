@@ -201,3 +201,130 @@ image.favicon {
   border-radius: 5px;
   color: alpha(@t_on_surface_variant, 0.45);
 }
+
+/* ======================= Calculatrice (Super + O) ======================= */
+.calc-root {
+  padding: 14px 16px 16px;
+  background-image: linear-gradient(to bottom, alpha(white, 0.07), alpha(white, 0.012) 30%, transparent 60%);
+}
+.calc-head { padding: 0 4px; }
+.calc-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: alpha(@t_on_surface_variant, 0.6);
+}
+.calc-iconbtn {
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0;
+  border-radius: 9px;
+  font-size: 15px;
+  color: alpha(@t_on_surface_variant, 0.8);
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+.calc-iconbtn:hover { background: alpha(@t_on_surface, 0.08); }
+.calc-iconbtn:checked { color: @t_primary; background: alpha(@t_primary, 0.15); }
+
+/* Écran : plaque de verre */
+.calc-display {
+  padding: 14px 18px 12px;
+  border-radius: 20px;
+  background: alpha(@t_on_surface, 0.045);
+  border: 1px solid alpha(@t_on_surface, 0.08);
+  box-shadow: inset 0 1px alpha(white, 0.10);
+}
+entry.calc-expr {
+  min-height: 30px;
+  padding: 0;
+  font-size: 19px;
+  color: alpha(@t_on_surface_variant, 0.85);
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  outline: none;
+  caret-color: @t_primary;
+}
+entry.calc-expr > text > placeholder { color: alpha(@t_on_surface_variant, 0.35); }
+.calc-big {
+  min-height: 72px;
+  font-size: 58px;
+  font-weight: 300;
+  color: @t_on_surface;
+  transition: all 180ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+.calc-big.big-m { font-size: 46px; }
+.calc-big.big-s { font-size: 36px; }
+.calc-big.big-xs { font-size: 27px; }
+.calc-big.dim { color: alpha(@t_on_surface, 0.35); }
+.calc-big.pop { color: @t_primary; }
+.calc-hint {
+  font-size: 10.5px;
+  color: alpha(@t_on_surface_variant, 0.45);
+}
+.calc-hint.error { color: alpha(@t_error, 0.9); }
+
+/* Historique */
+list.calc-history {
+  background: transparent;
+  padding: 2px 4px;
+}
+list.calc-history > row {
+  border-radius: 11px;
+  background: transparent;
+  transition: background 150ms ease;
+}
+list.calc-history > row:hover { background: alpha(@t_on_surface, 0.06); }
+.calc-hist-row { padding: 6px 12px; }
+.calc-hist-expr { font-size: 11.5px; color: alpha(@t_on_surface_variant, 0.6); }
+.calc-hist-result { font-size: 15px; font-weight: 600; color: @t_on_surface; }
+.calc-hist-empty { margin: 20px; font-size: 12px; color: alpha(@t_on_surface_variant, 0.4); }
+
+/* Pavé de touches en verre */
+.calc-keypad { margin-top: 2px; }
+button.key {
+  min-height: 50px;
+  padding: 0;
+  border-radius: 16px;
+  font-size: 20px;
+  font-weight: 500;
+  color: @t_on_surface;
+  background: alpha(@t_on_surface, 0.07);
+  border: 1px solid alpha(@t_on_surface, 0.06);
+  box-shadow: inset 0 1px alpha(white, 0.08);
+  transition: all 120ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+button.key:hover { background: alpha(@t_on_surface, 0.12); }
+button.key:active,
+button.key.pressed {
+  background: alpha(@t_on_surface, 0.20);
+  box-shadow: inset 0 2px 6px alpha(black, 0.18);
+}
+button.key-fn {
+  font-size: 17px;
+  color: alpha(@t_on_surface, 0.92);
+  background: alpha(@t_on_surface, 0.12);
+}
+button.key-fn:hover { background: alpha(@t_on_surface, 0.17); }
+button.key-op {
+  font-size: 24px;
+  color: @t_primary;
+  background: alpha(@t_primary, 0.16);
+  border-color: alpha(@t_primary, 0.20);
+}
+button.key-op:hover { background: alpha(@t_primary, 0.24); }
+button.key-op:active,
+button.key-op.pressed { background: alpha(@t_primary, 0.34); }
+button.key-eq {
+  font-size: 24px;
+  font-weight: 600;
+  color: @t_on_primary;
+  background: @t_primary;
+  border-color: transparent;
+  box-shadow: inset 0 1px alpha(white, 0.30), 0 4px 14px alpha(@t_primary, 0.30);
+}
+button.key-eq:hover { background: mix(@t_primary, white, 0.12); }
+button.key-eq:active,
+button.key-eq.pressed { background: mix(@t_primary, black, 0.12); }
