@@ -164,10 +164,10 @@ Item {
         readonly property bool current: TabBar.tabBar.currentItem === this
 
         Layout.fillWidth: true
-        Layout.fillHeight: true
         Layout.preferredWidth: 1 // Même largeur pour tous les onglets
+        Layout.preferredHeight: track.height
         implicitWidth: implicitContentWidth
-        implicitHeight: implicitContentHeight
+        implicitHeight: track.height
         background: null
 
         contentItem: CustomMouseArea {
