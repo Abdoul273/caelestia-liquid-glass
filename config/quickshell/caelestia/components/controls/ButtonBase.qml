@@ -67,6 +67,39 @@ StyledRect {
     required implicitWidth
     required implicitHeight
 
+    // Verre façon macOS : reflet en haut, liseré lumineux, légère pression au clic
+    readonly property bool glass: Glass.controls && type !== ButtonBase.Text
+
+    scale: glass && pressed ? 0.96 : 1
+
+    Behavior on scale {
+        Anim {
+            type: Anim.FastSpatial
+        }
+    }
+
+    Rectangle {
+        visible: root.glass
+        anchors.fill: parent
+        radius: root.radius
+        border.width: 1
+        border.color: Qt.alpha("white", root.internalChecked || root.type === ButtonBase.Filled && !root.isToggle ? 0.26 : 0.13)
+        gradient: Gradient {
+            GradientStop {
+                position: 0
+                color: Qt.alpha("white", root.hovered ? 0.22 : 0.16)
+            }
+            GradientStop {
+                position: 0.5
+                color: Qt.alpha("white", 0)
+            }
+            GradientStop {
+                position: 1
+                color: Qt.alpha("white", 0.04)
+            }
+        }
+    }
+
     StateLayer {
         id: stateLayer
 

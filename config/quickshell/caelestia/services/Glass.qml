@@ -11,6 +11,8 @@ Singleton {
     id: root
 
     readonly property bool panels: true
+    // Boutons et interrupteurs façon macOS (reflet, liseré, curseur lentille). false = style d'origine.
+    readonly property bool controls: panels
 
     // Fond des cartes à l'intérieur d'un panneau en verre : voile translucide au lieu d'un aplat
     function tile(original: color): color {
