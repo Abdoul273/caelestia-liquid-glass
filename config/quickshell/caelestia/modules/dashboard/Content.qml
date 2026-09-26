@@ -175,6 +175,27 @@ Item {
                             }
                         }
 
+                        // Cartes en cascade à l'ouverture du panneau et à chaque changement d'onglet
+                        Cascade {
+                            id: cascade
+
+                            target: paneLoader.item
+                        }
+
+                        onLoaded: if (isCurrent)
+                            Qt.callLater(cascade.play)
+                        onIsCurrentChanged: if (isCurrent && item)
+                            Qt.callLater(cascade.play)
+
+                        Connections {
+                            target: root.screenState
+
+                            function onDashboardChanged(): void {
+                                if (root.screenState.dashboard && paneLoader.isCurrent && paneLoader.item)
+                                    Qt.callLater(cascade.play);
+                            }
+                        }
+
                         Component.onCompleted: active = Qt.binding(() => {
                             if (index === view.currentIndex)
                                 return true;
