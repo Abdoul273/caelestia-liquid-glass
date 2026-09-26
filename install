@@ -282,6 +282,26 @@ install_files() {
         install_item "config/systemd/user/$(basename "$unit")" "$HOME/.config/systemd/user/$(basename "$unit")"
     done
     ok "Services (bascule audio Bluetooth, verre de Nautilus)"
+
+    set_logout_command
+}
+
+set_logout_command() {
+    # « loginctl terminate-user » (défaut Caelestia) tue la session : SDDM ne relance pas
+    # l'écran de connexion et on reste sur un fond noir. On quitte Hyprland proprement.
+    local cfg="$HOME/.config/caelestia/shell.json"
+    (( DRY_RUN )) && { info "déconnexion propre : ajoutée à ${cfg/#$HOME/~}"; return; }
+    mkdir -p "$(dirname "$cfg")"
+    [[ -f $cfg ]] && backup_path "$cfg"
+    python3 - "$cfg" <<'PY'
+import json, sys
+from pathlib import Path
+path = Path(sys.argv[1])
+data = json.loads(path.read_text()) if path.exists() and path.read_text().strip() else {}
+data.setdefault("session", {}).setdefault("commands", {})["logout"] = ["hyprctl", "dispatch", "hl.dsp.exit()"]
+path.write_text(json.dumps(data, indent=4) + "\n")
+PY
+    ok "Déconnexion propre vers l'écran de connexion"
 }
 
 # ---------------------------------------------------------------- finalisation
