@@ -288,7 +288,8 @@ install_files() {
 
 set_logout_command() {
     # « loginctl terminate-user » (défaut Caelestia) tue la session : SDDM ne relance pas
-    # l'écran de connexion et on reste sur un fond noir. On quitte Hyprland proprement.
+    # l'écran de connexion et on reste sur un fond noir. caelestia-logout quitte Hyprland
+    # proprement puis ferme les processus restés dans la session (ex. musique qui continue).
     local cfg="$HOME/.config/caelestia/shell.json"
     (( DRY_RUN )) && { info "déconnexion propre : ajoutée à ${cfg/#$HOME/~}"; return; }
     mkdir -p "$(dirname "$cfg")"
@@ -298,7 +299,7 @@ import json, sys
 from pathlib import Path
 path = Path(sys.argv[1])
 data = json.loads(path.read_text()) if path.exists() and path.read_text().strip() else {}
-data.setdefault("session", {}).setdefault("commands", {})["logout"] = ["hyprctl", "dispatch", "hl.dsp.exit()"]
+data.setdefault("session", {}).setdefault("commands", {})["logout"] = ["caelestia-logout"]
 path.write_text(json.dumps(data, indent=4) + "\n")
 PY
     ok "Déconnexion propre vers l'écran de connexion"

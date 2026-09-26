@@ -1,0 +1,31 @@
+#!/bin/sh
+# Déconnexion propre : quitte Hyprland (SDDM relance l'écran de connexion), puis
+# ferme ce qui reste de la session (lecteurs audio, processus sans fenêtre...).
+# « loginctl terminate-session/user » tue tout d'un coup et laisse un écran noir.
+
+[ -z "$CAELESTIA_LOGOUT_DETACHED" ] && CAELESTIA_LOGOUT_DETACHED=1 exec setsid -f "$0" "$@"
+
+scope=$(sed -n 's/^0:://p' /proc/self/cgroup)
+procs="/sys/fs/cgroup$scope/cgroup.procs"
+leader=$(loginctl show-session "$XDG_SESSION_ID" -p Leader --value 2>/dev/null)
+
+hypr=""
+for pid in $(pgrep -u "$(id -u)" -x Hyprland); do
+    grep -qx "0::$scope" "/proc/$pid/cgroup" 2>/dev/null && hypr=$pid
+done
+
+hyprctl dispatch 'hl.dsp.exit()' >/dev/null 2>&1
+
+# Attend la fin de Hyprland (10 s max), puis laisse SDDM reprendre la main.
+i=0
+while [ -n "$hypr" ] && [ -d "/proc/$hypr" ] && [ $i -lt 100 ]; do sleep 0.1; i=$((i + 1)); done
+sleep 1
+
+case "$scope" in */session-*.scope) ;; *) exit 0 ;; esac
+for sig in TERM KILL; do
+    for pid in $(cat "$procs" 2>/dev/null); do
+        [ "$pid" = "$$" ] || [ "$pid" = "$leader" ] && continue
+        kill -"$sig" "$pid" 2>/dev/null
+    done
+    [ "$sig" = TERM ] && sleep 2
+done
