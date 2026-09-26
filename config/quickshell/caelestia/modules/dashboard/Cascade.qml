@@ -3,15 +3,17 @@ import qs.services
 
 // Apparition en cascade façon macOS des cartes d'une page du tableau de bord.
 // Trouve les cartes toute seule (rectangles et éléments feuilles des layouts), les trie
-// dans l'ordre de lecture et les fait monter en fondu l'une après l'autre.
+// dans l'ordre de lecture et les fait apparaître en fondu avec un léger zoom, l'une après l'autre.
 // Une seule animation pilote tout (pas un objet par carte) : léger en CPU.
+// Ne JAMAIS ajouter d'objet (Translate…) aux cartes : à la destruction du panneau, Qt
+// plante sur les cartes qui ont un layer.effect (photo de profil…).
 Item {
     id: root
 
     property Item target
     property int stagger: 38
     property int duration: 460
-    property real rise: 14
+    property real fromScale: 0.94
 
     property real t
     property var entries: []
@@ -45,19 +47,12 @@ Item {
             const pa = pos(a), pb = pos(b);
             return Math.abs(pa.y - pb.y) > 30 ? pa.y - pb.y : pa.x - pb.x;
         });
-        entries = items.map((it, i) => {
-            let tr = null;
-            if (it.transform.length === 0) {
-                tr = Qt.createQmlObject("import QtQuick; Translate {}", it);
-                it.transform = [tr];
-            }
-            return {
-                item: it,
-                tr: tr,
-                opacity: it.opacity,
-                delay: i * stagger
-            };
-        });
+        entries = items.map((it, i) => ({
+                    item: it,
+                    opacity: it.opacity,
+                    scale: it.scale,
+                    delay: i * stagger
+                }));
         t = 0;
         apply();
         anim.duration = (entries.length - 1) * stagger + duration;
@@ -73,9 +68,10 @@ Item {
     function apply(): void {
         for (const e of entries) {
             const p = Math.max(0, Math.min(1, (t - e.delay) / duration));
+            if (!e.item)
+                continue;
             e.item.opacity = e.opacity * Math.min(1, p * 2);
-            if (e.tr)
-                e.tr.y = (1 - ease(p)) * rise;
+            e.item.scale = e.scale * (fromScale + (1 - fromScale) * ease(p));
         }
     }
 
@@ -85,8 +81,7 @@ Item {
             if (!e.item)
                 continue;
             e.item.opacity = e.opacity;
-            if (e.tr)
-                e.tr.y = 0;
+            e.item.scale = e.scale;
         }
         entries = [];
     }
@@ -104,5 +99,9 @@ Item {
         onFinished: root.finish()
     }
 
-    Component.onDestruction: finish()
+    // À la destruction, les cartes sont détruites avec le panneau : on ne les touche plus
+    Component.onDestruction: {
+        anim.stop();
+        entries = [];
+    }
 }
