@@ -6,6 +6,7 @@ import Caelestia
 import Caelestia.Components
 import Caelestia.Config
 import qs.components
+import qs.components.effects
 import qs.services
 
 Slider {
@@ -119,9 +120,17 @@ Slider {
                 scale: root.dragging ? 1.25 : knobHover.hovered ? 1.06 : 1
 
                 // Pastille blanche au repos, lentille de verre pendant le glisser
-                color: root.dragging ? Qt.alpha("white", 0.16) : root.enabled ? "white" : Qt.alpha("white", 0.5)
-                border.width: root.dragging ? 1.5 : 0.5
+                color: Glass.lensControls ? "transparent" : root.dragging ? Qt.alpha("white", 0.16) : root.enabled ? "white" : Qt.alpha("white", 0.5)
+                border.width: Glass.lensControls ? 0 : root.dragging ? 1.5 : 0.5
                 border.color: Qt.alpha("white", root.dragging ? 0.85 : 0.5)
+
+                GlassControl {
+                    visible: Glass.lensControls
+                    anchors.fill: parent
+                    tintColour: root.enabled ? "white" : Qt.alpha("white", 0.5)
+                    pressed: root.dragging
+                    hovered: knobHover.hovered
+                }
 
                 HoverHandler {
                     id: knobHover
@@ -130,6 +139,7 @@ Slider {
                 }
 
                 Rectangle {
+                    visible: !Glass.lensControls
                     anchors.horizontalCenter: parent.horizontalCenter
                     y: 1.5
                     width: parent.width * 0.6

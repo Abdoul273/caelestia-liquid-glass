@@ -17,6 +17,8 @@ Singleton {
     readonly property bool ios: panels && style === "ios"
     // Boutons et interrupteurs façon macOS (reflet, liseré, curseur lentille). false = style d'origine.
     readonly property bool controls: panels
+    // Contrôles en verre bombé (shader glasscontrol) au lieu des simples dégradés. false = version d'avant.
+    readonly property bool lensControls: controls
 
     // Fond des cartes à l'intérieur d'un panneau en verre : voile translucide au lieu d'un aplat
     function tile(original: color): color {

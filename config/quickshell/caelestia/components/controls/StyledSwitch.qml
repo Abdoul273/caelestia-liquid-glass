@@ -3,6 +3,7 @@ import QtQuick.Shapes
 import QtQuick.Templates
 import Caelestia.Config
 import qs.components
+import qs.components.effects
 import qs.services
 
 Switch {
@@ -181,14 +182,25 @@ Switch {
         Rectangle {
             id: track
 
+            readonly property color trackColour: root.checked ? Qt.alpha(Colours.palette.m3primary, 0.92) : Qt.alpha(Colours.palette.m3onSurface, root.hovered ? 0.28 : 0.22)
+
             anchors.fill: parent
             radius: height / 2
-            color: root.checked ? Qt.alpha(Colours.palette.m3primary, 0.92) : Qt.alpha(Colours.palette.m3onSurface, root.hovered ? 0.2 : 0.14)
-            border.width: 1
+            color: Glass.lensControls ? "transparent" : trackColour
+            border.width: Glass.lensControls ? 0 : 1
             border.color: Qt.alpha("white", root.checked ? 0.28 : 0.12)
+
+            // Piste en verre bombé
+            GlassControl {
+                visible: Glass.lensControls
+                anchors.fill: parent
+                tintColour: track.trackColour
+                hovered: root.hovered
+            }
 
             // Reflet du haut
             Rectangle {
+                visible: !Glass.lensControls
                 anchors.fill: parent
                 anchors.margins: 1
                 radius: height / 2
@@ -246,11 +258,20 @@ Switch {
             scale: root.pressed ? 1.18 : 1
 
             // Au repos : pastille blanche ; à l'appui : lentille de verre claire
-            color: root.pressed ? Qt.alpha("white", 0.18) : "white"
-            border.width: root.pressed ? 1.5 : 0.5
+            color: Glass.lensControls ? "transparent" : root.pressed ? Qt.alpha("white", 0.18) : "white"
+            border.width: Glass.lensControls ? 0 : root.pressed ? 1.5 : 0.5
             border.color: Qt.alpha("white", root.pressed ? 0.85 : 0.5)
 
+            // Curseur en verre bombé : blanc au repos, lentille transparente à l'appui
+            GlassControl {
+                visible: Glass.lensControls
+                anchors.fill: parent
+                tintColour: "white"
+                pressed: root.pressed
+            }
+
             Rectangle {
+                visible: !Glass.lensControls
                 anchors.fill: parent
                 radius: parent.radius
                 opacity: root.pressed ? 0 : 1
@@ -274,6 +295,7 @@ Switch {
 
             // Petit éclat de lumière en haut de la lentille
             Rectangle {
+                visible: !Glass.lensControls
                 anchors.horizontalCenter: parent.horizontalCenter
                 y: 1.5
                 width: parent.width * 0.6

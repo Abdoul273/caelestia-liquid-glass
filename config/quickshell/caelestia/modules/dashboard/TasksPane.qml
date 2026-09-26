@@ -7,6 +7,7 @@ import Caelestia.Config
 import qs.components
 import qs.components.controls
 import qs.components.containers
+import qs.components.effects
 import qs.services
 
 // Mode « Tâches » de l'onglet Notes : vraies cases à cocher, enregistrées dans Tasks.qml.
@@ -187,8 +188,8 @@ ColumnLayout {
                     implicitWidth: 22
                     implicitHeight: 22
                     radius: 7
-                    color: task.done ? Colours.palette.m3primary : "transparent"
-                    border.width: task.done ? 0 : 2
+                    color: Glass.lensControls ? "transparent" : task.done ? Colours.palette.m3primary : "transparent"
+                    border.width: task.done || Glass.lensControls ? 0 : 2
                     border.color: checkMouse.containsMouse ? Colours.palette.m3primary : Colours.palette.m3outline
                     scale: checkMouse.pressed ? 0.85 : 1
 
@@ -198,6 +199,16 @@ ColumnLayout {
 
                     Behavior on scale {
                         Anim {}
+                    }
+
+                    // Case en verre bombé : teintée quand cochée, verre clair sinon
+                    GlassControl {
+                        visible: Glass.lensControls
+                        anchors.fill: parent
+                        radius: 7
+                        tintColour: task.done ? Colours.palette.m3primary : Qt.alpha(Colours.palette.m3onSurface, checkMouse.containsMouse ? 0.2 : 0.12)
+                        pressed: checkMouse.pressed
+                        hovered: checkMouse.containsMouse
                     }
 
                     MaterialIcon {

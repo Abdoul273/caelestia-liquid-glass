@@ -76,16 +76,24 @@ Slider {
 
             readonly property bool lens: Glass.controls && root.pressed
 
-            color: Glass.controls ? (lens ? Qt.alpha("white", 0.18) : "white") : Colours.palette.m3inverseSurface
+            color: Glass.lensControls ? "transparent" : Glass.controls ? (lens ? Qt.alpha("white", 0.18) : "white") : Colours.palette.m3inverseSurface
             radius: Tokens.rounding.full
             scale: lens ? 1.12 : 1
-            border.width: Glass.controls ? (lens ? 1.5 : 0.5) : 0
+            border.width: Glass.lensControls ? 0 : Glass.controls ? (lens ? 1.5 : 0.5) : 0
             border.color: Qt.alpha("white", lens ? 0.85 : 0.5)
 
             Behavior on scale {
                 Anim {
                     type: Anim.FastSpatial
                 }
+            }
+
+            GlassControl {
+                visible: Glass.lensControls
+                anchors.fill: parent
+                tintColour: "white"
+                pressed: rect.lens
+                hovered: handleInteraction.containsMouse
             }
 
             MouseArea {

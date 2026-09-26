@@ -1,6 +1,7 @@
 import QtQuick
 import Caelestia.Config
 import qs.components
+import qs.components.effects
 import qs.services
 
 StyledRect {
@@ -61,7 +62,8 @@ StyledRect {
             return (height || implicitHeight) / 2 * Math.min(1, Tokens.rounding.scale);
         return defaultRadius;
     }
-    color: type === ButtonBase.Text ? "transparent" : disabled ? disabledColour : internalChecked ? activeColour : inactiveColour
+    readonly property color baseColour: type === ButtonBase.Text ? "transparent" : disabled ? disabledColour : internalChecked ? activeColour : inactiveColour
+    color: lens ? "transparent" : baseColour
 
     // Make size required so we don't forget to set it
     required implicitWidth
@@ -69,6 +71,7 @@ StyledRect {
 
     // Verre façon macOS : reflet en haut, liseré lumineux, légère pression au clic
     readonly property bool glass: Glass.controls && type !== ButtonBase.Text
+    readonly property bool lens: glass && Glass.lensControls
 
     scale: glass && pressed ? 0.96 : 1
 
@@ -78,8 +81,18 @@ StyledRect {
         }
     }
 
+    // Verre bombé (reflets, bord irisé, caustique) — voir components/effects/GlassControl.qml
+    GlassControl {
+        visible: root.lens
+        anchors.fill: parent
+        radius: root.radius
+        tintColour: root.baseColour
+        pressed: root.pressed
+        hovered: root.hovered
+    }
+
     Rectangle {
-        visible: root.glass
+        visible: root.glass && !root.lens
         anchors.fill: parent
         radius: root.radius
         border.width: 1
