@@ -157,6 +157,24 @@ Item {
 
                         sourceComponent: modelData.component
 
+                        // Façon macOS : la page qui part s'efface et recule un peu, la nouvelle arrive nette
+                        readonly property bool isCurrent: index === view.currentIndex
+                        opacity: isCurrent ? 1 : 0
+                        scale: isCurrent ? 1 : 0.94
+                        transformOrigin: Item.Top
+
+                        Behavior on opacity {
+                            Anim {
+                                type: Anim.DefaultEffects
+                            }
+                        }
+
+                        Behavior on scale {
+                            Anim {
+                                type: Anim.DefaultSpatial
+                            }
+                        }
+
                         Component.onCompleted: active = Qt.binding(() => {
                             if (index === view.currentIndex)
                                 return true;

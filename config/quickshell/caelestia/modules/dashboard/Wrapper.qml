@@ -46,6 +46,24 @@ Item {
 
         active: root.shouldBeActive || root.visible
 
+        // Ouverture façon macOS : le contenu se pose avec un léger zoom et un fondu
+        // un peu en retard sur le panneau, pour une sensation de profondeur.
+        property real reveal: root.shouldBeActive ? 1 : 0
+        opacity: reveal
+        scale: 0.94 + 0.06 * reveal
+        transformOrigin: Item.Top
+
+        Behavior on reveal {
+            SequentialAnimation {
+                PauseAnimation {
+                    duration: root.shouldBeActive ? 60 : 0
+                }
+                Anim {
+                    type: Anim.DefaultSpatial
+                }
+            }
+        }
+
         sourceComponent: Content {
             screenState: root.screenState
             facePicker: root.facePicker
