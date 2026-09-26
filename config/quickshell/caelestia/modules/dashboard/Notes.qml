@@ -46,7 +46,23 @@ Item {
         return d.toLocaleDateString(Qt.locale(), "d MMM yyyy");
     }
 
+    function focusMode(): void {
+        if (Notes.mode === "tasks") {
+            tasksPane.focusInput();
+            return;
+        }
+        if (!Notes.current)
+            Notes.create();
+        editor.forceActiveFocus();
+    }
+
+    function setMode(m: string): void {
+        Notes.mode = m;
+        focusMode();
+    }
+
     function newNote(): void {
+        Notes.mode = "notes";
         query = "";
         Notes.create();
         editor.forceActiveFocus();
@@ -76,11 +92,7 @@ Item {
         id: focusTimer
 
         interval: 120
-        onTriggered: {
-            if (!Notes.current)
-                Notes.create();
-            editor.forceActiveFocus();
-        }
+        onTriggered: root.focusMode()
     }
 
     Shortcut {
@@ -90,9 +102,18 @@ Item {
     }
 
     Shortcut {
+        sequence: "Ctrl+T"
+        enabled: root.screenState.notesActive
+        onActivated: root.setMode(Notes.mode === "tasks" ? "notes" : "tasks")
+    }
+
+    Shortcut {
         sequence: "Ctrl+F"
         enabled: root.screenState.notesActive
-        onActivated: search.forceActiveFocus()
+        onActivated: {
+            Notes.mode = "notes";
+            search.forceActiveFocus();
+        }
     }
 
     Shortcut {
@@ -124,7 +145,47 @@ Item {
                 anchors.margins: Tokens.padding.medium
                 spacing: Tokens.spacing.small
 
+                // Sélecteur Notes | Tâches
+                StyledRect {
+                    id: modeSwitch
+
+                    Layout.fillWidth: true
+                    implicitHeight: 40
+                    radius: Tokens.rounding.full
+                    color: Glass.tile(Colours.tPalette.m3surfaceContainerHigh)
+
+                    StyledRect {
+                        x: Notes.mode === "tasks" ? parent.width / 2 + 2 : 4
+                        y: 4
+                        width: parent.width / 2 - 6
+                        height: parent.height - 8
+                        radius: Tokens.rounding.full
+                        color: Colours.palette.m3primary
+
+                        Behavior on x {
+                            Anim {}
+                        }
+                    }
+
+                    Row {
+                        anchors.fill: parent
+
+                        ModeButton {
+                            mode: "notes"
+                            icon: "sticky_note_2"
+                            label: qsTr("Notes")
+                        }
+
+                        ModeButton {
+                            mode: "tasks"
+                            icon: "task_alt"
+                            label: Tasks.todoCount > 0 ? qsTr("Tâches · %1").arg(Tasks.todoCount) : qsTr("Tâches")
+                        }
+                    }
+                }
+
                 RowLayout {
+                    visible: Notes.mode === "notes"
                     Layout.fillWidth: true
                     spacing: Tokens.spacing.small
 
@@ -159,6 +220,7 @@ Item {
                 StyledListView {
                     id: list
 
+                    visible: Notes.mode === "notes"
                     Layout.fillWidth: true
                     Layout.fillHeight: true
 
@@ -280,7 +342,73 @@ Item {
                     }
                 }
 
+                // Résumé des tâches (mode Tâches)
+                ColumnLayout {
+                    visible: Notes.mode === "tasks"
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    spacing: Tokens.spacing.medium
+
+                    Item {
+                        Layout.fillHeight: true
+                    }
+
+                    CircularProgress {
+                        id: ring
+
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.preferredWidth: 130
+                        Layout.preferredHeight: 130
+                        implicitSize: 130
+                        strokeWidth: 8
+                        value: Tasks.tasks.length ? Tasks.doneCount / Tasks.tasks.length : 0
+
+                        Behavior on clampedVal {
+                            Anim {}
+                        }
+
+                        Column {
+                            anchors.centerIn: parent
+
+                            StyledText {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: Tasks.tasks.length ? `${Math.round(ring.value * 100)} %` : "—"
+                                font: Tokens.font.body.builders.large.size(22).weight(Font.DemiBold).build()
+                                color: Colours.palette.m3primary
+                            }
+
+                            StyledText {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: qsTr("accompli")
+                                font: Tokens.font.label.small
+                                color: Colours.palette.m3onSurfaceVariant
+                            }
+                        }
+                    }
+
+                    StyledText {
+                        Layout.alignment: Qt.AlignHCenter
+                        horizontalAlignment: Text.AlignHCenter
+                        text: Tasks.tasks.length === 0 ? qsTr("Aucune tâche") : Tasks.todoCount === 0 ? qsTr("Tout est fait 🎉") : Tasks.todoCount === 1 ? qsTr("1 tâche à faire") : qsTr("%1 tâches à faire").arg(Tasks.todoCount)
+                        font: Tokens.font.body.medium
+                        color: Colours.palette.m3onSurface
+                    }
+
+                    Item {
+                        Layout.fillHeight: true
+                    }
+
+                    TextButton {
+                        Layout.alignment: Qt.AlignHCenter
+                        visible: Tasks.doneCount > 0
+                        text: qsTr("Effacer les terminées")
+                        type: TextButton.Text
+                        onClicked: Tasks.clearDone()
+                    }
+                }
+
                 StyledText {
+                    visible: Notes.mode === "notes"
                     Layout.alignment: Qt.AlignHCenter
                     readonly property int n: Notes.notes.filter(n => n.body.trim()).length
 
@@ -299,7 +427,16 @@ Item {
             radius: Tokens.rounding.extraLarge
             color: Glass.tile(Colours.tPalette.m3surfaceContainer)
 
+            TasksPane {
+                id: tasksPane
+
+                anchors.fill: parent
+                anchors.margins: Tokens.padding.medium
+                visible: Notes.mode === "tasks"
+            }
+
             ColumnLayout {
+                visible: Notes.mode === "notes"
                 anchors.fill: parent
                 anchors.margins: Tokens.padding.large
                 anchors.topMargin: Tokens.padding.medium
@@ -541,4 +678,41 @@ Item {
         }
     }
 
+    component ModeButton: Item {
+        id: btn
+
+        required property string mode
+        required property string icon
+        required property string label
+        readonly property bool active: Notes.mode === mode
+
+        width: modeSwitch.width / 2
+        height: modeSwitch.height
+
+        Row {
+            anchors.centerIn: parent
+            spacing: Tokens.spacing.extraSmall
+
+            MaterialIcon {
+                anchors.verticalCenter: parent.verticalCenter
+                text: btn.icon
+                fill: btn.active ? 1 : 0
+                color: btn.active ? Colours.palette.m3onPrimary : Colours.palette.m3onSurfaceVariant
+                fontStyle: Tokens.font.icon.builders.medium.scale(0.8).build()
+            }
+
+            StyledText {
+                anchors.verticalCenter: parent.verticalCenter
+                text: btn.label
+                font: Tokens.font.label.large
+                color: btn.active ? Colours.palette.m3onPrimary : Colours.palette.m3onSurfaceVariant
+            }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.setMode(btn.mode)
+        }
+    }
 }

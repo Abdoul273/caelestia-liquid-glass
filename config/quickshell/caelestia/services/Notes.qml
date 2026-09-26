@@ -16,6 +16,8 @@ Singleton {
     readonly property string exportDir: `${Quickshell.env("XDG_DOCUMENTS_DIR") || `${Paths.home}/Documents`}/Notes/Caelestia`
 
     property list<var> notes: []
+    // Mode affiché dans l'onglet : "notes" ou "tasks" (retenu tant que le shell tourne)
+    property string mode: "notes"
     property string currentId
     property bool loaded
     property bool dirty
