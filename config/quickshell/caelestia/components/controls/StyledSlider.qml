@@ -18,6 +18,8 @@ Slider {
     property int radius: Tokens.rounding.medium
     property bool interactionOnMove: true
     readonly property bool dragging: mouse.pressed
+    // Style verre façon macOS (sauf la barre ondulée des médias, gardée telle quelle)
+    readonly property bool glass: Glass.controls && !wavy
 
     property color fgColour: enabled ? Colours.palette.m3primary : Qt.alpha(Colours.palette.m3onSurface, 0.38)
     property color bgColour: enabled ? Colours.palette.m3secondaryContainer : Qt.alpha(Colours.palette.m3onSurface, 0.1)
@@ -35,8 +37,130 @@ Slider {
     contentItem: Item {
         anchors.fill: parent
 
+        Item {
+            id: glassSlider
+
+            readonly property real trackH: Math.max(5, Math.min(root.height * 0.6, 10))
+            readonly property real knobH: Math.max(16, trackH * 2.1)
+            readonly property real knobW: knobH * 1.55
+            readonly property real knobX: root.pos * (width - knobW)
+
+            visible: root.glass
+            anchors.fill: parent
+
+            Rectangle {
+                id: glassTrack
+
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                height: glassSlider.trackH
+                radius: height / 2
+                color: root.enabled ? Qt.alpha(Colours.palette.m3onSurface, 0.14) : Qt.alpha(Colours.palette.m3onSurface, 0.07)
+                border.width: 1
+                border.color: Qt.alpha("white", 0.1)
+            }
+
+            Rectangle {
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                width: Math.max(height, glassSlider.knobX + glassSlider.knobW / 2)
+                height: glassSlider.trackH
+                radius: height / 2
+                color: root.fgColour
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: parent.radius
+                    gradient: Gradient {
+                    GradientStop {
+                        position: 0
+                        color: Qt.alpha("white", 0.25)
+                    }
+                    GradientStop {
+                        position: 0.55
+                        color: Qt.alpha("white", 0)
+                    }
+                    GradientStop {
+                        position: 1
+                        color: Qt.alpha("white", 0.04)
+                    }
+                }
+                }
+
+                Behavior on color {
+                    CAnim {}
+                }
+            }
+
+            // Ombre du bouton
+            Rectangle {
+                x: knob.x
+                y: knob.y + 1.5
+                width: knob.width
+                height: knob.height
+                radius: height / 2
+                scale: knob.scale
+                color: Qt.alpha("black", root.dragging ? 0.08 : 0.28)
+
+                Behavior on color {
+                    CAnim {}
+                }
+            }
+
+            Rectangle {
+                id: knob
+
+                x: glassSlider.knobX
+                anchors.verticalCenter: parent.verticalCenter
+                width: glassSlider.knobW
+                height: glassSlider.knobH
+                radius: height / 2
+                scale: root.dragging ? 1.25 : knobHover.hovered ? 1.06 : 1
+
+                // Pastille blanche au repos, lentille de verre pendant le glisser
+                color: root.dragging ? Qt.alpha("white", 0.16) : root.enabled ? "white" : Qt.alpha("white", 0.5)
+                border.width: root.dragging ? 1.5 : 0.5
+                border.color: Qt.alpha("white", root.dragging ? 0.85 : 0.5)
+
+                HoverHandler {
+                    id: knobHover
+
+                    cursorShape: Qt.PointingHandCursor
+                }
+
+                Rectangle {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: 1.5
+                    width: parent.width * 0.6
+                    height: parent.height * 0.35
+                    radius: height / 2
+                    color: Qt.alpha("white", 0.55)
+                    opacity: root.dragging ? 1 : 0
+
+                    Behavior on opacity {
+                        Anim {
+                            type: Anim.DefaultEffects
+                        }
+                    }
+                }
+
+                Behavior on scale {
+                    Anim {
+                        type: Anim.FastSpatial
+                    }
+                }
+
+                Behavior on color {
+                    CAnim {}
+                }
+            }
+        }
+
         StyledRect {
             id: remaining
+
+            visible: !root.glass
 
             anchors.left: handle.right
             anchors.right: parent.right
@@ -53,6 +177,7 @@ Slider {
         }
 
         StyledRect {
+            visible: !root.glass
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             anchors.rightMargin: 4 * remaining.opacity
@@ -68,6 +193,7 @@ Slider {
         StyledRect {
             id: handle
 
+            visible: !root.glass
             anchors.left: filled.right
             anchors.verticalCenter: parent.verticalCenter
             anchors.leftMargin: Tokens.spacing.extraSmall
@@ -92,6 +218,7 @@ Slider {
         Loader {
             id: filled
 
+            visible: !root.glass
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
             asynchronous: true

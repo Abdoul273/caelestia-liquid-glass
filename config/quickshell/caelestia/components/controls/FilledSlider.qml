@@ -15,8 +15,10 @@ Slider {
     orientation: Qt.Vertical
 
     background: StyledRect {
-        color: Colours.layer(Colours.palette.m3surfaceContainer, 2)
+        color: Glass.controls ? Qt.alpha(Colours.palette.m3onSurface, 0.12) : Colours.layer(Colours.palette.m3surfaceContainer, 2)
         radius: Tokens.rounding.full
+        border.width: Glass.controls ? 1 : 0
+        border.color: Qt.alpha("white", 0.1)
 
         StyledRect {
             anchors.left: parent.left
@@ -25,8 +27,30 @@ Slider {
             y: root.handle.y
             implicitHeight: parent.height - y
 
-            color: Colours.palette.m3secondary
+            color: Glass.controls ? Colours.palette.m3primary : Colours.palette.m3secondary
             radius: parent.radius
+
+            Rectangle {
+                visible: Glass.controls
+                anchors.fill: parent
+                radius: parent.radius
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+
+                    GradientStop {
+                        position: 0
+                        color: Qt.alpha("white", 0.22)
+                    }
+                    GradientStop {
+                        position: 0.5
+                        color: Qt.alpha("white", 0)
+                    }
+                    GradientStop {
+                        position: 1
+                        color: Qt.alpha("white", 0.06)
+                    }
+                }
+            }
         }
     }
 
@@ -50,8 +74,19 @@ Slider {
 
             anchors.fill: parent
 
-            color: Colours.palette.m3inverseSurface
+            readonly property bool lens: Glass.controls && root.pressed
+
+            color: Glass.controls ? (lens ? Qt.alpha("white", 0.18) : "white") : Colours.palette.m3inverseSurface
             radius: Tokens.rounding.full
+            scale: lens ? 1.12 : 1
+            border.width: Glass.controls ? (lens ? 1.5 : 0.5) : 0
+            border.color: Qt.alpha("white", lens ? 0.85 : 0.5)
+
+            Behavior on scale {
+                Anim {
+                    type: Anim.FastSpatial
+                }
+            }
 
             MouseArea {
                 id: handleInteraction
@@ -70,7 +105,7 @@ Slider {
                 anchors.centerIn: parent
                 anchors.verticalCenterOffset: 1
                 text: moving ? Math.round(root.value * 100) : root.icon
-                color: Colours.palette.m3inverseOnSurface
+                color: Glass.controls ? (rect.lens ? "white" : "#1d1d1f") : Colours.palette.m3inverseOnSurface
                 font: moving ? Tokens.font.body.small : Tokens.font.icon.medium
 
                 Behavior on moving {

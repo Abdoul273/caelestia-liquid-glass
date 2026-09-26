@@ -24,8 +24,32 @@ TextFieldBase {
         id: bg
 
         anchors.fill: parent
-        color: Glass.tile(Colours.tPalette.m3surfaceContainer)
+        color: Glass.controls ? Qt.alpha(Colours.palette.m3onSurface, root.activeFocus ? 0.1 : 0.06) : Glass.tile(Colours.tPalette.m3surfaceContainer)
         radius: Tokens.rounding.full
+        border.width: Glass.controls ? 1 : 0
+        border.color: root.activeFocus ? Qt.alpha(Colours.palette.m3primary, 0.8) : Qt.alpha("white", 0.12)
+
+        Behavior on border.color {
+            CAnim {}
+        }
+
+        // Halo de focus façon macOS
+        Rectangle {
+            visible: Glass.controls
+            anchors.fill: parent
+            anchors.margins: -3
+            radius: height / 2
+            color: "transparent"
+            border.width: 3
+            border.color: Qt.alpha(Colours.palette.m3primary, 0.3)
+            opacity: root.activeFocus ? 1 : 0
+
+            Behavior on opacity {
+                Anim {
+                    type: Anim.DefaultEffects
+                }
+            }
+        }
 
         StateLayer {
             id: stateLayer

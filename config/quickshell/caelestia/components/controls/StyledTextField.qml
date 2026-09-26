@@ -14,7 +14,8 @@ TextFieldBase {
         Filled
     }
 
-    property int type: StyledTextField.Outlined
+    // En mode verre, le style « rempli » (étiquette à l'intérieur) remplace le contour Material
+    property int type: Glass.controls ? StyledTextField.Filled : StyledTextField.Outlined
 
     property int smallFontSize: Tokens.font.label.small.pointSize
     readonly property real smallFontScale: smallFontSize / font.pointSize
@@ -280,11 +281,41 @@ TextFieldBase {
         id: filledComp
 
         StyledRect {
-            topLeftRadius: root.clampedRadius
-            topRightRadius: root.clampedRadius
-            color: root.activeFocus ? Glass.tile(Colours.tPalette.m3surfaceContainerHighest) : Glass.tile(Colours.tPalette.m3surfaceContainerHigh)
+            radius: Glass.controls ? Math.max(root.clampedRadius, Tokens.rounding.medium) : 0
+            topLeftRadius: Glass.controls ? radius : root.clampedRadius
+            topRightRadius: Glass.controls ? radius : root.clampedRadius
+            color: {
+                if (Glass.controls)
+                    return Qt.alpha(Colours.palette.m3onSurface, root.activeFocus ? 0.1 : root.hovered ? 0.08 : 0.06);
+                return root.activeFocus ? Glass.tile(Colours.tPalette.m3surfaceContainerHighest) : Glass.tile(Colours.tPalette.m3surfaceContainerHigh);
+            }
+            border.width: Glass.controls ? 1 : 0
+            border.color: root.isError ? Colours.palette.m3error : root.activeFocus ? Qt.alpha(Colours.palette.m3primary, 0.8) : Qt.alpha("white", 0.12)
+
+            Behavior on border.color {
+                CAnim {}
+            }
+
+            // Halo de focus façon macOS
+            Rectangle {
+                visible: Glass.controls
+                anchors.fill: parent
+                anchors.margins: -3
+                radius: parent.radius + 3
+                color: "transparent"
+                border.width: 3
+                border.color: Qt.alpha(root.isError ? Colours.palette.m3error : Colours.palette.m3primary, 0.3)
+                opacity: root.activeFocus ? 1 : 0
+
+                Behavior on opacity {
+                    Anim {
+                        type: Anim.DefaultEffects
+                    }
+                }
+            }
 
             StyledRect {
+                visible: !Glass.controls
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
