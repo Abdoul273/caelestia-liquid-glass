@@ -14,5 +14,6 @@ PersistentProperties {
 
     // Dashboard state
     property int dashboardTab
+    property bool notesActive
     property date dashboardDate: new Date()
 }

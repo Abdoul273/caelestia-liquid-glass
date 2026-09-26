@@ -40,6 +40,13 @@ Item {
                 iconName: "cloud",
                 text: qsTr("Météo"),
                 enabled: Config.dashboard.showWeather
+            },
+            {
+                component: notesComponent,
+                iconName: "edit_note",
+                text: qsTr("Notes"),
+                enabled: true,
+                notes: true
             }
         ];
         return allTabs.filter(tab => tab.enabled);
@@ -49,6 +56,13 @@ Item {
     readonly property real nonAnimHeight: tabs.implicitHeight + tabs.anchors.topMargin + view.implicitHeight + viewWrapper.anchors.margins * 2
 
     implicitWidth: nonAnimWidth
+
+    // Le clavier n'est donné au panneau que sur l'onglet Notes (voir ContentWindow)
+    Binding {
+        target: root.screenState
+        property: "notesActive"
+        value: root.screenState.dashboard && !!root.dashboardTabs[root.screenState.dashboardTab]?.notes
+    }
     implicitHeight: nonAnimHeight
 
     Tabs {
@@ -89,6 +103,8 @@ Item {
             anchors.fill: parent
 
             flickableDirection: Flickable.HorizontalFlick
+            // Pas de glisser entre onglets sur Notes : le glisser sert à sélectionner du texte
+            interactive: !root.screenState.notesActive
 
             implicitWidth: currentItem?.implicitWidth ?? 0
             implicitHeight: currentItem?.implicitHeight ?? 0
@@ -179,6 +195,14 @@ Item {
                 id: weatherComponent
 
                 WeatherTab {}
+            }
+
+            Component {
+                id: notesComponent
+
+                Notes {
+                    screenState: root.screenState
+                }
             }
 
             Behavior on contentX {
