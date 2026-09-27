@@ -5,6 +5,7 @@ import Quickshell
 import Caelestia
 import Caelestia.Config
 import qs.components
+import qs.services
 import qs.modules.sidebar as Sidebar
 import qs.modules.bar.popouts as BarPopouts
 
@@ -24,7 +25,8 @@ Item {
 
         reloadableId: "utilities"
     }
-    readonly property bool shouldBeActive: screenState.sidebar || (screenState.utilities && Config.utilities.enabled && !(screenState.session && Config.session.enabled))
+    // Avec le Centre de contrôle (Super + A), ce panneau (caféine, enregistreur, raccourcis) est retiré
+    readonly property bool shouldBeActive: !Island.controlCenter && (screenState.sidebar || (screenState.utilities && Config.utilities.enabled && !(screenState.session && Config.session.enabled)))
     readonly property real totalPadding: content.anchors.margins + CUtils.clamp(content.anchors.margins - Config.border.thickness, 0, content.anchors.margins)
     readonly property real nonAnimHeight: ((content.item as Content)?.nonAnimHeight ?? 0) + totalPadding
     property real offsetScale: shouldBeActive ? 0 : 1
