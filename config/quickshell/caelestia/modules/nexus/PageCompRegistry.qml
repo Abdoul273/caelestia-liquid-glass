@@ -182,6 +182,15 @@ QtObject {
             }
         },
 
+        Component {
+            // Façon macOS : Dynamic Island, Centre de contrôle, Dock
+            StackPage {
+                Component {
+                    MacosPage {}
+                }
+            }
+        },
+
         // About
         Component {
             StackPage {

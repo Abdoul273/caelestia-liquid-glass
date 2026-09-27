@@ -42,7 +42,7 @@ Verre translucide partout, Mission Control, Spotlight, animations fluides façon
   - **Paroles en direct** sous le titre (cache du lecteur [Aura](https://github.com/Abdoul273/aura), fichier `.lrc`, sinon [LRCLIB](https://lrclib.net)).
   - **Minuteur et chronomètre** : tape `minuteur 5 min` ou `chrono` dans Spotlight (ou `qs -c caelestia ipc call island timer 5m`).
   - **Gestes** : glisser ← → sur la musique pour changer de morceau, ↑ pour chasser une notification.
-  - **Étagère** : dépose un fichier sur l'île pour le garder sous la main, reprends-le en le glissant ailleurs. Réglages dans `services/Island.qml`.
+  - **Étagère** : dépose un fichier sur l'île pour le garder sous la main, reprends-le en le glissant ailleurs.
 - **Mission Control** (`Super + Tab` ou **3 doigts vers le haut**) : tes fenêtres glissent en grille, tes bureaux s'affichent en haut, et un clic t'y emmène.
 - **Spotlight** (`Super + Espace`) : **lance tes apps** (la meilleure en grand, Entrée pour l'ouvrir), actions du système (verrouiller, veille, éteindre, paramètres, Horloge…), **fichiers** de ton dossier perso, calculs et conversions, puis suggestions Google, fiche Wikipédia et résultats web.
 - **Calculatrice** (`Super + O`) : le résultat s'affiche pendant que tu tapes (`12,5 × 4 + 20 %`), et Entrée le copie.
@@ -148,6 +148,8 @@ Appuie sur **`Super + H`** : une fenêtre en verre liste **tous** les raccourcis
 ---
 
 ## 🎛️ Personnaliser
+
+**Façon macOS** : Paramètres (`Super + I`) → **Façon macOS** — un interrupteur pour chaque fonction (Dynamic Island, notifications et messages dans l'île, bureaux, paroles, micro/caméra, date/heure et batterie au repos, bord haut, Centre de contrôle, barre de gauche, Dock). Tout s'applique immédiatement ; réglages dans `~/.config/caelestia/island.json`.
 
 | Tu veux… | Où |
 |---|---|

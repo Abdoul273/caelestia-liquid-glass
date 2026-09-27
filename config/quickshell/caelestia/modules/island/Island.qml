@@ -35,7 +35,7 @@ Item {
     readonly property real battery: UPower.displayDevice.percentage ?? 0
     readonly property bool charging: !UPower.onBattery
     // Batterie au repos : icône toujours (sur portable), pourcentage seulement faible ou en charge
-    readonly property bool showBattery: UPower.displayDevice.isLaptopBattery
+    readonly property bool showBattery: Island.battery && UPower.displayDevice.isLaptopBattery
     readonly property bool batteryPctShown: charging && battery < 0.995 || battery < 0.2
 
     // ── Couleurs du thème (le verre suit le thème clair/sombre) ──
@@ -212,7 +212,7 @@ Item {
         const app = `${p["application.name"] ?? ""} ${p["node.name"] ?? ""} ${p["application.process.binary"] ?? ""}`.toLowerCase();
         return !/cava|quickshell|caelestia|bluez_capture_internal|pavucontrol|peak detect/.test(app);
     })
-    readonly property bool micInUse: recStreams.length > 0
+    readonly property bool micInUse: Island.privacy && recStreams.length > 0
     property bool camInUse
 
     PwObjectTracker {
@@ -223,7 +223,7 @@ Item {
         id: camProc
 
         command: ["sh", "-c", "for d in /dev/video*; do [ -e \"$d\" ] && fuser -s \"$d\" 2>/dev/null && exit 0; done; exit 1"]
-        onExited: code => root.camInUse = code === 0
+        onExited: code => root.camInUse = Island.privacy && code === 0
     }
 
     Timer {
@@ -639,7 +639,17 @@ Item {
         return ans;
     }
     readonly property string lyricLine: lyricIndex >= 0 ? (lyrics[lyricIndex][1] || "♪") : ""
-    readonly property bool hasLyrics: lyrics.length > 0 && lyricIndex >= 0
+    readonly property bool hasLyrics: Island.lyrics && lyrics.length > 0 && lyricIndex >= 0
+
+    // Paroles réactivées dans les réglages : on les recharge pour le morceau en cours
+    Connections {
+        target: Island
+
+        function onLyricsChanged(): void {
+            if (Island.lyrics)
+                lyricsDebounce.restart();
+        }
+    }
 
     onLyricKeyNowChanged: lyricsDebounce.restart()
 
@@ -650,7 +660,7 @@ Item {
         onTriggered: {
             root.lyrics = [];
             root.lyricsKey = root.lyricKeyNow;
-            if (!root.lyricKeyNow)
+            if (!root.lyricKeyNow || !Island.lyrics)
                 return;
             const len = root.player?.length ?? 0;
             lyricsProc.command = ["python3", Quickshell.shellPath("assets/island-lyrics.py"), root.player?.trackTitle ?? "", root.player?.trackArtist ?? "", String(len > 0 && len < 2147483 ? len : 0), String(root.player?.metadata?.["xesam:url"] ?? "")];

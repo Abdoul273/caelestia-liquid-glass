@@ -88,6 +88,13 @@ QtObject {
             category: "shell"
         },
 
+        {
+            label: qsTr("Façon macOS"),
+            icon: "auto_awesome",
+            description: qsTr("Dynamic Island, Centre de contrôle, Dock"),
+            category: "shell"
+        },
+
         // About
         {
             label: qsTr("À propos"),
