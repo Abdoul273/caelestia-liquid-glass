@@ -24,7 +24,7 @@ CSS_FILE = Path.home() / ".config/caelestia-shortcuts/style.css"
 SHORTCUTS = [
     ("Essentiels", "󰌌", [
         ("Super", "Ouvrir le lanceur d'applications (appui seul, puis relâcher)"),
-        ("Super + Espace", "Recherche façon Spotlight (web, calculs, conversions : « 10 km en miles »)"),
+        ("Super + Espace", "Spotlight : apps (Entrée pour lancer), actions (verrouiller, veille…), fichiers, calculs, conversions, web"),
         ("Super + O", "Calculatrice (chiffres et opérateurs uniquement)"),
         ("Super + Maj + O", "Horloge : minuteur, chrono, pomodoro, alarmes (reliée à la Dynamic Island)"),
         ("Super + Tab", "Mission Control : voir toutes les fenêtres et bureaux"),

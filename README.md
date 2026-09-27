@@ -43,7 +43,7 @@ Verre translucide partout, Mission Control, Spotlight, animations fluides façon
   - **Gestes** : glisser ← → sur la musique pour changer de morceau, ↑ pour chasser une notification.
   - **Étagère** : dépose un fichier sur l'île pour le garder sous la main, reprends-le en le glissant ailleurs. Réglages dans `services/Island.qml`.
 - **Mission Control** (`Super + Tab` ou **3 doigts vers le haut**) : tes fenêtres glissent en grille, tes bureaux s'affichent en haut, et un clic t'y emmène.
-- **Spotlight** (`Super + Espace`) : suggestions Google instantanées, fiche Wikipédia, résultats web, calculs.
+- **Spotlight** (`Super + Espace`) : **lance tes apps** (la meilleure en grand, Entrée pour l'ouvrir), actions du système (verrouiller, veille, éteindre, paramètres, Horloge…), **fichiers** de ton dossier perso, calculs et conversions, puis suggestions Google, fiche Wikipédia et résultats web.
 - **Calculatrice** (`Super + O`) : le résultat s'affiche pendant que tu tapes (`12,5 × 4 + 20 %`), et Entrée le copie.
 - **Horloge** (`Super + Maj + O`) : minuteur avec anneau, chronomètre à cadran et tours, pomodoro automatique et alarmes. Tout tourne dans la Dynamic Island : le minuteur continue et l'alarme sonne même app fermée.
 - **Aperçu rapide** : dans Nautilus, sélectionne un fichier et appuie sur **Espace**.

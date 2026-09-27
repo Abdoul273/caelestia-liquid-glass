@@ -14,6 +14,8 @@ import ast
 import html
 import json
 import math
+import os
+import shutil
 import operator
 import re
 import subprocess
@@ -500,6 +502,116 @@ def clock_command(text: str) -> tuple[list[str], str] | None:
     return base + ["timer", rest], f"Lancer un minuteur de {rest} dans l'île"
 
 
+# ---------------------------------------------------------------- apps, actions, fichiers
+
+import unicodedata
+
+
+def fold(text: str) -> str:
+    """Minuscules sans accents, pour comparer « parametres » et « Paramètres »."""
+    return "".join(c for c in unicodedata.normalize("NFD", text.lower()) if unicodedata.category(c) != "Mn")
+
+
+_APPS: list | None = None
+
+
+def all_apps() -> list:
+    global _APPS
+    if _APPS is None:
+        _APPS = [a for a in Gio.AppInfo.get_all() if a.should_show() and isinstance(a, Gio.DesktopAppInfo)]
+    return _APPS
+
+
+def score_text(q: str, name: str) -> int:
+    n = fold(name)
+    if not n:
+        return 0
+    if n == q:
+        return 100
+    if n.startswith(q):
+        return 90
+    words = re.split(r"[\s\-_.]+", n)
+    if any(w.startswith(q) for w in words):
+        return 80
+    initials = "".join(w[0] for w in words if w)
+    if len(q) >= 2 and initials.startswith(q):
+        return 70
+    if q in n:
+        return 60
+    return 0
+
+
+def search_apps(query: str, limit: int = 5) -> list:
+    q = fold(query.strip())
+    if not q:
+        return []
+    scored = []
+    for a in all_apps():
+        best = score_text(q, a.get_display_name() or a.get_name() or "")
+        if best < 60:
+            extra = [a.get_generic_name() or "", *(a.get_keywords() or []), os.path.basename(a.get_executable() or "")]
+            best = max(best, *(min(55, score_text(q, t)) for t in extra))
+        if best >= 50:
+            scored.append((best, a))
+    scored.sort(key=lambda x: (-x[0], (x[1].get_display_name() or "").lower()))
+    return [a for _, a in scored[:limit]]
+
+
+HOME = str(Path.home())
+BIN = HOME + "/.local/bin/"
+
+# Actions du système : (titre, mots-clés, icône, commande)
+ACTIONS = [
+    ("Verrouiller l'écran", "verrouiller lock ecran", "󰌾", ["qs", "-c", "caelestia", "ipc", "call", "lock", "lock"]),
+    ("Mettre en veille", "veille suspendre dormir sleep", "󰤄", ["systemctl", "suspend"]),
+    ("Redémarrer", "redemarrer reboot restart", "󰜉", ["systemctl", "reboot"]),
+    ("Éteindre", "eteindre shutdown arreter poweroff", "󰐥", ["systemctl", "poweroff"]),
+    ("Se déconnecter", "deconnecter logout session", "󰍃", [BIN + "caelestia-logout"]),
+    ("Paramètres de Caelestia", "parametres reglages settings nexus preferences", "󰒓", ["qs", "-c", "caelestia", "ipc", "call", "nexus", "open"]),
+    ("Horloge", "horloge minuteur chrono alarme pomodoro reveil", "󰔛", [BIN + "caelestia-clock"]),
+    ("Calculatrice", "calculatrice calcul", "󰃬", [BIN + "caelestia-spotlight", "calc"]),
+    ("Capture d'écran", "capture ecran screenshot", "󰹑", ["qs", "-c", "caelestia", "ipc", "call", "picker", "open"]),
+    ("Mission Control", "mission control fenetres bureaux", "󰕰", ["qs", "-c", "caelestia", "ipc", "call", "missioncontrol", "open"]),
+    ("Raccourcis clavier", "raccourcis clavier shortcuts aide", "󰌌", [BIN + "caelestia-shortcuts"]),
+    ("Presse-papiers", "presse papiers clipboard historique", "󰅌", [BIN + "caelestia-clipboard-pro"]),
+    ("Emojis", "emoji emojis smiley", "󰞅", [BIN + "caelestia-emoji-pro"]),
+    ("Choisir l'affichage", "affichage ecran externe projection display", "󰍹", [BIN + "caelestia-display-pro"]),
+]
+
+
+def search_actions(query: str, limit: int = 3) -> list:
+    q = fold(query.strip())
+    if len(q) < 2:
+        return []
+    found = []
+    for title, keys, icon, cmd in ACTIONS:
+        best = max(score_text(q, title), *(score_text(q, k) for k in keys.split()))
+        if best >= 70:
+            found.append((best, (title, icon, cmd)))
+    found.sort(key=lambda x: -x[0])
+    return [f for _, f in found[:limit]]
+
+
+def search_files(query: str, limit: int = 6) -> list[str]:
+    """Fichiers et dossiers du dossier perso dont le nom contient la recherche (fd, rapide)."""
+    q = query.strip()
+    if len(q) < 3 or not shutil.which("fd"):
+        return []
+    try:
+        out = subprocess.run(
+            ["fd", "--ignore-case", "--fixed-strings", "--max-results", str(limit * 3), "--max-depth", "7",
+             "--exclude", "node_modules", "--exclude", ".git", "--exclude", "target", "--exclude", "__pycache__",
+             q, HOME],
+            capture_output=True, text=True, timeout=1.5,
+        ).stdout.splitlines()
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    fq = fold(q)
+    # Les noms qui commencent par la recherche d'abord, puis les chemins les plus courts
+    out.sort(key=lambda p: (not fold(os.path.basename(p.rstrip("/"))).startswith(fq), p.count("/"), len(p)))
+    return out[:limit]
+
+
 def open_url(url: str) -> None:
     subprocess.Popen(["xdg-open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
@@ -524,7 +636,9 @@ class Spotlight(Gtk.Application):
         self.query_seq = 0
         self.suggest_seq = 0
         # Contenu affiché pour la recherche, reconstruit à chaque mise à jour
-        self.view = {"query": "", "calc": None, "suggest": [], "hit": None, "results": [], "loading": False, "error": False}
+        self.view = {"query": "", "calc": None, "suggest": [], "hit": None, "results": [], "loading": False, "error": False,
+                     "apps": [], "actions": [], "files": []}
+        self.file_seq = 0
         self.icon_cache: dict[str, Gdk.Texture | None] = {}
         self.rows: list[tuple[Gtk.ListBoxRow, str]] = []
         self.history: list[tuple[str, str]] = self.load_history() if mode == "calc" else []
@@ -577,7 +691,7 @@ class Spotlight(Gtk.Application):
         icon = Gtk.Label(label="󰃬" if calc else "󰍉")
         icon.add_css_class("spot-icon")
         bar.append(icon)
-        self.entry = Gtk.Entry(placeholder_text="Tape un calcul…  (ex. 12,5 × 4 + 20 %)" if calc else "Rechercher sur le web…")
+        self.entry = Gtk.Entry(placeholder_text="Tape un calcul…  (ex. 12,5 × 4 + 20 %)" if calc else "Apps, fichiers, calculs, web…")
         self.entry.add_css_class("spot-entry")
         self.entry.set_hexpand(True)
         self.entry.connect("changed", self.on_changed)
@@ -671,7 +785,12 @@ class Spotlight(Gtk.Application):
             self.update_calc()
             return
         query = self.entry.get_text().strip()
-        self.view.update(query=query, calc=None, hit=None, results=[], error=False)
+        self.view.update(query=query, calc=None, hit=None, results=[], error=False,
+                         apps=search_apps(query) if query else [], actions=search_actions(query) if query else [], files=[])
+        self.file_seq += 1
+        if query and len(query) >= 3:
+            seq = self.file_seq
+            threading.Thread(target=lambda: GLib.idle_add(self.show_files, query, seq, search_files(query)), daemon=True).start()
         clock = clock_command(query) if query else None
         if clock:
             self.view["calc"] = "⏱  " + clock[1] + " — Entrée"
@@ -707,7 +826,7 @@ class Spotlight(Gtk.Application):
             return
         # Entrée : si les résultats ne sont pas encore là, on les lance tout de suite ;
         # sinon on ouvre le résultat sélectionné
-        if self.view["loading"] and self.view["query"]:
+        if self.view["loading"] and self.view["query"] and not (self.view["apps"] or self.view["actions"]):
             if self.debounce:
                 GLib.source_remove(self.debounce)
                 self.debounce = 0
@@ -736,6 +855,17 @@ class Spotlight(Gtk.Application):
                     return
                 if action.startswith("copy:"):
                     copy_text(action[5:])
+                elif action.startswith("app:"):
+                    info = Gio.DesktopAppInfo.new(action[4:])
+                    if info is not None and info.get_filename():
+                        subprocess.Popen(["gio", "launch", info.get_filename()], start_new_session=True,
+                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                elif action.startswith("cmd:"):
+                    subprocess.Popen(json.loads(action[4:]), start_new_session=True,
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                elif action.startswith("file:"):
+                    subprocess.Popen(["xdg-open", action[5:]], start_new_session=True,
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 else:
                     open_url(action)
                 self.close()
@@ -849,6 +979,13 @@ class Spotlight(Gtk.Application):
         wiki.join(timeout=TIMEOUT)
         GLib.idle_add(self.show_results, query, seq, results, hit_holder[0], error)
 
+    def show_files(self, query: str, seq: int, files: list[str]) -> bool:
+        if seq != self.file_seq or self.window is None or query != self.view["query"]:
+            return False
+        self.view["files"] = files
+        self.render()
+        return False
+
     def show_results(self, query: str, seq: int, results, hit, error) -> bool:
         if seq != self.query_seq or self.window is None or query != self.view["query"]:
             return False
@@ -896,19 +1033,26 @@ class Spotlight(Gtk.Application):
         if not v["query"]:
             self.show_placeholder("Tape ta recherche : les résultats s'affichent ici.")
             return
+        apps = v["apps"]
+        if apps:
+            self.add_top_app(apps[0])
+            for a in apps[1:4]:
+                self.add_app(a)
+        for title, icon, cmd in v["actions"]:
+            self.add_card(icon, title, "Action", "cmd:" + json.dumps(cmd))
         if v["calc"]:
             self.add_card("󰃬", f"= {v['calc']}", "Calcul  •  Entrée pour copier", f"copy:{v['calc'].replace(chr(0x202f), '')}", big=True)
+        if v["files"]:
+            self.add_section("FICHIERS")
+            for path in v["files"]:
+                self.add_file(path)
         if v["hit"] is not None:
             self.add_top_hit(v["hit"])
         # Quand les résultats sont là, on garde seulement 3 suggestions pour leur laisser la place
         for text in v["suggest"][:3] if v["results"] else v["suggest"]:
             self.add_suggestion(text)
         if v["results"]:
-            head = Gtk.Label(label="RÉSULTATS WEB", xalign=0)
-            head.add_css_class("section-label")
-            row = Gtk.ListBoxRow(selectable=False, activatable=False)
-            row.set_child(head)
-            self.list.append(row)
+            self.add_section("RÉSULTATS WEB")
         for r in v["results"]:
             self.add_result(r)
         if v["error"]:
@@ -923,7 +1067,10 @@ class Spotlight(Gtk.Application):
         self.add_card("󰊭", f"Rechercher « {v['query']} » sur Google", "Ouvre le navigateur",
                       "https://www.google.com/search?" + urllib.parse.urlencode({"q": v["query"]}))
         if self.rows:
-            first = next((r for r, a in self.rows if not a.startswith("suggest:")), self.rows[0][0]) if v["results"] or v["hit"] else self.rows[0][0]
+            if apps or v["actions"]:
+                first = self.rows[0][0]
+            else:
+                first = next((r for r, a in self.rows if not a.startswith("suggest:")), self.rows[0][0]) if v["results"] or v["hit"] else self.rows[0][0]
             self.list.select_row(first)
 
     def clear_list(self) -> None:
@@ -948,6 +1095,69 @@ class Spotlight(Gtk.Application):
         row.set_child(widget)
         self.list.append(row)
         self.rows.append((row, action))
+
+    def add_section(self, text: str) -> None:
+        head = Gtk.Label(label=text, xalign=0)
+        head.add_css_class("section-label")
+        row = Gtk.ListBoxRow(selectable=False, activatable=False)
+        row.set_child(head)
+        self.list.append(row)
+
+    def add_top_app(self, app) -> None:
+        box = Gtk.Box(spacing=16)
+        box.add_css_class("top-app")
+        icon = Gtk.Image.new_from_gicon(app.get_icon()) if app.get_icon() else Gtk.Image.new_from_icon_name("application-x-executable")
+        icon.set_pixel_size(56)
+        box.append(icon)
+        texts = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3, valign=Gtk.Align.CENTER)
+        t = Gtk.Label(label=app.get_display_name(), xalign=0)
+        t.add_css_class("top-app-title")
+        t.set_ellipsize(Pango.EllipsizeMode.END)
+        texts.append(t)
+        sub = Gtk.Label(label=app.get_description() or app.get_generic_name() or "Application", xalign=0)
+        sub.add_css_class("row-domain")
+        sub.set_ellipsize(Pango.EllipsizeMode.END)
+        texts.append(sub)
+        box.append(texts)
+        hint = Gtk.Label(label="Entrée : ouvrir", hexpand=True, xalign=1)
+        hint.add_css_class("top-app-hint")
+        box.append(hint)
+        self._append(box, "app:" + app.get_id(), "top-app-row")
+
+    def add_app(self, app) -> None:
+        box = Gtk.Box(spacing=12)
+        box.add_css_class("card-row")
+        icon = Gtk.Image.new_from_gicon(app.get_icon()) if app.get_icon() else Gtk.Image.new_from_icon_name("application-x-executable")
+        icon.set_pixel_size(28)
+        box.append(icon)
+        t = Gtk.Label(label=app.get_display_name(), xalign=0)
+        t.add_css_class("row-title")
+        t.set_ellipsize(Pango.EllipsizeMode.END)
+        box.append(t)
+        sub = Gtk.Label(label="Application", hexpand=True, xalign=1)
+        sub.add_css_class("row-domain")
+        box.append(sub)
+        self._append(box, "app:" + app.get_id(), "card")
+
+    def add_file(self, path: str) -> None:
+        box = Gtk.Box(spacing=12)
+        box.add_css_class("card-row")
+        is_dir = os.path.isdir(path)
+        ctype = "inode/directory" if is_dir else Gio.content_type_guess(path, None)[0]
+        icon = Gtk.Image.new_from_gicon(Gio.content_type_get_icon(ctype))
+        icon.set_pixel_size(26)
+        box.append(icon)
+        texts = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        name = Gtk.Label(label=os.path.basename(path.rstrip("/")), xalign=0)
+        name.add_css_class("row-title")
+        name.set_ellipsize(Pango.EllipsizeMode.MIDDLE)
+        texts.append(name)
+        where = Gtk.Label(label=os.path.dirname(path.rstrip("/")).replace(HOME, "~", 1), xalign=0)
+        where.add_css_class("row-domain")
+        where.set_ellipsize(Pango.EllipsizeMode.START)
+        texts.append(where)
+        box.append(texts)
+        self._append(box, "file:" + path, "card")
 
     def add_suggestion(self, text: str) -> None:
         box = Gtk.Box(spacing=12)
