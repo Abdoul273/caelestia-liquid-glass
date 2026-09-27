@@ -13,6 +13,8 @@ Singleton {
     readonly property bool notifications: enabled
     // Bord haut du cadre invisible : l'île sort directement du haut de l'écran
     readonly property bool hideTopBorder: enabled
+    // Au repos l'île affiche l'heure (façon barre de menus macOS) et l'horloge de la barre disparaît
+    readonly property bool clock: enabled
 
     // Bus des notifications à afficher (émis par services/Notifs.qml)
     signal notify(var notif)

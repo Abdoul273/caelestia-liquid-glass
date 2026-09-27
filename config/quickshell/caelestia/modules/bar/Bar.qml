@@ -107,7 +107,8 @@ ColumnLayout {
         id: repeater
 
         model: ScriptModel {
-            values: root.Config.bar.entries.values.filter(e => e.enabled)
+            // L'heure est affichée par la Dynamic Island (services/Island.qml)
+            values: root.Config.bar.entries.values.filter(e => e.enabled && !(e.id === "clock" && Island.clock))
         }
 
         DelegateChooser {

@@ -93,8 +93,8 @@ Item {
         case "media":
             return Qt.size(290, 40);
         default:
-            // Au repos : rien à l'écran (une pastille vide ne sert à rien)
-            return Qt.size(150, 0);
+            // Au repos : juste l'heure (ou rien si Island.clock est coupé)
+            return Island.clock ? Qt.size(hovered ? 124 : 112, 32) : Qt.size(150, 0);
         }
     }
 
@@ -311,30 +311,18 @@ Item {
         height: root.h
         transformOrigin: Item.Top
 
-        // ── repos : trois points au survol ──
+        // ── repos : l'heure ──
         Face {
             active: root.mode === "idle"
 
-            Row {
+            StyledText {
                 anchors.centerIn: parent
-                spacing: 6
-                opacity: root.hovered ? 0.55 : 0
-
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: 200
-                    }
-                }
-
-                Repeater {
-                    model: 3
-
-                    Rectangle {
-                        width: 5
-                        height: 5
-                        radius: 2.5
-                        color: root.fg
-                    }
+                text: Time.format("HH:mm")
+                color: root.fg
+                font.pointSize: 10.5
+                font.weight: Font.DemiBold
+                font.features: {
+                    "tnum": 1
                 }
             }
         }
