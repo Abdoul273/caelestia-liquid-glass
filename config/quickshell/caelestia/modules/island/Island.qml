@@ -126,7 +126,7 @@ Item {
             return Qt.size(290, 40);
         default:
             // Au repos : juste l'heure (ou rien si Island.clock est coupé)
-            return Island.clock ? Qt.size(hovered ? 222 : 208, 36) : Qt.size(150, 0);
+            return Island.clock ? Qt.size(hovered ? 256 : 240, 40) : Qt.size(150, 0);
         }
     }
 
@@ -410,9 +410,10 @@ Item {
     Item {
         id: content
 
+        // Mise en page sur la taille finale : le contenu ne se réagence pas pendant le ressort de l'île
         anchors.horizontalCenter: parent.horizontalCenter
-        width: root.w
-        height: root.h
+        width: root.target.width
+        height: root.target.height
         transformOrigin: Item.Top
 
         // ── repos : date à gauche, heure à droite, comme de part et d'autre d'une encoche ──
@@ -421,14 +422,14 @@ Item {
 
             StyledText {
                 anchors.left: parent.left
-                anchors.leftMargin: 20
+                anchors.leftMargin: 22
                 anchors.verticalCenter: parent.verticalCenter
                 text: {
                     const s = Qt.locale("fr_FR").toString(Time.date, "ddd d");
                     return s.charAt(0).toUpperCase() + s.slice(1);
                 }
                 color: root.fgDim
-                font.pointSize: 10
+                font.pointSize: 10.5
                 font.weight: Font.Medium
             }
 
@@ -450,11 +451,11 @@ Item {
 
             StyledText {
                 anchors.right: parent.right
-                anchors.rightMargin: 20
+                anchors.rightMargin: 22
                 anchors.verticalCenter: parent.verticalCenter
                 text: Time.format("HH:mm")
                 color: root.fg
-                font.pointSize: 13
+                font.pointSize: 14
                 font.weight: Font.Bold
                 font.letterSpacing: 0.3
                 font.features: {
@@ -738,9 +739,9 @@ Item {
                         Behavior on width {
                             enabled: !gaugeArea.pressed
 
-                            SpringAnimation {
-                                spring: 5
-                                damping: 0.42
+                            NumberAnimation {
+                                duration: 160
+                                easing.type: Easing.OutCubic
                             }
                         }
                     }
