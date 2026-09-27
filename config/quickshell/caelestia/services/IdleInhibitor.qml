@@ -27,8 +27,13 @@ Singleton {
     IdleInhibitor {
         enabled: props.enabled
         window: PanelWindow {
-            implicitWidth: 0
-            implicitHeight: 0
+            // 1 px transparent : une surface 0×0 n'est jamais affichée, et Hyprland ignore alors l'inhibiteur
+            implicitWidth: 1
+            implicitHeight: 1
+            exclusionMode: ExclusionMode.Ignore
+            WlrLayershell.namespace: "caelestia-idleinhibitor"
+            anchors.top: true
+            anchors.left: true
             color: "transparent"
             mask: Region {}
         }
