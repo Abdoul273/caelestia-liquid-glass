@@ -21,6 +21,10 @@ Singleton {
     // Le changement de bureau s'affiche dans l'île (l'ancien indicateur du bas est retiré)
     readonly property bool workspaces: enabled
 
+    // Super + A ouvre le Centre de contrôle (en haut à droite) et la barre de gauche disparaît
+    readonly property bool controlCenter: enabled
+    readonly property bool noBar: controlCenter
+
     // Étagère : fichiers déposés sur l'île, gardés jusqu'au redémarrage du shell
     property list<string> shelf: []
 

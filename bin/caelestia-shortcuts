@@ -43,7 +43,7 @@ SHORTCUTS = [
         ("Super + P", "Choisir l'affichage (écran externe, dupliquer…)"),
     ]),
     ("Panneaux du shell", "󰕮", [
-        ("Super + A", "Tableau de bord (météo, calendrier, média…)"),
+        ("Super + A", "Centre de contrôle : Wi-Fi, Bluetooth, VPN, son, écran, raccourcis rapides, session (le tableau de bord y est en bouton)"),
         ("Super + N", "Barre latérale et centre de notifications"),
         ("Super + K", "Afficher/masquer lanceur, tableau de bord et OSD ensemble"),
         ("Ctrl + Alt + C", "Effacer toutes les notifications"),

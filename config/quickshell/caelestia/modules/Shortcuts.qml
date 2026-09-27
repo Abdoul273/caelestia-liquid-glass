@@ -42,6 +42,11 @@ Scope {
             if (root.hasFullscreen)
                 return;
             const screenState = ShellState.forActive();
+            if (Island.controlCenter) {
+                screenState.dashboard = false;
+                screenState.controlCenter = !screenState.controlCenter;
+                return;
+            }
             screenState.dashboard = !screenState.dashboard;
         }
     }

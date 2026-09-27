@@ -14,6 +14,7 @@ import qs.modules.utilities as Utilities
 import qs.modules.bar.popouts as BarPopouts
 import qs.modules.utilities.toasts as Toasts
 import qs.modules.island as IslandModule
+import qs.modules.controlcenter as CC
 
 Item {
     id: root
@@ -36,6 +37,7 @@ Item {
     readonly property alias toasts: toasts
     readonly property alias sidebar: sidebar
     readonly property alias island: island
+    readonly property alias controlCenter: controlCenter
 
     anchors.fill: parent
     anchors.margins: borderThickness
@@ -129,6 +131,19 @@ Item {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
         anchors.topMargin: -root.borderThickness
+    }
+
+    // Centre de contrôle : descend du haut de l'écran, à droite
+    CC.ControlCenter {
+        id: controlCenter
+
+        screen: root.screen
+        screenState: root.screenState
+
+        anchors.right: parent.right
+        anchors.rightMargin: 6
+        anchors.top: parent.top
+        anchors.topMargin: -root.borderThickness - (height + 40) * offsetScale
     }
 
     BarPopouts.ClipWrapper {

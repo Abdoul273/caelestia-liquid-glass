@@ -30,9 +30,10 @@ Verre translucide partout, Mission Control, Spotlight, animations fluides façon
 - **Les couleurs suivent ton fond d'écran** : tout est régénéré automatiquement à chaque changement de thème.
 
 ### 🪟 Façon macOS
+- **Centre de contrôle façon macOS 27** (`Super + A`), qui descend du haut à droite dans le même verre : Wi-Fi (liste des réseaux, mot de passe directement dedans), Bluetooth (appareils, batterie), VPN, Concentration, apparence claire/sombre, lecteur, luminosité, volume et choix de la sortie audio, raccourcis rapides (caféine, mode jeu, micro, enregistrement, capture, horloge, calculatrice, tableau de bord), batterie et profils d'énergie, icônes système, session. **La barre de gauche est retirée** : le cadre est fin et uniforme.
 - **Démarrage façon Mac** (optionnel) : logo blanc et fine barre de progression sur fond noir, au lieu du texte qui défile.
 - **Curseur macOS** ([apple_cursor](https://github.com/ful1e5/apple_cursor)), jusque sur l'écran de connexion.
-- **Dynamic Island** en liquid glass, fondue dans le cadre (le bord du haut disparaît, elle sort directement de l'écran) : musique avec visualiseur, lecteur complet au survol (pochette, progression cliquable, commandes), volume et luminosité façon macOS (jauge glissable), **connexion des écouteurs façon AirPods** (ondes + anneau de batterie), **chargeur branché/débranché** (batterie qui se remplit, éclair, temps restant), **captures d'écran** (miniature avec flash, Annoter / Enregistrer / Dossier), **notifications** (file d'attente, actions au survol), charge, enregistrement d'écran. Molette = volume, clic = lecture/pause ; le tableau de bord s'ouvre avec `Super + A`.
+- **Dynamic Island** en liquid glass, fondue dans le cadre (le bord du haut disparaît, elle sort directement de l'écran) : musique avec visualiseur, lecteur complet au survol (pochette, progression cliquable, commandes), volume et luminosité façon macOS (jauge glissable), **connexion des écouteurs façon AirPods** (ondes + anneau de batterie), **chargeur branché/débranché** (batterie qui se remplit, éclair, temps restant), **captures d'écran** (miniature avec flash, Annoter / Enregistrer / Dossier), **notifications** (file d'attente, actions au survol), charge, enregistrement d'écran. Molette = volume, clic = lecture/pause.
   - **Tout passe par elle** : bulles de Caelestia (Ne pas déranger, batterie faible, thème…), changement de bureau, Verr. Maj, Wi-Fi et VPN.
   - **Micro et caméra** : point orange ou vert à côté de l'heure quand une app les utilise, comme sur macOS.
   - **Paroles en direct** sous le titre (cache du lecteur [Aura](https://github.com/Abdoul273/aura), fichier `.lrc`, sinon [LRCLIB](https://lrclib.net)).
@@ -128,7 +129,7 @@ Appuie sur **`Super + H`** : une fenêtre en verre liste **tous** les raccourcis
 | `Super + Tab` | Mission Control |
 | `Super + H` | Tous les raccourcis |
 | `Super + I` | Paramètres de Caelestia |
-| `Super + A` | Tableau de bord |
+| `Super + A` | Centre de contrôle |
 | `Super + Retour arrière` | Éteindre / redémarrer / verrouiller |
 | `Super + Maj + R` | Recharger Hyprland et le shell |
 

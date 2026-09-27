@@ -1,0 +1,1472 @@
+pragma ComponentBehavior: Bound
+
+import QtQuick
+import QtQuick.Layouts
+import Quickshell
+import Quickshell.Bluetooth
+import Quickshell.Services.Mpris
+import Quickshell.Services.SystemTray
+import Quickshell.Services.UPower
+import Quickshell.Widgets
+import Caelestia.Config
+import qs.components
+import qs.services
+import qs.utils
+
+// Centre de contrôle façon macOS 27 (Super + A), dessiné dans le verre du cadre en haut à droite :
+// connexions (Wi-Fi, Bluetooth, VPN) avec leurs listes, Ne pas déranger, lecteur, luminosité,
+// son et sortie audio, raccourcis rapides, énergie, icônes système et session.
+Item {
+    id: root
+
+    required property ShellScreen screen
+    required property ScreenState screenState
+
+    readonly property bool shown: screenState?.controlCenter ?? false
+    property real offsetScale: shown ? 0 : 1
+    property string page: "main" // main, wifi, bt, audio
+
+    // ── Couleurs (comme la Dynamic Island) ──
+    readonly property color fg: Colours.palette.m3onSurface
+    readonly property color fgDim: Qt.alpha(fg, 0.62)
+    readonly property color fgFaint: Qt.alpha(fg, 0.12)
+    readonly property color tileColour: Qt.alpha(fg, Colours.light ? 0.06 : 0.07)
+    readonly property color tileBorder: Qt.alpha(fg, 0.08)
+    readonly property color accent: Colours.palette.m3primary
+    readonly property color onAccent: Colours.palette.m3onPrimary
+
+    readonly property MprisPlayer player: Players.active
+    readonly property var brightMon: Brightness.getMonitorForScreen(screen)
+    readonly property BluetoothAdapter adapter: Bluetooth.defaultAdapter
+    readonly property list<BluetoothDevice> btConnected: Bluetooth.devices.values.filter(d => d.connected)
+
+    function close(): void {
+        screenState.controlCenter = false;
+    }
+
+    function run(cmd: list<string>): void {
+        Quickshell.execDetached(cmd);
+    }
+
+    visible: offsetScale < 1
+    implicitWidth: 400
+    implicitHeight: pages.height + 28
+    opacity: 1 - offsetScale * 0.6
+
+    onShownChanged: {
+        if (shown) {
+            page = "main";
+            focusScope.forceActiveFocus();
+        }
+    }
+
+    Behavior on offsetScale {
+        NumberAnimation {
+            duration: root.shown ? 520 : 320
+            easing.type: root.shown ? Easing.OutBack : Easing.InCubic
+            easing.overshoot: 0.9
+        }
+    }
+
+    FocusScope {
+        id: focusScope
+
+        anchors.fill: parent
+        focus: root.shown
+        Keys.onEscapePressed: {
+            if (root.page !== "main")
+                root.page = "main";
+            else
+                root.close();
+        }
+
+        // Pages : la principale glisse à gauche quand une liste s'ouvre
+        Item {
+            id: pages
+
+            x: 14
+            y: 14
+            width: parent.width - 28
+            height: root.page === "main" ? mainPage.implicitHeight : 470
+            clip: true
+
+            Behavior on height {
+                NumberAnimation {
+                    duration: 380
+                    easing.type: Easing.OutCubic
+                }
+            }
+
+            // ════════════════════ Page principale ════════════════════
+            ColumnLayout {
+                id: mainPage
+
+                width: pages.width
+                x: root.page === "main" ? 0 : -pages.width * 0.3
+                opacity: root.page === "main" ? 1 : 0
+                visible: opacity > 0.01
+                spacing: 10
+
+                Behavior on x {
+                    NumberAnimation {
+                        duration: 380
+                        easing.type: Easing.OutCubic
+                    }
+                }
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 240
+                    }
+                }
+
+                // ── Connexions + Ne pas déranger / thème ──
+                Row {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 176
+                    spacing: 10
+
+                    Tile {
+                        width: mainPage.width - 160
+                        height: 176
+
+                        Column {
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 6
+
+                            ConnRow {
+                                icon: Nmcli.wifiEnabled ? "wifi" : "wifi_off"
+                                title: qsTr("Wi-Fi")
+                                subtitle: !Nmcli.wifiEnabled ? qsTr("Désactivé") : Nmcli.active?.ssid ?? (Nmcli.activeEthernet ? qsTr("Ethernet") : qsTr("Non connecté"))
+                                on: Nmcli.wifiEnabled
+                                onToggle: Nmcli.toggleWifi()
+                                onOpen: {
+                                    Nmcli.rescanWifi();
+                                    root.page = "wifi";
+                                }
+                            }
+                            ConnRow {
+                                icon: root.adapter?.enabled ? "bluetooth" : "bluetooth_disabled"
+                                title: qsTr("Bluetooth")
+                                subtitle: !root.adapter?.enabled ? qsTr("Désactivé") : root.btConnected.length > 0 ? root.btConnected.map(d => d.name).join(", ") : qsTr("Activé")
+                                on: root.adapter?.enabled ?? false
+                                onToggle: {
+                                    if (root.adapter)
+                                        root.adapter.enabled = !root.adapter.enabled;
+                                }
+                                onOpen: root.page = "bt"
+                            }
+                            ConnRow {
+                                icon: "vpn_key"
+                                title: qsTr("VPN")
+                                subtitle: VPN.connecting ? qsTr("Connexion…") : VPN.connected ? qsTr("Connecté") : qsTr("Déconnecté")
+                                on: VPN.connected
+                                onToggle: VPN.toggle()
+                                onOpen: VPN.toggle()
+                            }
+                        }
+                    }
+
+                    Column {
+                        width: 150
+                        spacing: 10
+
+                        WideToggle {
+                            width: parent.width
+                            icon: Notifs.dnd ? "do_not_disturb_on" : "do_not_disturb_off"
+                            title: qsTr("Concentration")
+                            subtitle: Notifs.dnd ? qsTr("Ne pas déranger") : qsTr("Désactivée")
+                            on: Notifs.dnd
+                            onClicked: Notifs.dnd = !Notifs.dnd
+                        }
+                        WideToggle {
+                            width: parent.width
+                            icon: Colours.light ? "light_mode" : "dark_mode"
+                            title: qsTr("Apparence")
+                            subtitle: Colours.light ? qsTr("Claire") : qsTr("Sombre")
+                            on: !Colours.light
+                            onClicked: Colours.setMode(Colours.light ? "dark" : "light")
+                        }
+                    }
+                }
+
+                // ── Lecteur ──
+                Tile {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 76
+                    visible: !!root.player
+
+                    Rectangle {
+                        id: ccCover
+
+                        anchors.left: parent.left
+                        anchors.leftMargin: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 52
+                        height: 52
+                        radius: 12
+                        color: root.fgFaint
+                        clip: true
+
+                        Image {
+                            anchors.fill: parent
+                            fillMode: Image.PreserveAspectCrop
+                            asynchronous: true
+                            sourceSize: Qt.size(104, 104)
+                            source: Players.getArtUrl(root.player)
+                        }
+                    }
+
+                    Column {
+                        anchors.left: ccCover.right
+                        anchors.leftMargin: 12
+                        anchors.right: ccControls.left
+                        anchors.rightMargin: 8
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        StyledText {
+                            width: parent.width
+                            elide: Text.ElideRight
+                            text: root.player?.trackTitle || qsTr("Rien en lecture")
+                            color: root.fg
+                            font.pointSize: 10
+                            font.weight: Font.DemiBold
+                        }
+                        StyledText {
+                            width: parent.width
+                            elide: Text.ElideRight
+                            text: root.player?.trackArtist || Players.getIdentity(root.player)
+                            color: root.fgDim
+                            font.pointSize: 8.5
+                        }
+                    }
+
+                    Row {
+                        id: ccControls
+
+                        anchors.right: parent.right
+                        anchors.rightMargin: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        IconBtn {
+                            icon: "skip_previous"
+                            onClicked: root.player?.previous()
+                        }
+                        IconBtn {
+                            icon: root.player?.isPlaying ? "pause" : "play_arrow"
+                            big: true
+                            onClicked: root.player?.togglePlaying()
+                        }
+                        IconBtn {
+                            icon: "skip_next"
+                            onClicked: root.player?.next()
+                        }
+                    }
+                }
+
+                // ── Luminosité ──
+                Tile {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 72
+
+                    StyledText {
+                        x: 14
+                        y: 10
+                        text: qsTr("Écran")
+                        color: root.fg
+                        font.pointSize: 9.5
+                        font.weight: Font.DemiBold
+                    }
+
+                    GlassSlider {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        anchors.margins: 12
+                        icon: "light_mode"
+                        value: root.brightMon?.brightness ?? 0
+                        onMoved: v => root.brightMon?.setBrightness(v)
+                    }
+                }
+
+                // ── Son + sortie ──
+                Tile {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 72
+
+                    StyledText {
+                        x: 14
+                        y: 10
+                        text: qsTr("Son")
+                        color: root.fg
+                        font.pointSize: 9.5
+                        font.weight: Font.DemiBold
+                    }
+
+                    // Sortie audio actuelle → liste des sorties
+                    Rectangle {
+                        anchors.right: parent.right
+                        anchors.rightMargin: 10
+                        y: 6
+                        width: outRow.implicitWidth + 16
+                        height: 24
+                        radius: 12
+                        color: outArea.containsMouse ? root.fgFaint : "transparent"
+
+                        Row {
+                            id: outRow
+
+                            anchors.centerIn: parent
+                            spacing: 4
+
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: Math.min(implicitWidth, 190)
+                                elide: Text.ElideRight
+                                text: Audio.sink?.description || Audio.sink?.nickname || Audio.sink?.name || ""
+                                color: root.fgDim
+                                font.pointSize: 8
+                            }
+                            MaterialIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "chevron_right"
+                                color: root.fgDim
+                                fontStyle: Tokens.font.icon.size(11).build()
+                            }
+                        }
+
+                        MouseArea {
+                            id: outArea
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.page = "audio"
+                        }
+                    }
+
+                    GlassSlider {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        anchors.margins: 12
+                        icon: Audio.muted ? "volume_off" : "volume_up"
+                        value: Audio.volume
+                        dim: Audio.muted
+                        onMoved: v => Audio.setVolume(v)
+                        onIconClicked: {
+                            if (Audio.sink?.audio)
+                                Audio.sink.audio.muted = !Audio.sink.audio.muted;
+                        }
+                    }
+                }
+
+                // ── Raccourcis rapides ──
+                Tile {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: grid.implicitHeight + 24
+
+                    Grid {
+                        id: grid
+
+                        anchors.centerIn: parent
+                        columns: 4
+                        columnSpacing: 22
+                        rowSpacing: 12
+
+                        RoundToggle {
+                            icon: "coffee"
+                            label: qsTr("Caféine")
+                            on: IdleInhibitor.enabled
+                            onClicked: IdleInhibitor.enabled = !IdleInhibitor.enabled
+                        }
+                        RoundToggle {
+                            icon: "sports_esports"
+                            label: qsTr("Mode jeu")
+                            on: GameMode.enabled
+                            onClicked: GameMode.enabled = !GameMode.enabled
+                        }
+                        RoundToggle {
+                            icon: Audio.sourceMuted ? "mic_off" : "mic"
+                            label: qsTr("Micro")
+                            on: !Audio.sourceMuted
+                            onClicked: {
+                                if (Audio.source?.audio)
+                                    Audio.source.audio.muted = !Audio.source.audio.muted;
+                            }
+                        }
+                        RoundToggle {
+                            icon: Recorder.running ? "stop_circle" : "screen_record"
+                            label: Recorder.running ? qsTr("Arrêter") : qsTr("Enregistrer")
+                            on: Recorder.running
+                            onClicked: {
+                                if (Recorder.running)
+                                    Recorder.stop();
+                                else {
+                                    root.close();
+                                    Recorder.start();
+                                }
+                            }
+                        }
+                        RoundToggle {
+                            icon: "screenshot_region"
+                            label: qsTr("Capture")
+                            onClicked: {
+                                root.close();
+                                captureDelay.start();
+                            }
+                        }
+                        RoundToggle {
+                            icon: "timer"
+                            label: qsTr("Horloge")
+                            onClicked: {
+                                root.close();
+                                root.run([`${Quickshell.env("HOME")}/.local/bin/caelestia-clock`]);
+                            }
+                        }
+                        RoundToggle {
+                            icon: "calculate"
+                            label: qsTr("Calcul")
+                            onClicked: {
+                                root.close();
+                                root.run([`${Quickshell.env("HOME")}/.local/bin/caelestia-spotlight`, "calc"]);
+                            }
+                        }
+                        RoundToggle {
+                            icon: "space_dashboard"
+                            label: qsTr("Tableau")
+                            onClicked: {
+                                root.close();
+                                root.screenState.dashboard = true;
+                            }
+                        }
+                    }
+                }
+
+                // ── Énergie ──
+                Tile {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 56
+                    visible: UPower.displayDevice.isLaptopBattery || PowerProfiles.hasPerformanceProfile !== undefined
+
+                    Row {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 14
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 8
+
+                        MaterialIcon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: UPower.onBattery ? "battery_full" : "battery_charging_full"
+                            color: !UPower.onBattery ? "#32d74b" : root.fg
+                            fontStyle: Tokens.font.icon.size(15).build()
+                            fill: 1
+                        }
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: `${Math.round((UPower.displayDevice.percentage ?? 0) * 100)} %`
+                            color: root.fg
+                            font.pointSize: 10
+                            font.weight: Font.DemiBold
+                        }
+                    }
+
+                    // Profils d'énergie : contrôle segmenté
+                    Rectangle {
+                        anchors.right: parent.right
+                        anchors.rightMargin: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 186
+                        height: 34
+                        radius: 17
+                        color: root.fgFaint
+
+                        Rectangle {
+                            readonly property int idx: PowerProfiles.profile === PowerProfile.PowerSaver ? 0 : PowerProfiles.profile === PowerProfile.Performance ? 2 : 1
+
+                            x: 3 + idx * (parent.width - 6) / 3
+                            y: 3
+                            width: (parent.width - 6) / 3
+                            height: parent.height - 6
+                            radius: height / 2
+                            color: Qt.alpha(root.fg, 0.16)
+
+                            Behavior on x {
+                                NumberAnimation {
+                                    duration: 320
+                                    easing.type: Easing.OutBack
+                                    easing.overshoot: 1.2
+                                }
+                            }
+                        }
+
+                        Row {
+                            anchors.fill: parent
+                            anchors.margins: 3
+
+                            Repeater {
+                                model: [
+                                    {
+                                        icon: "energy_savings_leaf",
+                                        p: PowerProfile.PowerSaver
+                                    },
+                                    {
+                                        icon: "balance",
+                                        p: PowerProfile.Balanced
+                                    },
+                                    {
+                                        icon: "speed",
+                                        p: PowerProfile.Performance
+                                    }
+                                ]
+
+                                Item {
+                                    id: prof
+
+                                    required property var modelData
+
+                                    width: (parent.width) / 3
+                                    height: parent.height
+
+                                    MaterialIcon {
+                                        anchors.centerIn: parent
+                                        text: prof.modelData.icon
+                                        color: PowerProfiles.profile === prof.modelData.p ? root.fg : root.fgDim
+                                        fontStyle: Tokens.font.icon.size(13).build()
+                                        fill: PowerProfiles.profile === prof.modelData.p ? 1 : 0
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: PowerProfiles.profile = prof.modelData.p
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Icônes système (anciennement dans la barre) ──
+                Tile {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 48
+                    visible: SystemTray.items.values.length > 0
+
+                    Row {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 6
+
+                        Repeater {
+                            model: SystemTray.items.values.filter(i => !GlobalConfig.bar.tray.hiddenIcons.includes(i.id))
+
+                            Rectangle {
+                                id: trayBtn
+
+                                required property SystemTrayItem modelData
+
+                                width: 32
+                                height: 32
+                                radius: 10
+                                color: trayArea.containsMouse ? root.fgFaint : "transparent"
+
+                                IconImage {
+                                    anchors.centerIn: parent
+                                    implicitSize: 18
+                                    source: {
+                                        let icon = trayBtn.modelData.icon;
+                                        if (icon.includes("?path=")) {
+                                            const [name, path] = icon.split("?path=");
+                                            icon = `file://${path}/${name.slice(name.lastIndexOf("/") + 1)}`;
+                                        }
+                                        return icon;
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: trayArea
+
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: e => {
+                                        const item = trayBtn.modelData;
+                                        if (e.button === Qt.LeftButton && !item.onlyMenu) {
+                                            item.activate();
+                                            root.close();
+                                        } else if (item.hasMenu) {
+                                            const win = QsWindow.window;
+                                            const p = trayBtn.mapToItem(win.contentItem, 0, trayBtn.height);
+                                            item.display(win, p.x, p.y);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Session ──
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 2
+                    spacing: 8
+
+                    Rectangle {
+                        width: 34
+                        height: 34
+                        radius: 17
+                        color: root.fgFaint
+                        clip: true
+
+                        Image {
+                            anchors.fill: parent
+                            fillMode: Image.PreserveAspectCrop
+                            asynchronous: true
+                            sourceSize: Qt.size(68, 68)
+                            source: `file://${Quickshell.env("HOME")}/.face`
+                        }
+                    }
+                    StyledText {
+                        Layout.fillWidth: true
+                        elide: Text.ElideRight
+                        text: {
+                            const u = Quickshell.env("USER") ?? "";
+                            return u.charAt(0).toUpperCase() + u.slice(1);
+                        }
+                        color: root.fg
+                        font.pointSize: 10
+                        font.weight: Font.DemiBold
+                    }
+                    IconBtn {
+                        icon: "settings"
+                        onClicked: {
+                            root.close();
+                            root.run(["qs", "-c", "caelestia", "ipc", "call", "nexus", "open"]);
+                        }
+                    }
+                    IconBtn {
+                        icon: "lock"
+                        onClicked: {
+                            root.close();
+                            root.run(["qs", "-c", "caelestia", "ipc", "call", "lock", "lock"]);
+                        }
+                    }
+                    IconBtn {
+                        icon: "bedtime"
+                        onClicked: {
+                            root.close();
+                            root.run(["systemctl", "suspend"]);
+                        }
+                    }
+                    IconBtn {
+                        icon: "restart_alt"
+                        onClicked: root.run(Config.session.commands.reboot)
+                    }
+                    IconBtn {
+                        icon: "power_settings_new"
+                        danger: true
+                        onClicked: root.run(Config.session.commands.shutdown)
+                    }
+                }
+            }
+
+            // ════════════════════ Sous-pages ════════════════════
+            Item {
+                id: subPage
+
+                width: pages.width
+                height: 470
+                x: root.page === "main" ? pages.width : 0
+                opacity: root.page === "main" ? 0 : 1
+                visible: opacity > 0.01
+
+                Behavior on x {
+                    NumberAnimation {
+                        duration: 380
+                        easing.type: Easing.OutCubic
+                    }
+                }
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 240
+                    }
+                }
+
+                // En-tête : retour + titre + interrupteur
+                Item {
+                    id: subHead
+
+                    width: parent.width
+                    height: 44
+
+                    IconBtn {
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        icon: "arrow_back_ios_new"
+                        onClicked: root.page = "main"
+                    }
+                    StyledText {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 44
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: root.page === "wifi" ? qsTr("Wi-Fi") : root.page === "bt" ? qsTr("Bluetooth") : qsTr("Sortie audio")
+                        color: root.fg
+                        font.pointSize: 13
+                        font.weight: Font.Bold
+                    }
+                    Row {
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 8
+
+                        IconBtn {
+                            visible: root.page === "wifi" || root.page === "bt"
+                            icon: "refresh"
+                            spinning: root.page === "wifi" ? Nmcli.scanning : (root.adapter?.discovering ?? false)
+                            onClicked: {
+                                if (root.page === "wifi")
+                                    Nmcli.rescanWifi();
+                                else if (root.adapter)
+                                    root.adapter.discovering = !root.adapter.discovering;
+                            }
+                        }
+                        Switch {
+                            visible: root.page === "wifi" || root.page === "bt"
+                            on: root.page === "wifi" ? Nmcli.wifiEnabled : (root.adapter?.enabled ?? false)
+                            onToggled: {
+                                if (root.page === "wifi")
+                                    Nmcli.toggleWifi();
+                                else if (root.adapter)
+                                    root.adapter.enabled = !root.adapter.enabled;
+                            }
+                        }
+                    }
+                }
+
+                // ── Wi-Fi ──
+                ListView {
+                    id: wifiList
+
+                    property string passwordFor: ""
+                    property string connecting: ""
+
+                    anchors.top: subHead.bottom
+                    anchors.topMargin: 6
+                    anchors.bottom: parent.bottom
+                    width: parent.width
+                    visible: root.page === "wifi"
+                    clip: true
+                    spacing: 4
+                    model: [...Nmcli.networks].sort((a, b) => (b.active - a.active) || (b.strength - a.strength))
+
+                    delegate: Rectangle {
+                        id: net
+
+                        required property var modelData
+                        readonly property bool askPwd: wifiList.passwordFor === modelData.ssid
+
+                        width: wifiList.width
+                        height: askPwd ? 100 : 48
+                        radius: 14
+                        color: modelData.active ? Qt.alpha(root.accent, 0.16) : netArea.containsMouse ? root.tileColour : "transparent"
+
+                        Behavior on height {
+                            NumberAnimation {
+                                duration: 240
+                                easing.type: Easing.OutCubic
+                            }
+                        }
+
+                        MaterialIcon {
+                            x: 12
+                            y: 14
+                            text: net.modelData.strength > 66 ? "network_wifi" : net.modelData.strength > 33 ? "network_wifi_2_bar" : "network_wifi_1_bar"
+                            color: net.modelData.active ? root.accent : root.fg
+                            fontStyle: Tokens.font.icon.size(14).build()
+                            fill: 1
+                        }
+                        StyledText {
+                            x: 42
+                            y: 14
+                            width: parent.width - 110
+                            elide: Text.ElideRight
+                            text: net.modelData.ssid
+                            color: root.fg
+                            font.pointSize: 10
+                            font.weight: net.modelData.active ? Font.DemiBold : Font.Normal
+                        }
+                        Row {
+                            anchors.right: parent.right
+                            anchors.rightMargin: 12
+                            y: 14
+                            spacing: 6
+
+                            StyledText {
+                                visible: wifiList.connecting === net.modelData.ssid && !net.modelData.active
+                                text: qsTr("Connexion…")
+                                color: root.fgDim
+                                font.pointSize: 8.5
+                            }
+                            MaterialIcon {
+                                visible: net.modelData.isSecure
+                                text: "lock"
+                                color: root.fgDim
+                                fontStyle: Tokens.font.icon.size(11).build()
+                            }
+                            MaterialIcon {
+                                visible: net.modelData.active
+                                text: "check"
+                                color: root.accent
+                                fontStyle: Tokens.font.icon.size(13).build()
+                            }
+                        }
+
+                        MouseArea {
+                            id: netArea
+
+                            width: parent.width
+                            height: 48
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (net.modelData.active) {
+                                    Nmcli.disconnectFromNetwork();
+                                    return;
+                                }
+                                wifiList.connecting = net.modelData.ssid;
+                                NetworkConnection.handleConnect(net.modelData, null, () => {
+                                    wifiList.passwordFor = net.modelData.ssid;
+                                    pwd.forceActiveFocus();
+                                });
+                            }
+                        }
+
+                        // Mot de passe, directement dans la liste
+                        Rectangle {
+                            x: 12
+                            y: 52
+                            width: parent.width - 24
+                            height: 38
+                            radius: 12
+                            visible: net.askPwd
+                            color: root.tileColour
+                            border.width: 1
+                            border.color: pwd.activeFocus ? Qt.alpha(root.accent, 0.7) : root.tileBorder
+
+                            TextInput {
+                                id: pwd
+
+                                anchors.left: parent.left
+                                anchors.right: pwdGo.left
+                                anchors.leftMargin: 12
+                                anchors.verticalCenter: parent.verticalCenter
+                                echoMode: TextInput.Password
+                                color: root.fg
+                                font.pointSize: 10
+                                clip: true
+                                Keys.onReturnPressed: pwdGo.go()
+                                Keys.onEscapePressed: wifiList.passwordFor = ""
+
+                                StyledText {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    visible: !pwd.text
+                                    text: qsTr("Mot de passe")
+                                    color: root.fgDim
+                                    font.pointSize: 10
+                                }
+                            }
+
+                            IconBtn {
+                                id: pwdGo
+
+                                function go(): void {
+                                    if (!pwd.text)
+                                        return;
+                                    NetworkConnection.connectWithPassword(net.modelData, pwd.text, () => {});
+                                    wifiList.passwordFor = "";
+                                    pwd.text = "";
+                                }
+
+                                anchors.right: parent.right
+                                anchors.rightMargin: 2
+                                anchors.verticalCenter: parent.verticalCenter
+                                icon: "arrow_forward"
+                                onClicked: go()
+                            }
+                        }
+                    }
+                }
+
+                // ── Bluetooth ──
+                ListView {
+                    id: btList
+
+                    anchors.top: subHead.bottom
+                    anchors.topMargin: 6
+                    anchors.bottom: parent.bottom
+                    width: parent.width
+                    visible: root.page === "bt"
+                    clip: true
+                    spacing: 4
+                    model: [...Bluetooth.devices.values].filter(d => d.paired || d.connected || (root.adapter?.discovering && d.name)).sort((a, b) => (b.connected - a.connected) || (b.paired - a.paired) || a.name.localeCompare(b.name))
+
+                    delegate: Rectangle {
+                        id: dev
+
+                        required property BluetoothDevice modelData
+                        readonly property bool busy: modelData.state === BluetoothDeviceState.Connecting || modelData.state === BluetoothDeviceState.Disconnecting
+
+                        width: btList.width
+                        height: 52
+                        radius: 14
+                        color: modelData.connected ? Qt.alpha(root.accent, 0.16) : devArea.containsMouse ? root.tileColour : "transparent"
+
+                        Rectangle {
+                            x: 10
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 32
+                            height: 32
+                            radius: 16
+                            color: dev.modelData.connected ? root.accent : root.fgFaint
+
+                            MaterialIcon {
+                                anchors.centerIn: parent
+                                text: Icons.getBluetoothIcon(dev.modelData.icon)
+                                color: dev.modelData.connected ? root.onAccent : root.fg
+                                fontStyle: Tokens.font.icon.size(13).build()
+                                fill: 1
+                            }
+                        }
+                        Column {
+                            x: 52
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width - 120
+
+                            StyledText {
+                                width: parent.width
+                                elide: Text.ElideRight
+                                text: dev.modelData.name || dev.modelData.address
+                                color: root.fg
+                                font.pointSize: 10
+                                font.weight: dev.modelData.connected ? Font.DemiBold : Font.Normal
+                            }
+                            StyledText {
+                                text: dev.busy ? qsTr("Patiente…") : dev.modelData.connected ? qsTr("Connecté") : dev.modelData.paired ? qsTr("Associé") : qsTr("Disponible")
+                                color: root.fgDim
+                                font.pointSize: 8
+                            }
+                        }
+                        StyledText {
+                            anchors.right: parent.right
+                            anchors.rightMargin: 14
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: dev.modelData.connected && dev.modelData.batteryAvailable
+                            text: `${Math.round(dev.modelData.battery * 100)} %`
+                            color: root.fgDim
+                            font.pointSize: 9
+                        }
+
+                        MouseArea {
+                            id: devArea
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                const d = dev.modelData;
+                                if (d.connected)
+                                    d.disconnect();
+                                else if (d.paired)
+                                    d.connect();
+                                else
+                                    d.pair();
+                            }
+                        }
+                    }
+
+                    StyledText {
+                        anchors.centerIn: parent
+                        visible: btList.count === 0
+                        text: root.adapter?.enabled ? qsTr("Aucun appareil — actualise pour chercher") : qsTr("Bluetooth désactivé")
+                        color: root.fgDim
+                        font.pointSize: 9.5
+                    }
+                }
+
+                // ── Sorties audio ──
+                ListView {
+                    id: audioList
+
+                    anchors.top: subHead.bottom
+                    anchors.topMargin: 6
+                    anchors.bottom: parent.bottom
+                    width: parent.width
+                    visible: root.page === "audio"
+                    clip: true
+                    spacing: 4
+                    model: Audio.sinks
+
+                    delegate: Rectangle {
+                        id: sinkItem
+
+                        required property var modelData
+                        readonly property bool current: Audio.sink === modelData
+
+                        width: audioList.width
+                        height: 48
+                        radius: 14
+                        color: current ? Qt.alpha(root.accent, 0.16) : sinkArea.containsMouse ? root.tileColour : "transparent"
+
+                        MaterialIcon {
+                            x: 12
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: (sinkItem.modelData.name ?? "").startsWith("bluez") ? "headphones" : (sinkItem.modelData.name ?? "").includes("hdmi") ? "tv" : "speaker"
+                            color: sinkItem.current ? root.accent : root.fg
+                            fontStyle: Tokens.font.icon.size(14).build()
+                            fill: 1
+                        }
+                        StyledText {
+                            x: 42
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width - 80
+                            elide: Text.ElideRight
+                            text: sinkItem.modelData.description || sinkItem.modelData.nickname || sinkItem.modelData.name
+                            color: root.fg
+                            font.pointSize: 10
+                            font.weight: sinkItem.current ? Font.DemiBold : Font.Normal
+                        }
+                        MaterialIcon {
+                            anchors.right: parent.right
+                            anchors.rightMargin: 12
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: sinkItem.current
+                            text: "check"
+                            color: root.accent
+                            fontStyle: Tokens.font.icon.size(13).build()
+                        }
+
+                        MouseArea {
+                            id: sinkArea
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: Audio.setAudioSink(sinkItem.modelData)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Timer {
+        id: captureDelay
+
+        interval: 420
+        onTriggered: root.run(["qs", "-c", "caelestia", "ipc", "call", "picker", "open"])
+    }
+
+    // ════════════════════ Composants ════════════════════
+
+    component Tile: Rectangle {
+        radius: 22
+        color: Qt.alpha(Colours.palette.m3onSurface, Colours.light ? 0.06 : 0.07)
+        border.width: 1
+        border.color: Qt.alpha(Colours.palette.m3onSurface, 0.08)
+
+        // Reflet en haut, comme une plaque de verre
+        Rectangle {
+            anchors.fill: parent
+            radius: parent.radius
+            gradient: Gradient {
+                GradientStop {
+                    position: 0
+                    color: Qt.rgba(1, 1, 1, 0.05)
+                }
+                GradientStop {
+                    position: 0.45
+                    color: "transparent"
+                }
+            }
+        }
+    }
+
+    // Ligne de connexion : pastille ronde (bascule) + texte (ouvre la liste)
+    component ConnRow: Item {
+        id: cr
+
+        property string icon
+        property string title
+        property string subtitle
+        property bool on
+        signal toggle
+        signal open
+
+        width: parent?.width ?? 0
+        height: 46
+
+        Rectangle {
+            id: crDot
+
+            anchors.verticalCenter: parent.verticalCenter
+            width: 38
+            height: 38
+            radius: 19
+            color: cr.on ? Colours.palette.m3primary : Qt.alpha(Colours.palette.m3onSurface, 0.12)
+            scale: crDotArea.pressed ? 0.9 : 1
+
+            Behavior on color {
+                ColorAnimation {
+                    duration: 200
+                }
+            }
+            Behavior on scale {
+                NumberAnimation {
+                    duration: 160
+                    easing.type: Easing.OutBack
+                }
+            }
+
+            MaterialIcon {
+                anchors.centerIn: parent
+                text: cr.icon
+                color: cr.on ? Colours.palette.m3onPrimary : Colours.palette.m3onSurface
+                fontStyle: Tokens.font.icon.size(14).build()
+                fill: 1
+            }
+
+            MouseArea {
+                id: crDotArea
+
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: cr.toggle()
+            }
+        }
+
+        Column {
+            anchors.left: crDot.right
+            anchors.leftMargin: 10
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+
+            StyledText {
+                width: parent.width
+                elide: Text.ElideRight
+                text: cr.title
+                color: Colours.palette.m3onSurface
+                font.pointSize: 9.5
+                font.weight: Font.DemiBold
+            }
+            StyledText {
+                width: parent.width
+                elide: Text.ElideRight
+                text: cr.subtitle
+                color: Qt.alpha(Colours.palette.m3onSurface, 0.6)
+                font.pointSize: 8.5
+            }
+        }
+
+        MouseArea {
+            anchors.left: crDot.right
+            anchors.right: parent.right
+            height: parent.height
+            cursorShape: Qt.PointingHandCursor
+            onClicked: cr.open()
+        }
+    }
+
+    // Grande tuile à bascule (Concentration, Apparence)
+    component WideToggle: Rectangle {
+        id: wt
+
+        property string icon
+        property string title
+        property string subtitle
+        property bool on
+        signal clicked
+
+        implicitHeight: 83
+        radius: 22
+        color: Qt.alpha(Colours.palette.m3onSurface, wtArea.containsMouse ? 0.1 : 0.07)
+        border.width: 1
+        border.color: Qt.alpha(Colours.palette.m3onSurface, 0.08)
+        scale: wtArea.pressed ? 0.97 : 1
+
+        Behavior on scale {
+            NumberAnimation {
+                duration: 160
+                easing.type: Easing.OutBack
+            }
+        }
+
+        Rectangle {
+            id: wtDot
+
+            x: 12
+            y: 12
+            width: 32
+            height: 32
+            radius: 16
+            color: wt.on ? Colours.palette.m3primary : Qt.alpha(Colours.palette.m3onSurface, 0.12)
+
+            Behavior on color {
+                ColorAnimation {
+                    duration: 200
+                }
+            }
+
+            MaterialIcon {
+                anchors.centerIn: parent
+                text: wt.icon
+                color: wt.on ? Colours.palette.m3onPrimary : Colours.palette.m3onSurface
+                fontStyle: Tokens.font.icon.size(13).build()
+                fill: 1
+            }
+        }
+
+        Column {
+            x: 12
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: 10
+            width: parent.width - 24
+
+            StyledText {
+                width: parent.width
+                elide: Text.ElideRight
+                text: wt.title
+                color: Colours.palette.m3onSurface
+                font.pointSize: 9.5
+                font.weight: Font.DemiBold
+            }
+            StyledText {
+                width: parent.width
+                elide: Text.ElideRight
+                text: wt.subtitle
+                color: Qt.alpha(Colours.palette.m3onSurface, 0.6)
+                font.pointSize: 8
+            }
+        }
+
+        MouseArea {
+            id: wtArea
+
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: wt.clicked()
+        }
+    }
+
+    // Petit bouton rond + libellé (raccourcis rapides)
+    component RoundToggle: Column {
+        id: rt
+
+        property string icon
+        property string label
+        property bool on
+        signal clicked
+
+        spacing: 4
+
+        Rectangle {
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: 46
+            height: 46
+            radius: 23
+            color: rt.on ? Colours.palette.m3primary : Qt.alpha(Colours.palette.m3onSurface, rtArea.containsMouse ? 0.16 : 0.1)
+            scale: rtArea.pressed ? 0.9 : 1
+
+            Behavior on color {
+                ColorAnimation {
+                    duration: 200
+                }
+            }
+            Behavior on scale {
+                NumberAnimation {
+                    duration: 160
+                    easing.type: Easing.OutBack
+                }
+            }
+
+            MaterialIcon {
+                anchors.centerIn: parent
+                text: rt.icon
+                color: rt.on ? Colours.palette.m3onPrimary : Colours.palette.m3onSurface
+                fontStyle: Tokens.font.icon.size(15).build()
+                fill: 1
+            }
+
+            MouseArea {
+                id: rtArea
+
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: rt.clicked()
+            }
+        }
+
+        StyledText {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: rt.label
+            color: Qt.alpha(Colours.palette.m3onSurface, 0.75)
+            font.pointSize: 7.5
+            font.weight: Font.Medium
+        }
+    }
+
+    // Jauge épaisse façon macOS, glissable, avec icône dedans
+    component GlassSlider: Item {
+        id: gs
+
+        property string icon
+        property real value
+        property bool dim
+        signal moved(real v)
+        signal iconClicked
+
+        height: 26
+
+        Rectangle {
+            id: track
+
+            anchors.fill: parent
+            radius: height / 2
+            color: Qt.alpha(Colours.palette.m3onSurface, 0.12)
+            clip: true
+
+            Rectangle {
+                height: parent.height
+                radius: parent.radius
+                width: Math.max(parent.height, parent.width * Math.max(0, Math.min(1, gs.value)))
+                color: gs.dim ? Qt.alpha(Colours.palette.m3onSurface, 0.35) : Colours.palette.m3onSurface
+
+                Behavior on width {
+                    enabled: !gsArea.pressed
+
+                    NumberAnimation {
+                        duration: 160
+                        easing.type: Easing.OutCubic
+                    }
+                }
+            }
+
+            MouseArea {
+                id: gsArea
+
+                anchors.fill: parent
+                anchors.leftMargin: 30
+                cursorShape: Qt.PointingHandCursor
+                onPressed: e => gs.moved(Math.max(0, Math.min(1, (e.x + 30) / track.width)))
+                onPositionChanged: e => {
+                    if (pressed)
+                        gs.moved(Math.max(0, Math.min(1, (e.x + 30) / track.width)));
+                }
+            }
+        }
+
+        MaterialIcon {
+            x: 7
+            anchors.verticalCenter: parent.verticalCenter
+            text: gs.icon
+            color: gs.value > 0.1 && !gs.dim ? Colours.palette.m3surface : Colours.palette.m3onSurface
+            fontStyle: Tokens.font.icon.size(12).build()
+            fill: 1
+
+            MouseArea {
+                anchors.fill: parent
+                anchors.margins: -6
+                cursorShape: Qt.PointingHandCursor
+                onClicked: gs.iconClicked()
+            }
+        }
+    }
+
+    component IconBtn: Rectangle {
+        id: ib
+
+        property string icon
+        property bool big
+        property bool danger
+        property bool spinning
+        signal clicked
+
+        width: big ? 38 : 32
+        height: width
+        radius: width / 2
+        color: ibArea.pressed ? Qt.alpha(Colours.palette.m3onSurface, 0.2) : ibArea.containsMouse ? Qt.alpha(Colours.palette.m3onSurface, 0.12) : ib.danger ? Qt.alpha("#ff453a", 0.14) : "transparent"
+
+        MaterialIcon {
+            anchors.centerIn: parent
+            text: ib.icon
+            color: ib.danger ? "#ff453a" : Colours.palette.m3onSurface
+            fontStyle: Tokens.font.icon.size(ib.big ? 18 : 13).build()
+            fill: 1
+
+            RotationAnimation on rotation {
+                running: ib.spinning
+                loops: Animation.Infinite
+                from: 0
+                to: 360
+                duration: 900
+            }
+        }
+
+        MouseArea {
+            id: ibArea
+
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: ib.clicked()
+        }
+    }
+
+    component Switch: Rectangle {
+        id: sw
+
+        property bool on
+        signal toggled
+
+        width: 44
+        height: 26
+        radius: 13
+        color: on ? "#32d74b" : Qt.alpha(Colours.palette.m3onSurface, 0.18)
+
+        Behavior on color {
+            ColorAnimation {
+                duration: 200
+            }
+        }
+
+        Rectangle {
+            x: sw.on ? sw.width - width - 3 : 3
+            y: 3
+            width: 20
+            height: 20
+            radius: 10
+            color: "white"
+
+            Behavior on x {
+                NumberAnimation {
+                    duration: 220
+                    easing.type: Easing.OutBack
+                    easing.overshoot: 1.4
+                }
+            }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: sw.toggled()
+        }
+    }
+}

@@ -70,7 +70,7 @@ StyledWindow {
     name: "drawers"
     WlrLayershell.exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: (fsTransitionProg > 0 && contentItem.Config.general.showOverFullscreen) || (hasSpecialWorkspace && hasFullscreenOnNormalWs) ? WlrLayer.Overlay : WlrLayer.Top
-    WlrLayershell.keyboardFocus: screenState.launcher || screenState.session || screenState.notesActive ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: screenState.launcher || screenState.session || screenState.notesActive || screenState.controlCenter ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
     mask: hasFullscreen ? emptyRegion : regions
 
@@ -117,7 +117,7 @@ StyledWindow {
         active: {
             const s = root.screenState;
             const conf = root.contentItem.Config;
-            if ((s.launcher && conf.launcher.enabled) || (s.session && conf.session.enabled) || (s.sidebar && conf.sidebar.enabled))
+            if ((s.launcher && conf.launcher.enabled) || (s.session && conf.session.enabled) || (s.sidebar && conf.sidebar.enabled) || s.controlCenter)
                 return true;
             if (!conf.dashboard.showOnHover && s.dashboard && conf.dashboard.enabled)
                 return true;
@@ -131,6 +131,7 @@ StyledWindow {
             root.screenState.session = false;
             root.screenState.sidebar = false;
             root.screenState.dashboard = false;
+            root.screenState.controlCenter = false;
             panels.popouts.hasCurrent = false;
             bar.closeTray();
         }
@@ -250,6 +251,18 @@ StyledWindow {
                     radiusY: islandShoulders.s
                 }
             }
+        }
+
+        // Centre de contrôle : même verre, collé au haut de l'écran
+        PanelBg {
+            id: ccBg
+
+            panel: panels.controlCenter
+            deformAmount: 0.08
+            radius: 30
+            y: panel.y + root.borderThickness - radius
+            implicitHeight: panel.height + radius
+            visible: panels.controlCenter.visible
         }
 
         PanelBg {
@@ -423,6 +436,9 @@ StyledWindow {
                 matrix: dashBg.deformMatrix
             }
             island.fullscreen: root.hasFullscreen
+            controlCenter.transform: Matrix4x4 {
+                matrix: ccBg.deformMatrix
+            }
             island.transform: Matrix4x4 {
                 matrix: islandBg.deformMatrix
             }

@@ -28,6 +28,12 @@ Region {
     }
 
     R {
+        panel: root.panels.controlCenter
+        y: 0
+        height: root.panels.controlCenter.visible ? Math.max(0, panel.y + root.borderThickness + panel.height) : 0
+    }
+
+    R {
         panel: root.panels.island
         y: 0
         height: panel.height

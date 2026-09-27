@@ -3,6 +3,7 @@ import QtQuick.Controls
 import Quickshell
 import Caelestia.Config
 import qs.components
+import qs.services
 import qs.components.controls
 import qs.modules.bar as Bar
 import qs.modules.bar.popouts as BarPopouts
@@ -238,7 +239,7 @@ CustomMouseArea {
         }
 
         // Show popouts on hover
-        if (x < bar.implicitWidth) {
+        if (x < bar.implicitWidth && !Island.noBar) {
             bar.checkPopout(y);
         } else if ((!popouts.currentName.startsWith("traymenu") || ((popouts.current as StackView)?.depth ?? 0) <= 1) && !inLeftPanel(panels.popoutsWrapper, x, y)) {
             popouts.hasCurrent = false;
