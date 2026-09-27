@@ -4,6 +4,9 @@ import QtQuick
 import Quickshell
 import QtQuick.Shapes
 import Quickshell.Bluetooth
+import Quickshell.Hyprland
+import Quickshell.Io
+import Quickshell.Services.Pipewire
 import Quickshell.Services.Mpris
 import Quickshell.Services.UPower
 import Caelestia
@@ -41,13 +44,18 @@ Item {
     readonly property color red: Colours.light ? "#d70015" : "#ff453a"
 
     // ── État ──
-    property string pulse: "" // "level", "notif", "charge"
+    property string pulse: "" // level, notif, toast, shot, bt, charge, ws, caps, net, done
     property var notif: null
+    property var toastData: null
     property list<var> queue: []
     property bool ready
     property bool hovered
     property bool expanded
     property bool levelHeld // doigt/souris sur la jauge : l'île reste ouverte
+    // Dernières valeurs affichées (pas de liaison : elles ne doivent pas se mettre à jour toutes seules)
+    property int lastVol: -1
+    property bool lastMuted
+    property int lastSink: -1
     property string levelKind: "volume"
     property string levelIcon: "volume_up"
     // Valeur en direct selon le type : chaque jauge garde la sienne, pas de glissement de l'une à l'autre
@@ -84,6 +92,17 @@ Item {
     property real chargeFill: 1
     property real chargeBolt: 1
     property real chargeShine: 0
+
+    Timer {
+        id: chargeSwap
+
+        interval: 260
+        onTriggered: {
+            root.chargePlugged = root.charging;
+            root.flash("charge", root.charging ? 3600 : 2600);
+            chargeIntro.restart();
+        }
+    }
 
     SequentialAnimation {
         id: chargeIntro
@@ -164,31 +183,284 @@ Item {
         }
     }
 
+    // ── Bureaux ──
+    readonly property HyprlandMonitor hyprMon: Hyprland.monitorFor(screen)
+    readonly property int wsId: hyprMon?.activeWorkspace?.id ?? 1
+    readonly property int wsLast: {
+        let max = wsId;
+        for (const w of Hypr.workspaces.values)
+            if (w.id > max && w.monitor?.name === hyprMon?.name)
+                max = w.id;
+        return Math.max(max, 3);
+    }
+
+    onWsIdChanged: {
+        if (Island.workspaces && wsId > 0 && pulse !== "notif" && pulse !== "toast" && pulse !== "shot")
+            flash("ws", 1100);
+    }
+
+    // ── Micro et caméra utilisés (points orange / vert façon macOS) ──
+    readonly property list<PwNode> recStreams: Pipewire.nodes.values.filter(n => {
+        if (!n?.isStream)
+            return false;
+        const p = n.properties ?? {};
+        if (p["media.class"] !== "Stream/Input/Audio" || p["stream.capture.sink"] === "true" || p["stream.monitor"] === "true")
+            return false;
+        const app = `${p["application.name"] ?? ""} ${p["node.name"] ?? ""} ${p["application.process.binary"] ?? ""}`.toLowerCase();
+        return !/cava|quickshell|caelestia|bluez_capture_internal|pavucontrol|peak detect/.test(app);
+    })
+    readonly property bool micInUse: recStreams.length > 0
+    property bool camInUse
+
+    PwObjectTracker {
+        objects: Pipewire.nodes.values.filter(n => n?.isStream)
+    }
+
+    Process {
+        id: camProc
+
+        command: ["sh", "-c", "for d in /dev/video*; do [ -e \"$d\" ] && fuser -s \"$d\" 2>/dev/null && exit 0; done; exit 1"]
+        onExited: code => root.camInUse = code === 0
+    }
+
+    Timer {
+        interval: 3000
+        running: true
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: camProc.running = true
+    }
+
+    // ── Verr. Maj, Wi-Fi, VPN ──
+    property string blipIcon: ""
+    property string blipText: ""
+    property string blipSub: ""
+    property bool blipOn: true
+
+    function blip(icon: string, text: string, sub: string, on: bool): void {
+        blipIcon = icon;
+        blipText = text;
+        blipSub = sub;
+        blipOn = on;
+        flash("blip", 1800);
+    }
+
+    readonly property bool capsLock: Hypr.capsLock
+    onCapsLockChanged: blip(capsLock ? "keyboard_capslock_badge" : "keyboard_capslock", capsLock ? qsTr("Verr. Maj activé") : qsTr("Verr. Maj désactivé"), "", capsLock)
+
+    readonly property string wifiName: Nmcli.active?.ssid ?? ""
+    onWifiNameChanged: {
+        if (wifiName)
+            blip("wifi", wifiName, qsTr("Connecté"), true);
+        else
+            blip("wifi_off", qsTr("Wi-Fi"), qsTr("Déconnecté"), false);
+    }
+
+    readonly property bool vpnOn: VPN.connected
+    onVpnOnChanged: blip(vpnOn ? "vpn_lock" : "vpn_key_off", qsTr("VPN"), vpnOn ? qsTr("Connecté") : qsTr("Déconnecté"), vpnOn)
+
+    // ── Minuteur et chronomètre (IPC : qs -c caelestia ipc call island timer 5m) ──
+    property string clockKind: "" // "", "timer", "stopwatch"
+    property real clockEnd: 0 // minuteur : fin (ms)
+    property real clockStart: 0 // chronomètre : départ (ms)
+    property real clockPaused: 0 // ms figées pendant une pause (0 = en marche)
+    property real clockTotal: 0
+    property real now: Date.now()
+    readonly property real clockValue: {
+        const t = clockPaused > 0 ? clockPaused : now;
+        if (clockKind === "timer")
+            return Math.max(0, (clockEnd - t) / 1000);
+        if (clockKind === "stopwatch")
+            return (t - clockStart) / 1000;
+        return 0;
+    }
+
+    Timer {
+        running: root.clockKind !== ""
+        interval: 100
+        repeat: true
+        onTriggered: {
+            root.now = Date.now();
+            if (root.clockKind === "timer" && root.clockPaused === 0 && root.now >= root.clockEnd) {
+                root.clockKind = "";
+                Quickshell.execDetached(["pw-play", "/usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga"]);
+                root.flash("done", 8000);
+            }
+        }
+    }
+
+    function parseDuration(txt: string): real {
+        const t = String(txt).toLowerCase().replace(",", ".").trim();
+        let total = 0;
+        const re = /(\d+(?:\.\d+)?)\s*(h|m|min|s|sec)?/g;
+        let m;
+        while ((m = re.exec(t)) !== null) {
+            const v = parseFloat(m[1]);
+            const u = m[2] ?? "m";
+            total += u === "h" ? v * 3600 : u === "s" || u === "sec" ? v : v * 60;
+        }
+        return total;
+    }
+
+    function startTimer(sec: real): void {
+        if (!(sec > 0))
+            return;
+        clockKind = "timer";
+        clockTotal = sec;
+        clockPaused = 0;
+        now = Date.now();
+        clockEnd = now + sec * 1000;
+    }
+
+    function startStopwatch(): void {
+        clockKind = "stopwatch";
+        clockPaused = 0;
+        now = Date.now();
+        clockStart = now;
+    }
+
+    function togglePause(): void {
+        if (clockKind === "")
+            return;
+        if (clockPaused > 0) {
+            const shift = Date.now() - clockPaused;
+            clockEnd += shift;
+            clockStart += shift;
+            clockPaused = 0;
+        } else {
+            clockPaused = Date.now();
+        }
+        now = Date.now();
+    }
+
+    function stopClock(): void {
+        clockKind = "";
+        clockPaused = 0;
+    }
+
+    function fmtClock(sec: real): string {
+        sec = Math.max(0, sec);
+        const h = Math.floor(sec / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        const s = Math.floor(sec % 60);
+        const mm = m.toString().padStart(2, "0");
+        const ss = s.toString().padStart(2, "0");
+        return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
+    }
+
+    // ── Paroles synchronisées (cache d'Aura, .lrc voisin, puis LRCLIB) ──
+    property var lyrics: []
+    property string lyricsKey: ""
+    property real lyricPos: 0
+    readonly property string lyricKeyNow: hasMedia ? `${player?.trackTitle ?? ""}|${player?.trackArtist ?? ""}` : ""
+    readonly property int lyricIndex: {
+        const l = lyrics;
+        if (!l || l.length === 0)
+            return -1;
+        const t = lyricPos + 0.25;
+        let lo = 0, hi = l.length - 1, ans = -1;
+        while (lo <= hi) {
+            const mid = (lo + hi) >> 1;
+            if (l[mid][0] <= t) {
+                ans = mid;
+                lo = mid + 1;
+            } else {
+                hi = mid - 1;
+            }
+        }
+        return ans;
+    }
+    readonly property string lyricLine: lyricIndex >= 0 ? (lyrics[lyricIndex][1] || "♪") : ""
+    readonly property bool hasLyrics: lyrics.length > 0 && lyricIndex >= 0
+
+    onLyricKeyNowChanged: lyricsDebounce.restart()
+
+    Timer {
+        id: lyricsDebounce
+
+        interval: 700
+        onTriggered: {
+            root.lyrics = [];
+            root.lyricsKey = root.lyricKeyNow;
+            if (!root.lyricKeyNow)
+                return;
+            const len = root.player?.length ?? 0;
+            lyricsProc.command = ["python3", Quickshell.shellPath("assets/island-lyrics.py"), root.player?.trackTitle ?? "", root.player?.trackArtist ?? "", String(len > 0 && len < 2147483 ? len : 0), String(root.player?.metadata?.["xesam:url"] ?? "")];
+            lyricsProc.running = true;
+        }
+    }
+
+    Process {
+        id: lyricsProc
+
+        property string key
+
+        onStarted: key = root.lyricsKey
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (lyricsProc.key !== root.lyricKeyNow)
+                    return;
+                try {
+                    root.lyrics = JSON.parse(text).lines ?? [];
+                } catch (e) {
+                    root.lyrics = [];
+                }
+            }
+        }
+    }
+
+    Timer {
+        running: root.playing && root.lyrics.length > 0
+        interval: 200
+        repeat: true
+        onTriggered: {
+            root.player?.positionChanged();
+            root.lyricPos = root.player?.position ?? 0;
+        }
+    }
+
+    // ── Étagère : fichiers déposés sur l'île (partagée, dans services/Island.qml) ──
+    readonly property list<string> shelf: Island.shelf
+    property bool dropping
+
     readonly property bool hidden: !Island.enabled || fullscreen || (screenState?.dashboard ?? false)
 
     readonly property string mode: {
         if (hidden)
             return "hidden";
+        if (dropping)
+            return "drop";
         if (pulse === "level")
             return "level";
         if (pulse === "shot")
             return "shot";
         if (pulse === "notif" && notif)
             return "notif";
+        if (pulse === "toast" && toastData)
+            return "toast";
+        if (pulse === "done")
+            return "done";
         if (pulse === "bt" && btDevice)
             return "bt";
         if (pulse === "charge")
             return "charge";
+        if (pulse === "blip")
+            return "blip";
+        if (pulse === "ws")
+            return "ws";
         if (expanded)
-            return hasMedia ? "player" : "info";
+            return clockKind !== "" && !hasMedia ? "clock" : hasMedia ? "player" : "info";
         if (Recorder.running)
             return "record";
+        if (clockKind !== "")
+            return "clockMini";
         if (hasMedia && playing)
             return "media";
         return "idle";
     }
 
     readonly property bool notifHasActions: (notif?.actions?.length ?? 0) > 0
+    readonly property real shelfExtra: shelf.length > 0 ? 78 : 0
 
     // Taille visible (depuis le haut de l'écran) pour chaque mode
     readonly property size target: {
@@ -199,6 +471,20 @@ Item {
             return Qt.size(340, 52);
         case "notif":
             return Qt.size(430, hovered && notifHasActions ? 132 : 92);
+        case "drop":
+            return Qt.size(420, 110);
+        case "toast":
+            return Qt.size(400, toastData?.message ? 76 : 52);
+        case "done":
+            return Qt.size(360, 64);
+        case "blip":
+            return Qt.size(blipSub ? 320 : 280, 44);
+        case "ws":
+            return Qt.size(Math.max(250, 150 + wsLast * 18), 44);
+        case "clock":
+            return Qt.size(360, 118 + shelfExtra);
+        case "clockMini":
+            return Qt.size(230, 40);
         case "shot":
             return Qt.size(460, 100);
         case "bt":
@@ -206,26 +492,34 @@ Item {
         case "charge":
             return chargePlugged ? Qt.size(420, 78) : Qt.size(330, 48);
         case "player":
-            return Qt.size(450, 178);
+            return Qt.size(450, (hasLyrics ? 202 : 178) + shelfExtra);
         case "info":
-            return Qt.size(390, 118);
+            return Qt.size(390, 118 + shelfExtra);
         case "record":
             return Qt.size(210, 40);
         case "media":
-            return Qt.size(290, 40);
+            return Qt.size(hasLyrics ? 400 : 290, 40);
         default:
             // Au repos : juste l'heure (ou rien si Island.clock est coupé)
-            return Island.clock ? Qt.size(hovered ? 256 : 240, 40) : Qt.size(150, 0);
+            return Island.clock ? Qt.size((hovered ? 256 : 240) + (micInUse || camInUse ? 24 : 0) + (shelf.length > 0 ? 34 : 0), 40) : Qt.size(150, 0);
         }
     }
 
     property real w: target.width
     property real h: target.height
-    readonly property real radius: Math.min(h / 2, mode === "player" || mode === "info" || mode === "notif" || mode === "bt" || mode === "shot" || (mode === "charge" && chargePlugged) ? 32 : h / 2)
+    readonly property real radius: Math.min(h / 2, mode === "player" || mode === "info" || mode === "notif" || mode === "bt" || mode === "shot" || mode === "clock" || mode === "drop" || mode === "toast" || mode === "done" || (mode === "charge" && chargePlugged) ? 32 : h / 2)
 
     function flash(kind: string, ms: int): void {
         if (!ready)
             return;
+        // Volume, bureau… par-dessus une notification : elle revient ensuite
+        if ((pulse === "notif" && notif) || (pulse === "toast" && toastData)) {
+            if (kind !== "notif" && kind !== "toast") {
+                queue = [pulse === "notif" ? notif : toastData, ...queue];
+                notif = null;
+                toastData = null;
+            }
+        }
         pulse = kind;
         pulseTimer.interval = ms;
         pulseTimer.restart();
@@ -235,13 +529,21 @@ Item {
         while (queue.length > 0) {
             const n = queue[0];
             queue = queue.slice(1);
+            if (n?.isToast) {
+                toastData = n;
+                notif = null;
+                flash("toast", n.type >= 2 ? 5000 : 3200);
+                return;
+            }
             if (n && !n.closed) {
                 notif = n;
+                toastData = null;
                 flash("notif", n.urgency === 2 ? 9000 : 5000);
                 return;
             }
         }
         notif = null;
+        toastData = null;
     }
 
     function fmtTime(s: real): string {
@@ -285,7 +587,13 @@ Item {
         id: readyTimer
 
         interval: 1500
-        onTriggered: root.ready = true
+        onTriggered: {
+            root.lastVol = Math.round(Audio.volume * 100);
+            root.lastMuted = Audio.muted;
+            root.lastSink = Audio.sink?.id ?? -1;
+            root.lastBright = Math.round(root.brightness * 100);
+            root.ready = true;
+        }
     }
 
     Timer {
@@ -297,12 +605,13 @@ Item {
                 restart();
                 return;
             }
-            if (root.pulse === "notif" && root.queue.length > 0) {
+            if (root.queue.length > 0) {
                 root.showNext();
                 return;
             }
             root.pulse = "";
             root.notif = null;
+            root.toastData = null;
         }
     }
 
@@ -320,6 +629,18 @@ Item {
         target: Audio
 
         function onVolumeChanged(): void {
+            // PipeWire renvoie parfois le même volume (nouveau flux, changement de sortie) : on ignore
+            const v = Math.round(Audio.volume * 100);
+            const sink = Audio.sink?.id ?? -1;
+            const sameSink = sink === root.lastSink;
+            root.lastSink = sink;
+            if (v === root.lastVol && Audio.muted === root.lastMuted)
+                return;
+            root.lastVol = v;
+            root.lastMuted = Audio.muted;
+            // Changement de sortie (écouteurs qui passent en mode micro, etc.) : pas de jauge
+            if (!sameSink)
+                return;
             root.levelKind = "volume";
             root.levelIcon = Audio.muted || Audio.volume <= 0 ? "volume_off" : Audio.volume < 0.34 ? "volume_mute" : Audio.volume < 0.67 ? "volume_down" : "volume_up";
             root.flash("level", 1700);
@@ -330,7 +651,13 @@ Item {
         }
     }
 
+    property int lastBright: -1
+
     onBrightnessChanged: {
+        const b = Math.round(brightness * 100);
+        if (b === lastBright)
+            return;
+        lastBright = b;
         levelKind = "brightness";
         levelIcon = brightness < 0.34 ? "brightness_low" : brightness < 0.67 ? "brightness_medium" : "brightness_high";
         flash("level", 1700);
@@ -339,6 +666,12 @@ Item {
     onChargingChanged: {
         if (!UPower.displayDevice.ready || !UPower.displayDevice.isLaptopBattery)
             return;
+        if (pulse === "charge") {
+            // Laisse la vue précédente s'effacer avant d'afficher la nouvelle
+            pulse = "";
+            chargeSwap.restart();
+            return;
+        }
         chargePlugged = charging;
         flash("charge", charging ? 3600 : 2600);
         chargeIntro.restart();
@@ -366,6 +699,12 @@ Item {
         target: Island
 
         function onNotify(n: var): void {
+            root.enqueue(n);
+        }
+    }
+
+    function enqueue(n: var): void {
+        {
             if (!root.ready)
                 return;
             if (root.isShot(n)) {
@@ -378,19 +717,71 @@ Item {
                 shotIntro.restart();
                 return;
             }
-            if (root.pulse === "notif" && root.notif) {
+            if ((root.pulse === "notif" && root.notif) || (root.pulse === "toast" && root.toastData)) {
                 root.queue = [...root.queue, n];
                 return;
             }
-            root.queue = [n];
+            root.queue = [...root.queue, n];
             root.showNext();
+        }
+    }
+
+    // Bulles de Caelestia (Ne pas déranger, batterie faible, thème…) : elles passent par l'île
+    property var seenToasts: []
+
+    Connections {
+        target: Toaster
+
+        function onToastsChanged(): void {
+            const fresh = [];
+            for (const t of Toaster.toasts)
+                if (t && !t.closed && !root.seenToasts.includes(t))
+                    fresh.push(t);
+            root.seenToasts = [...Toaster.toasts];
+            if (!Island.toasts)
+                return;
+            for (const t of fresh.reverse()) {
+                const title = t.title ?? "";
+                // Déjà montré autrement par l'île
+                if (/^En cours de lecture|^Verrouillage majuscule|^Chargeur|^Batterie en charge/.test(title))
+                    continue;
+                root.enqueue({
+                    isToast: true,
+                    title: title,
+                    message: t.message ?? "",
+                    icon: t.icon || "info",
+                    type: t.type ?? 0
+                });
+                t.close?.();
+            }
+        }
+    }
+
+    // Commandes : qs -c caelestia ipc call island timer 5m | stopwatch | pause | stop
+    IpcHandler {
+        target: "island"
+        enabled: root.screen === Quickshell.screens[0]
+
+        function timer(duration: string): void {
+            root.startTimer(root.parseDuration(duration));
+        }
+        function stopwatch(): void {
+            root.startStopwatch();
+        }
+        function pause(): void {
+            root.togglePause();
+        }
+        function stop(): void {
+            root.stopClock();
         }
     }
 
     // Petit rebond quand un évènement arrive
     onPulseChanged: {
-        if (pulse === "notif" || pulse === "charge" || pulse === "bt" || pulse === "shot")
+        if (pulse === "notif" || pulse === "toast" || pulse === "charge" || pulse === "bt" || pulse === "shot")
             bump.restart();
+        if (pulse === "done")
+            doneShake.restart();
         if (pulse === "bt" && btOn)
             btIntro.restart();
     }
@@ -445,6 +836,30 @@ Item {
     }
 
     SequentialAnimation {
+        id: doneShake
+
+        loops: 3
+        NumberAnimation {
+            target: root
+            property: "swipeX"
+            to: 7
+            duration: 55
+        }
+        NumberAnimation {
+            target: root
+            property: "swipeX"
+            to: -7
+            duration: 90
+        }
+        NumberAnimation {
+            target: root
+            property: "swipeX"
+            to: 0
+            duration: 55
+        }
+    }
+
+    SequentialAnimation {
         id: bump
 
         NumberAnimation {
@@ -480,9 +895,93 @@ Item {
         onHoveredChanged: root.hovered = hovered
     }
 
+    // Gestes : glisser à gauche/droite sur la musique = morceau suivant/précédent,
+    // vers le haut sur une notification = la chasser ; molette verticale = volume
+    property real swipeX: 0
+    property real swipeY: 0
+    property real wheelX: 0
+    property real wheelY: 0
+
+    Behavior on swipeX {
+        enabled: !dragH.active
+
+        SpringAnimation {
+            spring: 5
+            damping: 0.4
+        }
+    }
+    Behavior on swipeY {
+        enabled: !dragH.active
+
+        SpringAnimation {
+            spring: 5
+            damping: 0.4
+        }
+    }
+
+    function swipeTrack(dir: int): void {
+        if (dir > 0)
+            player?.next();
+        else
+            player?.previous();
+        swipeX = dir * 40;
+        swipeReset.restart();
+    }
+
+    function dismissCurrent(): void {
+        swipeY = -30;
+        swipeReset.restart();
+        pulseTimer.stop();
+        pulse = "";
+        notif = null;
+        toastData = null;
+        if (queue.length > 0)
+            showNext();
+    }
+
+    Timer {
+        id: swipeReset
+
+        interval: 90
+        onTriggered: {
+            root.swipeX = 0;
+            root.swipeY = 0;
+        }
+    }
+
+    Timer {
+        id: wheelReset
+
+        interval: 350
+        onTriggered: {
+            root.wheelX = 0;
+            root.wheelY = 0;
+        }
+    }
+
     WheelHandler {
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
         onWheel: e => {
+            const media = root.mode === "media" || root.mode === "player";
+            const notifLike = root.mode === "notif" || root.mode === "toast" || root.mode === "shot";
+            if (media && Math.abs(e.angleDelta.x) > Math.abs(e.angleDelta.y)) {
+                root.wheelX += e.angleDelta.x;
+                wheelReset.restart();
+                if (Math.abs(root.wheelX) > 240) {
+                    root.swipeTrack(root.wheelX < 0 ? 1 : -1);
+                    root.wheelX = -root.wheelX * 4; // pas de double déclenchement dans le même geste
+                }
+                return;
+            }
+            if (notifLike && e.pixelDelta.y !== 0) {
+                root.wheelY += e.angleDelta.y;
+                wheelReset.restart();
+                if (root.wheelY < -200) {
+                    root.dismissCurrent();
+                    root.wheelY = 10000;
+                }
+                return;
+            }
             if (e.angleDelta.y > 0)
                 Audio.incrementVolume();
             else if (e.angleDelta.y < 0)
@@ -490,8 +989,48 @@ Item {
         }
     }
 
+    DragHandler {
+        id: dragH
+
+        target: null
+        xAxis.enabled: root.mode === "media" || root.mode === "player"
+        yAxis.enabled: root.mode === "notif" || root.mode === "toast" || root.mode === "shot"
+        onTranslationChanged: {
+            if (active) {
+                root.swipeX = translation.x * 0.35;
+                root.swipeY = Math.min(0, translation.y * 0.5);
+            }
+        }
+        onActiveChanged: {
+            if (active)
+                return;
+            if (xAxis.enabled && Math.abs(translation.x) > 70)
+                root.swipeTrack(translation.x < 0 ? 1 : -1);
+            else if (yAxis.enabled && translation.y < -35)
+                root.dismissCurrent();
+            root.swipeX = 0;
+            root.swipeY = 0;
+        }
+    }
+
+    // Déposer des fichiers sur l'île = les ranger sur l'étagère
+    DropArea {
+        anchors.fill: parent
+        keys: ["text/uri-list"]
+        onEntered: root.dropping = true
+        onExited: root.dropping = false
+        onDropped: drop => {
+            root.dropping = false;
+            if (drop.hasUrls) {
+                Island.addToShelf(drop.urls);
+                drop.acceptProposedAction();
+            }
+        }
+    }
+
     TapHandler {
         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+        enabled: !dragH.active
         onTapped: (_, button) => {
             if (root.mode === "notif") {
                 const n = root.notif;
@@ -500,6 +1039,10 @@ Item {
                 pulseTimer.stop();
                 root.pulse = "";
                 root.showNext();
+            } else if (root.mode === "toast" || root.mode === "done") {
+                root.dismissCurrent();
+            } else if (root.mode === "clockMini") {
+                root.togglePause();
             } else if (button === Qt.MiddleButton || root.mode === "media") {
                 root.player?.togglePlaying();
             } else if (root.mode === "idle") {
@@ -514,6 +1057,8 @@ Item {
 
         // Mise en page sur la taille finale : le contenu ne se réagence pas pendant le ressort de l'île
         anchors.horizontalCenter: parent.horizontalCenter
+        anchors.horizontalCenterOffset: root.swipeX
+        y: root.swipeY
         width: root.target.width
         height: root.target.height
         transformOrigin: Item.Top
@@ -535,18 +1080,56 @@ Item {
                 font.weight: Font.Medium
             }
 
-            // Point d'accent : notifications non lues
-            Rectangle {
+            // Centre : notifications non lues (accent), micro (orange), caméra (vert), étagère
+            Row {
                 anchors.centerIn: parent
-                width: 6
-                height: 6
-                radius: 3
-                color: root.accent
-                opacity: Notifs.notClosed.length > 0 ? 0.9 : 0
+                spacing: 7
 
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: 250
+                Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: Notifs.notClosed.length > 0 && !root.micInUse && !root.camInUse
+                    width: 6
+                    height: 6
+                    radius: 3
+                    color: root.accent
+                    opacity: 0.9
+                }
+                PrivacyDot {
+                    visible: root.micInUse
+                    dotColor: "#ff9f0a"
+                }
+                PrivacyDot {
+                    visible: root.camInUse
+                    dotColor: root.green
+                }
+                Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: root.shelf.length > 0
+                    width: shelfCount.implicitWidth + 16
+                    height: 20
+                    radius: 10
+                    color: root.fgFaint
+
+                    Row {
+                        id: shelfCount
+
+                        anchors.centerIn: parent
+                        spacing: 3
+
+                        MaterialIcon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "inventory_2"
+                            color: root.fg
+                            fontStyle: Tokens.font.icon.size(10).build()
+                            fill: 1
+                        }
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: root.shelf.length
+                            color: root.fg
+                            font.pointSize: 8.5
+                            font.weight: Font.Bold
+                        }
                     }
                 }
             }
@@ -738,15 +1321,30 @@ Item {
                 radius: 7
             }
 
-            StyledText {
+            // Ligne de paroles en cours (sinon le titre)
+            LyricLine {
                 anchors.centerIn: parent
-                width: parent.width - 140
-                horizontalAlignment: Text.AlignHCenter
-                elide: Text.ElideRight
-                text: root.player?.trackTitle ?? ""
-                color: root.fg
-                font.pointSize: 9
-                font.weight: Font.Medium
+                width: parent.width - 120
+                line: root.hasLyrics ? root.lyricLine : (root.player?.trackTitle ?? "")
+                lineColor: root.fg
+                size: root.hasLyrics ? 9.5 : 9
+                bold: root.hasLyrics
+            }
+
+            Row {
+                anchors.right: parent.right
+                anchors.rightMargin: 44
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 5
+
+                PrivacyDot {
+                    visible: root.micInUse
+                    dotColor: "#ff9f0a"
+                }
+                PrivacyDot {
+                    visible: root.camInUse
+                    dotColor: root.green
+                }
             }
 
             Bars {
@@ -1165,6 +1763,402 @@ Item {
             }
         }
 
+        // ── bulle Caelestia (Ne pas déranger, batterie faible, thème…) ──
+        Face {
+            active: root.mode === "toast"
+
+            readonly property color tone: {
+                switch (root.toastData?.type ?? 0) {
+                case 1:
+                    return root.green;
+                case 2:
+                    return "#ff9f0a";
+                case 3:
+                    return root.red;
+                default:
+                    return root.accent;
+                }
+            }
+
+            Rectangle {
+                id: toastIcon
+
+                anchors.left: parent.left
+                anchors.leftMargin: 20
+                anchors.verticalCenter: parent.verticalCenter
+                width: 34
+                height: 34
+                radius: 17
+                color: Qt.alpha(parent.tone, 0.2)
+
+                MaterialIcon {
+                    anchors.centerIn: parent
+                    text: root.toastData?.icon ?? "info"
+                    color: parent.parent.tone
+                    fontStyle: Tokens.font.icon.size(15).build()
+                    fill: 1
+                }
+            }
+
+            Column {
+                anchors.left: toastIcon.right
+                anchors.leftMargin: 14
+                anchors.right: parent.right
+                anchors.rightMargin: 24
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 1
+
+                StyledText {
+                    width: parent.width
+                    elide: Text.ElideRight
+                    text: root.toastData?.title ?? ""
+                    color: root.fg
+                    font.pointSize: 10
+                    font.weight: Font.DemiBold
+                }
+                StyledText {
+                    width: parent.width
+                    visible: text.length > 0
+                    elide: Text.ElideRight
+                    text: root.toastData?.message ?? ""
+                    color: root.fgDim
+                    font.pointSize: 9
+                }
+            }
+        }
+
+        // ── changement de bureau ──
+        Face {
+            active: root.mode === "ws"
+
+            StyledText {
+                id: wsLabel
+
+                anchors.left: parent.left
+                anchors.leftMargin: 22
+                anchors.verticalCenter: parent.verticalCenter
+                text: qsTr("Bureau %1").arg(root.wsId)
+                color: root.fg
+                font.pointSize: 10.5
+                font.weight: Font.DemiBold
+            }
+
+            Row {
+                anchors.right: parent.right
+                anchors.rightMargin: 22
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 7
+
+                Repeater {
+                    model: root.wsLast
+
+                    Rectangle {
+                        required property int index
+                        readonly property bool current: index + 1 === root.wsId
+
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: current ? 24 : 8
+                        height: 8
+                        radius: 4
+                        color: current ? root.accent : Qt.alpha(root.fg, 0.3)
+
+                        Behavior on width {
+                            NumberAnimation {
+                                duration: 380
+                                easing.type: Easing.OutBack
+                                easing.overshoot: 1.6
+                            }
+                        }
+                        Behavior on color {
+                            ColorAnimation {
+                                duration: 220
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Verr. Maj, Wi-Fi, VPN ──
+        Face {
+            active: root.mode === "blip"
+
+            Rectangle {
+                id: blipBadge
+
+                anchors.left: parent.left
+                anchors.leftMargin: 14
+                anchors.verticalCenter: parent.verticalCenter
+                width: 28
+                height: 28
+                radius: 14
+                color: root.blipOn ? Qt.alpha(root.accent, 0.22) : root.fgFaint
+
+                MaterialIcon {
+                    anchors.centerIn: parent
+                    text: root.blipIcon
+                    color: root.blipOn ? root.accent : root.fgDim
+                    fontStyle: Tokens.font.icon.size(13).build()
+                    fill: 1
+                }
+            }
+
+            StyledText {
+                anchors.left: blipBadge.right
+                anchors.leftMargin: 12
+                anchors.right: blipSubText.left
+                anchors.rightMargin: 10
+                anchors.verticalCenter: parent.verticalCenter
+                elide: Text.ElideRight
+                text: root.blipText
+                color: root.fg
+                font.pointSize: 10
+                font.weight: Font.DemiBold
+            }
+
+            StyledText {
+                id: blipSubText
+
+                anchors.right: parent.right
+                anchors.rightMargin: 20
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.blipSub
+                color: root.blipOn ? root.green : root.fgDim
+                font.pointSize: 9
+                font.weight: Font.Medium
+            }
+        }
+
+        // ── minuteur / chronomètre compact ──
+        Face {
+            active: root.mode === "clockMini"
+
+            MaterialIcon {
+                anchors.left: parent.left
+                anchors.leftMargin: 18
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.clockKind === "timer" ? "timer" : "timer_play"
+                color: "#ff9f0a"
+                fontStyle: Tokens.font.icon.size(14).build()
+                fill: 1
+                opacity: root.clockPaused > 0 ? 0.45 : 1
+            }
+
+            // Mini anneau de progression du minuteur
+            Shape {
+                anchors.centerIn: parent
+                width: 20
+                height: 20
+                visible: root.clockKind === "timer"
+                preferredRendererType: Shape.CurveRenderer
+
+                ShapePath {
+                    strokeWidth: 3
+                    strokeColor: "#ff9f0a"
+                    fillColor: "transparent"
+                    capStyle: ShapePath.RoundCap
+
+                    PathAngleArc {
+                        centerX: 10
+                        centerY: 10
+                        radiusX: 8
+                        radiusY: 8
+                        startAngle: -90
+                        sweepAngle: 360 * (root.clockTotal > 0 ? root.clockValue / root.clockTotal : 0)
+                    }
+                }
+            }
+
+            StyledText {
+                anchors.right: parent.right
+                anchors.rightMargin: 20
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.fmtClock(root.clockValue)
+                color: "#ff9f0a"
+                opacity: root.clockPaused > 0 ? 0.55 : 1
+                font.pointSize: 12
+                font.weight: Font.Bold
+                font.features: {
+                    "tnum": 1
+                }
+            }
+        }
+
+        // ── minuteur / chronomètre au survol ──
+        Face {
+            active: root.mode === "clock"
+
+            Column {
+                x: 30
+                y: 22
+
+                StyledText {
+                    text: root.clockKind === "timer" ? qsTr("Minuteur") : qsTr("Chronomètre")
+                    color: root.fgDim
+                    font.pointSize: 9
+                    font.weight: Font.Medium
+                }
+                StyledText {
+                    text: root.fmtClock(root.clockValue)
+                    color: "#ff9f0a"
+                    font.pointSize: 30
+                    font.weight: Font.Bold
+                    font.features: {
+                        "tnum": 1
+                    }
+                }
+            }
+
+            Row {
+                anchors.right: parent.right
+                anchors.rightMargin: 26
+                y: 38
+                spacing: 10
+
+                ShotButton {
+                    visible: root.clockKind === "timer"
+                    icon: "exposure_plus_1"
+                    onClicked: {
+                        root.clockEnd += 60000;
+                        root.clockTotal += 60;
+                    }
+                }
+                ShotButton {
+                    icon: root.clockPaused > 0 ? "play_arrow" : "pause"
+                    onClicked: root.togglePause()
+                }
+                ShotButton {
+                    icon: "stop"
+                    onClicked: root.stopClock()
+                }
+            }
+        }
+
+        // ── minuteur terminé ──
+        Face {
+            active: root.mode === "done"
+
+            Rectangle {
+                id: doneIcon
+
+                anchors.left: parent.left
+                anchors.leftMargin: 20
+                anchors.verticalCenter: parent.verticalCenter
+                width: 38
+                height: 38
+                radius: 19
+                color: Qt.alpha("#ff9f0a", 0.22)
+
+                MaterialIcon {
+                    anchors.centerIn: parent
+                    text: "alarm"
+                    color: "#ff9f0a"
+                    fontStyle: Tokens.font.icon.size(17).build()
+                    fill: 1
+                }
+            }
+
+            StyledText {
+                anchors.left: doneIcon.right
+                anchors.leftMargin: 14
+                anchors.verticalCenter: parent.verticalCenter
+                text: qsTr("Minuteur terminé")
+                color: root.fg
+                font.pointSize: 11
+                font.weight: Font.DemiBold
+            }
+
+            StyledText {
+                anchors.right: parent.right
+                anchors.rightMargin: 24
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.fmtClock(root.clockTotal)
+                color: root.fgDim
+                font.pointSize: 10
+                font.features: {
+                    "tnum": 1
+                }
+            }
+        }
+
+        // ── fichier glissé au-dessus de l'île ──
+        Face {
+            active: root.mode === "drop"
+
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: 14
+                anchors.topMargin: 12
+                radius: 22
+                color: Qt.alpha(root.accent, 0.1)
+                border.width: 2
+                border.color: Qt.alpha(root.accent, 0.6)
+
+                Column {
+                    anchors.centerIn: parent
+                    spacing: 4
+
+                    MaterialIcon {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: "move_to_inbox"
+                        color: root.accent
+                        fontStyle: Tokens.font.icon.size(20).build()
+                        fill: 1
+                    }
+                    StyledText {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: qsTr("Déposer sur l'étagère")
+                        color: root.fg
+                        font.pointSize: 10
+                        font.weight: Font.DemiBold
+                    }
+                }
+            }
+        }
+
+        // ── étagère (en bas des vues étendues) ──
+        Item {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: root.shelfExtra
+            visible: root.shelf.length > 0 && (root.mode === "player" || root.mode === "info" || root.mode === "clock")
+
+            Rectangle {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: 24
+                anchors.rightMargin: 24
+                height: 1
+                color: root.fgFaint
+            }
+
+            Row {
+                anchors.left: parent.left
+                anchors.leftMargin: 22
+                anchors.right: clearShelf.left
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 8
+                clip: true
+
+                Repeater {
+                    model: root.shelf
+
+                    ShelfTile {}
+                }
+            }
+
+            ShotButton {
+                id: clearShelf
+
+                anchors.right: parent.right
+                anchors.rightMargin: 22
+                anchors.verticalCenter: parent.verticalCenter
+                icon: "delete_sweep"
+                onClicked: Island.shelf = []
+            }
+        }
+
         // ── notification ──
         Face {
             active: root.mode === "notif"
@@ -1422,6 +2416,19 @@ Item {
                 }
             }
 
+            LyricLine {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: 26
+                anchors.rightMargin: 26
+                y: 102
+                visible: root.hasLyrics
+                line: root.lyricLine
+                lineColor: root.accent
+                size: 10.5
+                bold: true
+            }
+
             Bars {
                 id: bigBars
 
@@ -1444,7 +2451,7 @@ Item {
                 anchors.right: parent.right
                 anchors.leftMargin: 26
                 anchors.rightMargin: 26
-                y: 104
+                y: root.hasLyrics ? 130 : 104
                 height: 16
 
                 StyledText {
@@ -1519,7 +2526,7 @@ Item {
 
             Row {
                 anchors.horizontalCenter: parent.horizontalCenter
-                y: 128
+                y: root.hasLyrics ? 154 : 128
                 spacing: 28
 
                 IslandButton {
@@ -1666,6 +2673,174 @@ Item {
             height: 4
             radius: 1
             color: Qt.alpha(parent.fg, 0.5)
+        }
+    }
+
+    component PrivacyDot: Rectangle {
+        property color dotColor
+
+        anchors.verticalCenter: parent?.verticalCenter
+        width: 7
+        height: 7
+        radius: 3.5
+        color: dotColor
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: parent.width * 2.4
+            height: width
+            radius: width / 2
+            color: parent.dotColor
+            opacity: 0.25
+        }
+    }
+
+    // Ligne de texte qui change avec un fondu + glissement vers le haut (paroles)
+    component LyricLine: Item {
+        id: ll
+
+        property string line
+        property color lineColor
+        property real size: 10
+        property bool bold
+
+        implicitHeight: shown.implicitHeight
+        height: implicitHeight
+        clip: false
+
+        onLineChanged: swapAnim.restart()
+
+        StyledText {
+            id: shown
+
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
+            elide: Text.ElideRight
+            color: ll.lineColor
+            font.pointSize: ll.size
+            font.weight: ll.bold ? Font.DemiBold : Font.Medium
+            Component.onCompleted: text = ll.line
+        }
+
+        SequentialAnimation {
+            id: swapAnim
+
+            ParallelAnimation {
+                NumberAnimation {
+                    target: shown
+                    property: "opacity"
+                    to: 0
+                    duration: 120
+                }
+                NumberAnimation {
+                    target: shown
+                    property: "y"
+                    to: -6
+                    duration: 120
+                }
+            }
+            ScriptAction {
+                script: {
+                    shown.text = ll.line;
+                    shown.y = 8;
+                }
+            }
+            ParallelAnimation {
+                NumberAnimation {
+                    target: shown
+                    property: "opacity"
+                    to: 1
+                    duration: 260
+                    easing.type: Easing.OutCubic
+                }
+                NumberAnimation {
+                    target: shown
+                    property: "y"
+                    to: 0
+                    duration: 320
+                    easing.type: Easing.OutBack
+                }
+            }
+        }
+    }
+
+    // Fichier de l'étagère : clic = ouvrir, glisser = le déposer ailleurs
+    component ShelfTile: Item {
+        id: tile
+
+        required property string modelData
+        readonly property string path: decodeURIComponent(modelData.replace(/^file:\/\//, ""))
+        readonly property string fileName: path.split("/").pop()
+        readonly property bool isImage: /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(path)
+
+        width: 58
+        height: 58
+
+        Drag.active: tileDrag.active
+        Drag.dragType: Drag.Automatic
+        Drag.supportedActions: Qt.CopyAction
+        Drag.mimeData: {
+            "text/uri-list": tile.modelData + "\r\n"
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            radius: 12
+            color: Qt.alpha(Colours.palette.m3onSurface, tileArea.containsMouse ? 0.16 : 0.08)
+            clip: true
+
+            Image {
+                anchors.fill: parent
+                visible: tile.isImage
+                fillMode: Image.PreserveAspectCrop
+                asynchronous: true
+                sourceSize: Qt.size(116, 116)
+                source: tile.isImage ? tile.modelData : ""
+            }
+
+            Column {
+                anchors.centerIn: parent
+                visible: !tile.isImage
+                spacing: 1
+
+                MaterialIcon {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: /\.(pdf)$/i.test(tile.path) ? "picture_as_pdf" : /\.(mp3|flac|ogg|wav|m4a|opus)$/i.test(tile.path) ? "music_note" : /\.(mp4|mkv|webm|mov)$/i.test(tile.path) ? "movie" : /\.(zip|tar|gz|xz|7z|rar)$/i.test(tile.path) ? "folder_zip" : "description"
+                    color: Colours.palette.m3onSurface
+                    fontStyle: Tokens.font.icon.size(16).build()
+                    fill: 1
+                }
+                StyledText {
+                    width: 52
+                    horizontalAlignment: Text.AlignHCenter
+                    elide: Text.ElideMiddle
+                    text: tile.fileName
+                    color: Colours.palette.m3onSurface
+                    font.pointSize: 6.5
+                }
+            }
+        }
+
+        DragHandler {
+            id: tileDrag
+
+            target: null
+        }
+
+        MouseArea {
+            id: tileArea
+
+            anchors.fill: parent
+            hoverEnabled: true
+            acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+            cursorShape: Qt.PointingHandCursor
+            onClicked: e => {
+                if (e.button === Qt.MiddleButton) {
+                    Island.removeFromShelf(tile.modelData);
+                } else {
+                    Quickshell.execDetached(["xdg-open", tile.path]);
+                }
+            }
         }
     }
 

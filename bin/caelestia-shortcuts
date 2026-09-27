@@ -146,7 +146,17 @@ SHORTCUTS = [
         ("Entrée", "Ouvrir le résultat sélectionné"),
         ("↑ ↓", "Naviguer dans les résultats"),
         ("Ctrl + Entrée", "Chercher directement sur Google"),
+        ("minuteur 5 min | chrono | stop minuteur", "Minuteur ou chronomètre dans la Dynamic Island"),
         ("Échap", "Fermer"),
+    ]),
+    ("Dynamic Island (en haut au centre)", "󰍹", [
+        ("Survol", "Lecteur complet, ou heure / météo / batterie"),
+        ("Molette", "Volume"),
+        ("Clic | clic milieu", "Lecture / pause (musique), action (notification)"),
+        ("Glisser ← → | deux doigts ← →", "Morceau précédent / suivant"),
+        ("Glisser ↑ | deux doigts ↑", "Chasser la notification"),
+        ("Déposer un fichier", "Le ranger sur l'étagère (clic = ouvrir, glisser = le reprendre, clic milieu = retirer)"),
+        ("Point orange | vert", "Micro | caméra en cours d'utilisation"),
     ]),
 ]
 

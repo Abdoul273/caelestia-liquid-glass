@@ -36,7 +36,7 @@ ShellRoot {
     }
 
     MissionControl {}
-    WorkspaceHud {}
+    // WorkspaceHud {} — remplacé par la Dynamic Island (services/Island.qml)
     ConfigToasts {}
     Shortcuts {}
     BatteryMonitor {}

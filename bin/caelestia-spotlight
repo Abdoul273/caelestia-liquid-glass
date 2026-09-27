@@ -478,6 +478,25 @@ def top_hit(query: str) -> TopHit | None:
         return None
 
 
+CLOCK_RE = re.compile(r"^(minuteur|timer|chrono(?:mètre|metre)?|stopwatch|stop(?:per)?\s+(?:le\s+)?(?:minuteur|chrono(?:mètre|metre)?|timer))\b\s*(.*)$", re.I)
+
+
+def clock_command(text: str) -> tuple[list[str], str] | None:
+    """« minuteur 5 min », « timer 1h30 », « chrono », « stop minuteur » → commande de la Dynamic Island."""
+    m = CLOCK_RE.match(text.strip())
+    if not m:
+        return None
+    word, rest = m.group(1).lower(), m.group(2).strip()
+    base = ["qs", "-c", "caelestia", "ipc", "call", "island"]
+    if word.startswith("stop"):
+        return base + ["stop"], "Arrêter le minuteur ou le chronomètre"
+    if word.startswith("chrono") or word == "stopwatch":
+        return base + ["stopwatch"], "Lancer le chronomètre dans l'île"
+    if not re.search(r"\d", rest):
+        return None
+    return base + ["timer", rest], f"Lancer un minuteur de {rest} dans l'île"
+
+
 def open_url(url: str) -> None:
     subprocess.Popen(["xdg-open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
@@ -650,7 +669,10 @@ class Spotlight(Gtk.Application):
             return
         query = self.entry.get_text().strip()
         self.view.update(query=query, calc=None, hit=None, results=[], error=False)
-        if query and is_calculation(query):
+        clock = clock_command(query) if query else None
+        if clock:
+            self.view["calc"] = "⏱  " + clock[1] + " — Entrée"
+        elif query and is_calculation(query):
             self.view["calc"] = format_number(calculate(query))
         elif query and convert(query):
             self.view["calc"] = convert(query)
@@ -674,6 +696,11 @@ class Spotlight(Gtk.Application):
                 self.add_history(expr, self.last_result)
                 self.hint.set_text("Copié dans le presse-papiers ✓")
                 GLib.timeout_add(900, self.close)
+            return
+        clock = clock_command(self.entry.get_text())
+        if clock:
+            subprocess.Popen(clock[0], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self.close()
             return
         # Entrée : si les résultats ne sont pas encore là, on les lance tout de suite ;
         # sinon on ouvre le résultat sélectionné

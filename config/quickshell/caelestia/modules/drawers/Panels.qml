@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Caelestia.Config
 import qs.components
+import qs.services
 import qs.modules.bar as Bar
 import qs.modules.dashboard as Dashboard
 import qs.modules.launcher as Launcher
@@ -150,6 +151,9 @@ Item {
 
     Toasts.Toasts {
         id: toasts
+
+        // Avec l'île, les bulles s'affichent en haut dans l'île
+        visible: !Island.toasts
 
         anchors.bottom: sidebar.visible ? parent.bottom : utilities.top
         anchors.right: sidebar.left

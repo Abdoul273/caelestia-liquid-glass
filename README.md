@@ -32,7 +32,13 @@ Verre translucide partout, Mission Control, Spotlight, animations fluides façon
 ### 🪟 Façon macOS
 - **Démarrage façon Mac** (optionnel) : logo blanc et fine barre de progression sur fond noir, au lieu du texte qui défile.
 - **Curseur macOS** ([apple_cursor](https://github.com/ful1e5/apple_cursor)), jusque sur l'écran de connexion.
-- **Dynamic Island** en liquid glass, fondue dans le cadre (le bord du haut disparaît, elle sort directement de l'écran) : musique avec visualiseur, lecteur complet au survol (pochette, progression cliquable, commandes), volume et luminosité façon macOS (jauge glissable), **connexion des écouteurs façon AirPods** (ondes + anneau de batterie), **chargeur branché/débranché** (batterie qui se remplit, éclair, temps restant), **captures d'écran** (miniature avec flash, Annoter / Enregistrer / Dossier), **notifications** (file d'attente, actions au survol), charge, enregistrement d'écran. Molette = volume, clic = lecture/pause ; le tableau de bord s'ouvre avec `Super + A`. Réglages dans `services/Island.qml`.
+- **Dynamic Island** en liquid glass, fondue dans le cadre (le bord du haut disparaît, elle sort directement de l'écran) : musique avec visualiseur, lecteur complet au survol (pochette, progression cliquable, commandes), volume et luminosité façon macOS (jauge glissable), **connexion des écouteurs façon AirPods** (ondes + anneau de batterie), **chargeur branché/débranché** (batterie qui se remplit, éclair, temps restant), **captures d'écran** (miniature avec flash, Annoter / Enregistrer / Dossier), **notifications** (file d'attente, actions au survol), charge, enregistrement d'écran. Molette = volume, clic = lecture/pause ; le tableau de bord s'ouvre avec `Super + A`.
+  - **Tout passe par elle** : bulles de Caelestia (Ne pas déranger, batterie faible, thème…), changement de bureau, Verr. Maj, Wi-Fi et VPN.
+  - **Micro et caméra** : point orange ou vert à côté de l'heure quand une app les utilise, comme sur macOS.
+  - **Paroles en direct** sous le titre (cache du lecteur [Aura](https://github.com/Abdoul273/aura), fichier `.lrc`, sinon [LRCLIB](https://lrclib.net)).
+  - **Minuteur et chronomètre** : tape `minuteur 5 min` ou `chrono` dans Spotlight (ou `qs -c caelestia ipc call island timer 5m`).
+  - **Gestes** : glisser ← → sur la musique pour changer de morceau, ↑ pour chasser une notification.
+  - **Étagère** : dépose un fichier sur l'île pour le garder sous la main, reprends-le en le glissant ailleurs. Réglages dans `services/Island.qml`.
 - **Mission Control** (`Super + Tab` ou **3 doigts vers le haut**) : tes fenêtres glissent en grille, tes bureaux s'affichent en haut, et un clic t'y emmène.
 - **Spotlight** (`Super + Espace`) : suggestions Google instantanées, fiche Wikipédia, résultats web, calculs.
 - **Calculatrice** (`Super + O`) : le résultat s'affiche pendant que tu tapes (`12,5 × 4 + 20 %`), et Entrée le copie.
