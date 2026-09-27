@@ -178,6 +178,7 @@ rebind("SUPER + H", hl.dsp.exec_cmd(bin .. "caelestia-shortcuts"))
 rebind("SUPER + I", hl.dsp.global("caelestia:nexus"))              -- paramètres
 rebind("SUPER + A", hl.dsp.global("caelestia:dashboard"))          -- tableau de bord
 rebind("SUPER + SHIFT + N", hl.dsp.global("caelestia:quicknotes"))  -- notes rapides
+rebind("SUPER + SHIFT + T", hl.dsp.global("caelestia:quicktasks"))  -- tâches AuraTask
 rebind("SUPER + Tab", hl.dsp.global("caelestia:missionControl"))   -- Mission Control
 rebind("SUPER + SHIFT + R", hl.dsp.exec_cmd(
     "hyprctl reload && (caelestia shell -k; sleep 0.2; caelestia shell -d) & "

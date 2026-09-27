@@ -20,9 +20,9 @@ Item {
 
     property string query
 
-    // Super+Maj+N : panneau de notes seules, sans le sélecteur Notes | Tâches
-    readonly property bool quick: screenState.quickNotes
-    readonly property string shownMode: quick ? "notes" : Notes.mode
+    // Super+Maj+N : notes seules · Super+Maj+T : tâches AuraTask seules (sans le sélecteur)
+    readonly property bool quick: screenState.quickNotes || screenState.quickTasks
+    readonly property string shownMode: screenState.quickTasks ? "tasks" : screenState.quickNotes ? "notes" : Notes.mode
 
     readonly property list<var> visibleNotes: {
         const q = query.trim().toLowerCase();
@@ -173,7 +173,7 @@ Item {
 
                         MaterialIcon {
                             anchors.centerIn: parent
-                            text: "edit_note"
+                            text: root.shownMode === "tasks" ? "task_alt" : "edit_note"
                             fill: 1
                             color: Colours.palette.m3onPrimary
                             fontStyle: Tokens.font.icon.builders.medium.scale(0.85).build()
@@ -185,13 +185,13 @@ Item {
                         spacing: 0
 
                         StyledText {
-                            text: qsTr("Notes")
+                            text: root.shownMode === "tasks" ? qsTr("Tâches") : qsTr("Notes")
                             font: Tokens.font.body.builders.large.size(15).weight(Font.DemiBold).build()
                             color: Colours.palette.m3onSurface
                         }
 
                         StyledText {
-                            text: qsTr("Ctrl+N nouvelle · Échap fermer")
+                            text: root.shownMode === "tasks" ? qsTr("Synchronisé avec AuraTask") : qsTr("Ctrl+N nouvelle note")
                             font: Tokens.font.label.small
                             color: Colours.palette.m3outline
                         }
@@ -411,9 +411,9 @@ Item {
                         id: ring
 
                         Layout.alignment: Qt.AlignHCenter
-                        Layout.preferredWidth: 130
-                        Layout.preferredHeight: 130
-                        implicitSize: 130
+                        Layout.preferredWidth: 110
+                        Layout.preferredHeight: 110
+                        implicitSize: 110
                         strokeWidth: 8
                         value: Tasks.tasks.length ? Tasks.doneCount / Tasks.tasks.length : 0
 
@@ -446,6 +446,35 @@ Item {
                         text: Tasks.tasks.length === 0 ? qsTr("Aucune tâche") : Tasks.todoCount === 0 ? qsTr("Tout est fait 🎉") : Tasks.todoCount === 1 ? qsTr("1 tâche à faire") : qsTr("%1 tâches à faire").arg(Tasks.todoCount)
                         font: Tokens.font.body.medium
                         color: Colours.palette.m3onSurface
+                    }
+
+                    // Filtres
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.topMargin: Tokens.spacing.small
+                        spacing: 2
+
+                        FilterRow {
+                            filter: "all"
+                            icon: "inbox"
+                            label: qsTr("Toutes")
+                            count: Tasks.todoCount
+                        }
+
+                        FilterRow {
+                            filter: "today"
+                            icon: "today"
+                            label: qsTr("Aujourd'hui")
+                            count: Tasks.todayCount
+                        }
+
+                        FilterRow {
+                            filter: "overdue"
+                            icon: "event_busy"
+                            label: qsTr("En retard")
+                            count: Tasks.overdueCount
+                            alert: true
+                        }
                     }
 
                     Item {
@@ -772,6 +801,63 @@ Item {
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
             onClicked: root.setMode(btn.mode)
+        }
+    }
+
+    component FilterRow: StyledRect {
+        id: fr
+
+        required property string filter
+        required property string icon
+        required property string label
+        required property int count
+        property bool alert
+        readonly property bool active: tasksPane.filter === filter
+
+        Layout.fillWidth: true
+        implicitHeight: 36
+        radius: Tokens.rounding.full
+        color: active ? Qt.alpha(Colours.palette.m3secondaryContainer, 0.85) : "transparent"
+
+        Behavior on color {
+            CAnim {}
+        }
+
+        StateLayer {
+            radius: fr.radius
+            color: Colours.palette.m3onSurface
+            onClicked: {
+                tasksPane.filter = fr.filter;
+                tasksPane.focusInput();
+            }
+        }
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: Tokens.padding.large
+            anchors.rightMargin: Tokens.padding.large
+            spacing: Tokens.spacing.small
+
+            MaterialIcon {
+                text: fr.icon
+                fill: fr.active ? 1 : 0
+                color: fr.alert && fr.count > 0 ? Colours.palette.m3error : fr.active ? Colours.palette.m3onSecondaryContainer : Colours.palette.m3onSurfaceVariant
+                fontStyle: Tokens.font.icon.builders.medium.scale(0.8).build()
+            }
+
+            StyledText {
+                Layout.fillWidth: true
+                text: fr.label
+                font: Tokens.font.label.large
+                color: fr.active ? Colours.palette.m3onSecondaryContainer : Colours.palette.m3onSurface
+            }
+
+            StyledText {
+                visible: fr.count > 0
+                text: fr.count
+                font: Tokens.font.label.large
+                color: fr.alert ? Colours.palette.m3error : Colours.palette.m3onSurfaceVariant
+            }
         }
     }
 }

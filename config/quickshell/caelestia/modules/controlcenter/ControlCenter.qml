@@ -484,6 +484,7 @@ Item {
                             onClicked: {
                                 root.close();
                                 root.screenState.quickNotes = false;
+                                root.screenState.quickTasks = false;
                                 root.screenState.dashboard = true;
                             }
                         }

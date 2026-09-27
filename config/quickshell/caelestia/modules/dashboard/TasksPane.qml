@@ -15,6 +15,20 @@ import qs.services
 ColumnLayout {
     id: root
 
+    // Filtre : "all", "today", "overdue"
+    property string filter: "all"
+    readonly property list<var> shown: filter === "today" ? Tasks.sorted.filter(t => !t.done && Tasks.isToday(t)) : filter === "overdue" ? Tasks.sorted.filter(t => Tasks.isOverdue(t)) : Tasks.sorted
+
+    function priorityColour(p: string): color {
+        if (p === "urgent")
+            return Colours.palette.m3error;
+        if (p === "high")
+            return Colours.palette.m3tertiary;
+        if (p === "low")
+            return Colours.palette.m3outline;
+        return Colours.palette.m3primary;
+    }
+
     function focusInput(): void {
         input.forceActiveFocus();
     }
@@ -71,7 +85,7 @@ ColumnLayout {
             StyledText {
                 anchors.verticalCenter: parent.verticalCenter
                 visible: !input.text
-                text: qsTr("Ajouter une tâche… (Entrée)")
+                text: qsTr("Ajouter une tâche…   ! haute · !! urgente · demain")
                 color: Colours.palette.m3outline
                 font: input.font
             }
@@ -106,7 +120,7 @@ ColumnLayout {
         clip: true
         spacing: 2
         boundsBehavior: Flickable.StopAtBounds
-        model: Tasks.sorted
+        model: root.shown
 
         add: Transition {
             Anim {
@@ -141,7 +155,7 @@ ColumnLayout {
             required property var modelData
             required property int index
             readonly property bool done: modelData.done
-            readonly property bool firstDone: done && index > 0 && !Tasks.sorted[index - 1].done
+            readonly property bool firstDone: done && index > 0 && !root.shown[index - 1].done
             property bool editing
 
             width: ListView.view.width
@@ -164,7 +178,7 @@ ColumnLayout {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
-                implicitHeight: Math.max(checkbox.implicitHeight, label.implicitHeight) + Tokens.padding.medium * 2
+                implicitHeight: Math.max(checkbox.implicitHeight, textCol.implicitHeight) + Tokens.padding.medium * 1.6
 
                 radius: Tokens.rounding.large
                 color: hover.hovered ? Qt.alpha(Colours.palette.m3onSurface, 0.06) : "transparent"
@@ -190,7 +204,7 @@ ColumnLayout {
                     radius: 7
                     color: Glass.lensControls ? "transparent" : task.done ? Colours.palette.m3primary : "transparent"
                     border.width: task.done || Glass.lensControls ? 0 : 2
-                    border.color: checkMouse.containsMouse ? Colours.palette.m3primary : Colours.palette.m3outline
+                    border.color: checkMouse.containsMouse ? Colours.palette.m3primary : task.modelData.priority === "urgent" || task.modelData.priority === "high" ? root.priorityColour(task.modelData.priority) : Colours.palette.m3outline
                     scale: checkMouse.pressed ? 0.85 : 1
 
                     Behavior on color {
@@ -206,7 +220,7 @@ ColumnLayout {
                         visible: Glass.lensControls
                         anchors.fill: parent
                         radius: 7
-                        tintColour: task.done ? Colours.palette.m3primary : Qt.alpha(Colours.palette.m3onSurface, checkMouse.containsMouse ? 0.2 : 0.12)
+                        tintColour: task.done ? Colours.palette.m3primary : task.modelData.priority === "urgent" || task.modelData.priority === "high" ? Qt.alpha(root.priorityColour(task.modelData.priority), 0.35) : Qt.alpha(Colours.palette.m3onSurface, checkMouse.containsMouse ? 0.2 : 0.12)
                         pressed: checkMouse.pressed
                         hovered: checkMouse.containsMouse
                     }
@@ -236,55 +250,109 @@ ColumnLayout {
                     }
                 }
 
-                StyledText {
-                    id: label
+                ColumnLayout {
+                    id: textCol
 
                     anchors.left: checkbox.right
-                    anchors.right: delBtn.left
+                    anchors.right: prioBtn.left
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.leftMargin: Tokens.spacing.medium
                     anchors.rightMargin: Tokens.spacing.small
+                    spacing: 2
 
-                    visible: !task.editing
-                    text: task.modelData.text
-                    wrapMode: Text.Wrap
-                    font.pointSize: 13
-                    font.strikeout: task.done
-                    color: task.done ? Colours.palette.m3outline : Colours.palette.m3onSurface
+                    StyledText {
+                        id: label
 
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.IBeamCursor
-                        onClicked: {
-                            task.editing = true;
-                            editField.text = task.modelData.text;
-                            editField.forceActiveFocus();
-                            editField.selectAll();
+                        Layout.fillWidth: true
+                        text: task.modelData.text
+                        wrapMode: Text.Wrap
+                        font.pointSize: 13
+                        font.strikeout: task.done
+                        color: task.editing ? "transparent" : task.done ? Colours.palette.m3outline : Colours.palette.m3onSurface
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.IBeamCursor
+                            onClicked: {
+                                task.editing = true;
+                                editField.text = task.modelData.text;
+                                editField.forceActiveFocus();
+                                editField.selectAll();
+                            }
+                        }
+
+                        TextInput {
+                            id: editField
+
+                            anchors.fill: parent
+                            visible: task.editing
+                            font: label.font
+                            color: Colours.palette.m3onSurface
+                            selectionColor: Qt.alpha(Colours.palette.m3primary, 0.4)
+                            selectByMouse: true
+                            verticalAlignment: TextInput.AlignVCenter
+
+                            onAccepted: focus = false
+                            onActiveFocusChanged: {
+                                if (!activeFocus && task.editing) {
+                                    task.editing = false;
+                                    Tasks.edit(task.modelData.id, text);
+                                }
+                            }
+                            Keys.onEscapePressed: {
+                                text = task.modelData.text;
+                                focus = false;
+                            }
+                        }
+                    }
+
+                    // Détails venus d'AuraTask : échéance, sous-tâches, catégorie
+                    Row {
+                        readonly property bool overdue: Tasks.isOverdue(task.modelData)
+
+                        visible: !task.done && (task.modelData.due > 0 || task.modelData.subTotal > 0 || task.modelData.category)
+                        spacing: Tokens.spacing.medium
+
+                        Meta {
+                            visible: task.modelData.due > 0
+                            icon: parent.overdue ? "event_busy" : "event"
+                            text: Tasks.dueLabel(task.modelData)
+                            colour: parent.overdue ? Colours.palette.m3error : Tasks.isToday(task.modelData) ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
+                        }
+
+                        Meta {
+                            visible: task.modelData.subTotal > 0
+                            icon: "checklist"
+                            text: `${task.modelData.subDone}/${task.modelData.subTotal}`
+                        }
+
+                        Meta {
+                            visible: !!task.modelData.category
+                            icon: "label"
+                            text: task.modelData.category
                         }
                     }
                 }
 
-                TextInput {
-                    id: editField
+                // Priorité : un clic la fait tourner (basse → moyenne → haute → urgente)
+                IconButton {
+                    id: prioBtn
 
-                    anchors.fill: label
-                    visible: task.editing
-                    font: label.font
-                    color: Colours.palette.m3onSurface
-                    selectionColor: Qt.alpha(Colours.palette.m3primary, 0.4)
-                    selectByMouse: true
-                    verticalAlignment: TextInput.AlignVCenter
+                    readonly property bool strong: task.modelData.priority === "urgent" || task.modelData.priority === "high"
 
-                    onAccepted: focus = false
-                    onActiveFocusChanged: {
-                        if (!activeFocus && task.editing) {
-                            task.editing = false;
-                            Tasks.edit(task.modelData.id, text);
-                        }
-                    }
-                    Keys.onEscapePressed: {
-                        text = task.modelData.text;
-                        focus = false;
+                    anchors.right: delBtn.left
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    visible: !task.done
+                    icon: "flag"
+                    type: IconButton.Text
+                    label.color: root.priorityColour(task.modelData.priority)
+                    opacity: strong || hover.hovered ? 1 : 0
+                    enabled: opacity > 0
+                    onClicked: Tasks.cyclePriority(task.modelData.id)
+
+                    Behavior on opacity {
+                        Anim {}
                     }
                 }
 
@@ -322,10 +390,32 @@ ColumnLayout {
 
             StyledText {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: qsTr("Rien à faire. Profite !")
+                text: root.filter === "overdue" ? qsTr("Rien en retard 👌") : root.filter === "today" ? qsTr("Rien de prévu aujourd'hui") : qsTr("Rien à faire. Profite !")
                 color: Colours.palette.m3onSurfaceVariant
                 font: Tokens.font.body.small
             }
+        }
+    }
+
+    component Meta: Row {
+        property string icon
+        property string text
+        property color colour: Colours.palette.m3onSurfaceVariant
+
+        spacing: 3
+
+        MaterialIcon {
+            anchors.verticalCenter: parent.verticalCenter
+            text: parent.icon
+            color: parent.colour
+            fontStyle: Tokens.font.icon.builders.medium.scale(0.62).build()
+        }
+
+        StyledText {
+            anchors.verticalCenter: parent.verticalCenter
+            text: parent.text
+            color: parent.colour
+            font: Tokens.font.label.small
         }
     }
 }

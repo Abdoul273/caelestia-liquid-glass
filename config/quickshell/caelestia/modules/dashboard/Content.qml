@@ -49,11 +49,11 @@ Item {
                 notes: true
             }
         ];
-        return root.screenState.quickNotes ? [allTabs[allTabs.length - 1]] : allTabs.filter(tab => tab.enabled);
+        return root.screenState.quick ? [allTabs[allTabs.length - 1]] : allTabs.filter(tab => tab.enabled);
     }
 
     readonly property real nonAnimWidth: view.implicitWidth + viewWrapper.anchors.margins * 2
-    readonly property real nonAnimHeight: (screenState.quickNotes ? 0 : tabs.implicitHeight + tabs.anchors.topMargin) + view.implicitHeight + viewWrapper.anchors.margins * 2
+    readonly property real nonAnimHeight: (screenState.quick ? 0 : tabs.implicitHeight + tabs.anchors.topMargin) + view.implicitHeight + viewWrapper.anchors.margins * 2
 
     implicitWidth: nonAnimWidth
 
@@ -61,14 +61,14 @@ Item {
     Binding {
         target: root.screenState
         property: "notesActive"
-        value: root.screenState.dashboard && (root.screenState.quickNotes || !!root.dashboardTabs[root.screenState.dashboardTab]?.notes)
+        value: root.screenState.dashboard && (root.screenState.quick || !!root.dashboardTabs[root.screenState.dashboardTab]?.notes)
     }
     implicitHeight: nonAnimHeight
 
     Tabs {
         id: tabs
 
-        visible: !root.screenState.quickNotes
+        visible: !root.screenState.quick
 
         anchors.top: parent.top
         anchors.left: parent.left
@@ -84,7 +84,7 @@ Item {
     ClippingRectangle {
         id: viewWrapper
 
-        anchors.top: root.screenState.quickNotes ? parent.top : tabs.bottom
+        anchors.top: root.screenState.quick ? parent.top : tabs.bottom
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom

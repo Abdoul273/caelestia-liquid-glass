@@ -10,6 +10,8 @@ PersistentProperties {
     property bool launcher
     property bool dashboard
     property bool quickNotes
+    property bool quickTasks
+    readonly property bool quick: quickNotes || quickTasks
     property bool utilities
     property bool sidebar
     property bool controlCenter

@@ -223,6 +223,7 @@ CustomMouseArea {
         if (pressed && inTopPanel(panels.dashboard, dragStart.x, dragStart.y) && withinPanelWidth(panels.dashboard, x, y)) {
             if (dragY > Config.dashboard.dragThreshold) {
                 screenState.quickNotes = false;
+                screenState.quickTasks = false;
                 screenState.dashboard = true;
             } else if (dragY < -Config.dashboard.dragThreshold)
                 screenState.dashboard = false;

@@ -10,6 +10,19 @@ Scope {
     id: root
 
     property bool launcherInterrupted
+    // Super+Maj+N / Super+Maj+T : panneau Notes ou Tâches seul ; même raccourci = fermer
+    function toggleQuick(kind: string): void {
+        if (hasFullscreen)
+            return;
+        const screenState = ShellState.forActive();
+        const wasOpen = screenState.dashboard && (kind === "tasks" ? screenState.quickTasks : screenState.quickNotes);
+        screenState.controlCenter = false;
+        screenState.quickNotes = kind === "notes";
+        screenState.quickTasks = kind === "tasks";
+        screenState.dashboardTab = 0;
+        screenState.dashboard = !wasOpen;
+    }
+
     readonly property bool hasFullscreen: Hypr.focusedWorkspace?.toplevels.values.some(t => t.lastIpcObject.fullscreen > 1) ?? false
 
     // qmllint disable unresolved-type
@@ -45,10 +58,12 @@ Scope {
             if (Island.controlCenter) {
                 screenState.dashboard = false;
                 screenState.quickNotes = false;
+                screenState.quickTasks = false;
                 screenState.controlCenter = !screenState.controlCenter;
                 return;
             }
             screenState.quickNotes = false;
+            screenState.quickTasks = false;
             screenState.dashboard = !screenState.dashboard;
         }
     }
@@ -58,16 +73,15 @@ Scope {
         // qmllint enable unresolved-type
         name: "quicknotes"
         description: qsTr("Ouvrir les notes rapides")
-        onPressed: {
-            if (root.hasFullscreen)
-                return;
-            const screenState = ShellState.forActive();
-            const wasOpen = screenState.dashboard && screenState.quickNotes;
-            screenState.controlCenter = false;
-            screenState.quickNotes = true;
-            screenState.dashboardTab = 0;
-            screenState.dashboard = !wasOpen;
-        }
+        onPressed: root.toggleQuick("notes")
+    }
+
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
+        name: "quicktasks"
+        description: qsTr("Ouvrir les tâches AuraTask")
+        onPressed: root.toggleQuick("tasks")
     }
 
     // qmllint disable unresolved-type
