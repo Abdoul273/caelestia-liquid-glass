@@ -11,6 +11,7 @@ import Quickshell.Services.Mpris
 import Quickshell.Services.UPower
 import Caelestia
 import Caelestia.Config
+import Caelestia.Internal
 import Caelestia.Services
 import qs.components
 import qs.services
@@ -735,7 +736,7 @@ Item {
         if (expanded && Recorder.running)
             return "recordFull";
         if (expanded)
-            return clockKind !== "" && !hasMedia ? "clock" : hasMedia ? "player" : "info";
+            return clockKind !== "" && !hasMedia ? "clock" : hasMedia ? "player" : infoPage === 1 ? "perf" : "info";
         if (Recorder.running)
             return "record";
         if (clockKind !== "")
@@ -789,6 +790,8 @@ Item {
             return Qt.size(450, (hasLyrics ? 202 : 178) + shelfExtra);
         case "info":
             return Qt.size(390, 118 + shelfExtra);
+        case "perf":
+            return Qt.size(500, 132);
         case "record":
             return Qt.size(210, 40);
         case "media":
@@ -801,7 +804,7 @@ Item {
 
     property real w: target.width
     property real h: target.height
-    readonly property real radius: Math.min(h / 2, mode === "player" || mode === "info" || mode === "notif" || mode === "bt" || mode === "shot" || mode === "clock" || mode === "drop" || mode === "toast" || mode === "done" || mode === "alarm" || mode === "count" || mode === "recordFull" || mode === "center" || (mode === "charge" && chargePlugged) ? 32 : h / 2)
+    readonly property real radius: Math.min(h / 2, mode === "player" || mode === "info" || mode === "perf" || mode === "notif" || mode === "bt" || mode === "shot" || mode === "clock" || mode === "drop" || mode === "toast" || mode === "done" || mode === "alarm" || mode === "count" || mode === "recordFull" || mode === "center" || (mode === "charge" && chargePlugged) ? 32 : h / 2)
 
     function flash(kind: string, ms: int): void {
         if (!ready)
@@ -1275,6 +1278,40 @@ Item {
     property real wheelX: 0
     property real wheelY: 0
 
+    // Pages de l'île ouverte sans musique : 0 = heure/météo, 1 = performances du PC
+    property int infoPage: 0
+    readonly property bool paged: mode === "info" || mode === "perf"
+
+    function flipPage(dir: int): void {
+        const next = Math.max(0, Math.min(1, infoPage + dir));
+        if (next === infoPage) {
+            // Bord : petit rebond élastique
+            swipeX = -dir * 14;
+            swipeReset.restart();
+            return;
+        }
+        infoPage = next;
+        swipeX = -dir * 26;
+        swipeReset.restart();
+    }
+
+    // Capteurs actifs seulement quand l'île est ouverte (préchauffés sur la page 1)
+    ServiceRef {
+        service: root.paged ? Cpu : null
+    }
+    ServiceRef {
+        service: root.paged ? Memory : null
+    }
+    ServiceRef {
+        service: root.paged ? Storage : null
+    }
+    // NetworkUsage est un singleton QML (compteur de références simple)
+    onPagedChanged: NetworkUsage.refCount += paged ? 1 : -1
+    Component.onDestruction: {
+        if (paged)
+            NetworkUsage.refCount--;
+    }
+
     Behavior on swipeX {
         enabled: !dragH.active
 
@@ -1339,6 +1376,15 @@ Item {
             if (root.mode === "center")
                 return;
             const media = root.mode === "media" || root.mode === "player";
+            if (root.paged && Math.abs(e.angleDelta.x) > Math.abs(e.angleDelta.y)) {
+                root.wheelX += e.angleDelta.x;
+                wheelReset.restart();
+                if (Math.abs(root.wheelX) > 160) {
+                    root.flipPage(root.wheelX < 0 ? 1 : -1);
+                    root.wheelX = -root.wheelX * 4;
+                }
+                return;
+            }
             const notifLike = root.mode === "notif" || root.mode === "toast" || root.mode === "shot";
             if (media && Math.abs(e.angleDelta.x) > Math.abs(e.angleDelta.y)) {
                 root.wheelX += e.angleDelta.x;
@@ -1369,7 +1415,7 @@ Item {
         id: dragH
 
         target: null
-        xAxis.enabled: root.mode === "media" || root.mode === "player"
+        xAxis.enabled: root.mode === "media" || root.mode === "player" || root.paged
         yAxis.enabled: root.mode === "notif" || root.mode === "toast" || root.mode === "shot"
         onTranslationChanged: {
             if (active) {
@@ -1380,7 +1426,9 @@ Item {
         onActiveChanged: {
             if (active)
                 return;
-            if (xAxis.enabled && Math.abs(translation.x) > 70)
+            if (root.paged && Math.abs(translation.x) > 50)
+                root.flipPage(translation.x < 0 ? 1 : -1);
+            else if (xAxis.enabled && !root.paged && Math.abs(translation.x) > 70)
                 root.swipeTrack(translation.x < 0 ? 1 : -1);
             else if (yAxis.enabled && translation.y < -35)
                 root.dismissCurrent();
@@ -1426,7 +1474,7 @@ Item {
                 root.togglePause();
             } else if (button === Qt.MiddleButton || root.mode === "media") {
                 root.player?.togglePlaying();
-            } else if (root.mode === "idle" || root.mode === "info") {
+            } else if (root.mode === "idle" || root.mode === "info" || root.mode === "perf") {
                 Island.notifCenter = true;
             }
         }
@@ -3365,6 +3413,7 @@ Item {
         // ── survol sans musique : heure, date, météo, batterie ──
         Face {
             active: root.mode === "info"
+            slide: root.mode === "perf" ? -90 : 0
 
             Column {
                 anchors.left: parent.left
@@ -3433,6 +3482,173 @@ Item {
                     }
                     BatteryGlyph {
                         anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+            }
+        }
+
+        // ── performances en direct : CPU, RAM, disque, réseau ──
+        Face {
+            active: root.mode === "perf"
+            slide: root.mode === "info" ? 90 : 0
+
+            Row {
+                anchors.left: parent.left
+                anchors.leftMargin: 26
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenterOffset: -2
+                spacing: 10
+
+                PerfRing {
+                    icon: "memory"
+                    label: "CPU"
+                    value: Cpu.percentage
+                    sub: Cpu.temperature > 0 ? `${Math.round(Cpu.temperature)}°C` : ""
+                }
+                PerfRing {
+                    icon: "memory_alt"
+                    label: "RAM"
+                    value: Memory.percentage
+                    sub: root.kibText(Memory.used, Memory.total)
+                }
+                PerfRing {
+                    icon: "hard_drive"
+                    label: "Disque"
+                    value: Storage.primaryDisk?.perc ?? 0
+                    sub: Storage.primaryDisk ? root.kibText(Storage.primaryDisk.used, Storage.primaryDisk.total) : ""
+                }
+            }
+
+            // Réseau : débit descendant / montant + courbe
+            Item {
+                anchors.right: parent.right
+                anchors.rightMargin: 26
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenterOffset: -2
+                width: 150
+                height: 86
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 18
+                    color: Qt.alpha(root.fg, 0.06)
+                    border.width: 1
+                    border.color: Qt.alpha(root.fg, 0.08)
+                }
+
+                SparklineItem {
+                    id: netSpark
+
+                    property real targetMax: 1024
+                    property real smoothMax: targetMax
+
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    anchors.margins: 6
+                    height: 34
+                    line1: NetworkUsage.uploadBuffer // qmllint disable missing-type
+                    line1Color: Colours.palette.m3secondary
+                    line1FillAlpha: 0.12
+                    line2: NetworkUsage.downloadBuffer // qmllint disable missing-type
+                    line2Color: Colours.palette.m3tertiary
+                    line2FillAlpha: 0.22
+                    maxValue: smoothMax
+                    historyLength: NetworkUsage.historyLength
+
+                    Connections {
+                        function onValuesChanged(): void {
+                            netSpark.targetMax = Math.max(NetworkUsage.downloadBuffer.maximum, NetworkUsage.uploadBuffer.maximum, 1024);
+                            netSlide.restart();
+                        }
+
+                        target: NetworkUsage.downloadBuffer
+                    }
+
+                    NumberAnimation {
+                        id: netSlide
+
+                        target: netSpark
+                        property: "slideProgress"
+                        from: 0
+                        to: 1
+                        duration: GlobalConfig.dashboard.resourceUpdateInterval
+                    }
+
+                    Behavior on smoothMax {
+                        NumberAnimation {
+                            duration: 600
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+                }
+
+                Column {
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.leftMargin: 12
+                    anchors.topMargin: 9
+                    spacing: 1
+
+                    NetLine {
+                        icon: "south"
+                        tint: Colours.palette.m3tertiary
+                        speed: NetworkUsage.downloadSpeed
+                        big: true
+                    }
+                    NetLine {
+                        icon: "north"
+                        tint: Colours.palette.m3secondary
+                        speed: NetworkUsage.uploadSpeed
+                    }
+                }
+            }
+        }
+
+        // Points de page (heure ↔ performances) : la pastille active s'allonge
+        Row {
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: 7
+            spacing: 5
+            opacity: root.paged && root.shelf.length === 0 ? 1 : 0
+            visible: opacity > 0.01
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 250
+                }
+            }
+
+            Repeater {
+                model: 2
+
+                Rectangle {
+                    required property int index
+                    readonly property bool current: root.infoPage === index
+
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: current ? 16 : 5
+                    height: 5
+                    radius: 2.5
+                    color: current ? Qt.alpha(root.fg, 0.85) : Qt.alpha(root.fg, 0.28)
+
+                    Behavior on width {
+                        NumberAnimation {
+                            duration: 420
+                            easing.type: Easing.OutBack
+                            easing.overshoot: 1.6
+                        }
+                    }
+                    Behavior on color {
+                        ColorAnimation {
+                            duration: 300
+                        }
+                    }
+
+                    TapHandler {
+                        margin: 6
+                        onTapped: root.flipPage(parent.index - root.infoPage)
                     }
                 }
             }
@@ -3613,10 +3829,175 @@ Item {
 
     // Une vue de l'île : l'ancienne s'efface vite, la nouvelle attend que l'île ait
     // commencé à s'ouvrir puis apparaît en fondu avec un léger zoom (pas de saut brutal)
+    function kibText(used: real, total: real): string {
+        if (!(total > 0))
+            return "";
+        const f = UsageFmt.formatKib(used, total);
+        const unit = f.unit.replace("GiB", "Go").replace("MiB", "Mo").replace("TiB", "To");
+        return `${+f.value.toFixed(1)}/${Math.round(f.total)} ${unit}`;
+    }
+
+    // Anneau de jauge animé (couleur qui chauffe avec la charge)
+    component PerfRing: Column {
+        id: ring
+
+        property string icon
+        property string label
+        property string sub
+        property real value
+        property real shown: value
+        readonly property color tint: shown > 0.85 ? root.red : shown > 0.6 ? (Colours.light ? "#c77700" : "#ff9f0a") : root.accent
+
+        spacing: 3
+        width: 88
+
+        Behavior on shown {
+            NumberAnimation {
+                duration: 700
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        Item {
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: 56
+            height: 56
+
+            Shape {
+                anchors.fill: parent
+                preferredRendererType: Shape.CurveRenderer
+
+                ShapePath {
+                    fillColor: "transparent"
+                    strokeColor: Qt.alpha(root.fg, 0.1)
+                    strokeWidth: 5
+                    capStyle: ShapePath.RoundCap
+
+                    PathAngleArc {
+                        centerX: 28
+                        centerY: 28
+                        radiusX: 25
+                        radiusY: 25
+                        startAngle: 0
+                        sweepAngle: 360
+                    }
+                }
+                ShapePath {
+                    fillColor: "transparent"
+                    strokeColor: ring.tint
+                    strokeWidth: 5
+                    capStyle: ShapePath.RoundCap
+
+                    Behavior on strokeColor {
+                        ColorAnimation {
+                            duration: 500
+                        }
+                    }
+
+                    PathAngleArc {
+                        centerX: 28
+                        centerY: 28
+                        radiusX: 25
+                        radiusY: 25
+                        startAngle: -90
+                        sweepAngle: Math.max(0.5, Math.min(1, ring.shown)) * 360
+                    }
+                }
+            }
+
+            Column {
+                anchors.centerIn: parent
+                spacing: -2
+
+                MaterialIcon {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: ring.icon
+                    color: root.fgDim
+                    fontStyle: Tokens.font.icon.size(10).build()
+                    fill: 1
+                }
+                StyledText {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: Math.round(ring.shown * 100) + "%"
+                    color: root.fg
+                    font.pointSize: 10.5
+                    font.weight: Font.Bold
+                    font.features: {
+                        "tnum": 1
+                    }
+                }
+            }
+        }
+
+        StyledText {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: ring.sub ? `${ring.label} · ${ring.sub}` : ring.label
+            color: root.fgDim
+            font.pointSize: 7.5
+            font.weight: Font.Medium
+            font.features: {
+                "tnum": 1
+            }
+        }
+    }
+
+    // Ligne de débit réseau (valeur lissée pour un défilement fluide)
+    component NetLine: Row {
+        id: nl
+
+        property string icon
+        property color tint
+        property real speed
+        property real shown: speed
+        property bool big
+
+        spacing: 4
+
+        Behavior on shown {
+            NumberAnimation {
+                duration: 600
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        MaterialIcon {
+            anchors.verticalCenter: parent.verticalCenter
+            text: nl.icon
+            color: nl.tint
+            fontStyle: Tokens.font.icon.size(nl.big ? 12 : 10).build()
+        }
+        StyledText {
+            anchors.verticalCenter: parent.verticalCenter
+            text: {
+                const f = NetworkUsage.formatBytes(nl.shown);
+                const unit = f.unit.replace("KB/s", "Ko/s").replace("MB/s", "Mo/s").replace("GB/s", "Go/s").replace("B/s", "o/s");
+                return `${f.value.toFixed(f.value < 10 ? 1 : 0)} ${unit}`;
+            }
+            color: nl.big ? root.fg : root.fgDim
+            font.pointSize: nl.big ? 12 : 9
+            font.weight: nl.big ? Font.Bold : Font.DemiBold
+            font.features: {
+                "tnum": 1
+            }
+        }
+    }
+
     component Face: Item {
         id: face
 
         property bool active
+        property real slide // décalage de sortie (pages qu'on fait glisser)
+
+        transform: Translate {
+            x: face.active ? 0 : face.slide
+
+            Behavior on x {
+                NumberAnimation {
+                    duration: 480
+                    easing.type: Easing.OutCubic
+                }
+            }
+        }
 
         anchors.fill: parent
         opacity: active ? 1 : 0
