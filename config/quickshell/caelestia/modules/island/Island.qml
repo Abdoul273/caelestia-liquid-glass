@@ -231,6 +231,43 @@ Item {
         onTriggered: camProc.running = true
     }
 
+    // ── Compte à rebours avant un enregistrement ──
+    property int countLeft: 0
+    property list<string> recArgs: []
+
+    Connections {
+        target: Island
+
+        function onRecordRequest(args: var, delay: int): void {
+            if (root.screen !== Quickshell.screens[0])
+                return;
+            root.recArgs = args;
+            if (delay <= 0) {
+                Recorder.start(args);
+                return;
+            }
+            root.countLeft = delay;
+            countTimer.restart();
+            countPop.restart();
+        }
+    }
+
+    Timer {
+        id: countTimer
+
+        interval: 1000
+        repeat: true
+        onTriggered: {
+            root.countLeft -= 1;
+            if (root.countLeft <= 0) {
+                stop();
+                Recorder.start(root.recArgs);
+            } else {
+                countPop.restart();
+            }
+        }
+    }
+
     // ── Verr. Maj, Wi-Fi, VPN ──
     property string blipIcon: ""
     property string blipText: ""
@@ -656,6 +693,8 @@ Item {
     readonly property string mode: {
         if (hidden)
             return "hidden";
+        if (countLeft > 0)
+            return "count";
         if (dropping)
             return "drop";
         if (alarmRinging)
@@ -678,6 +717,8 @@ Item {
             return "blip";
         if (pulse === "ws")
             return "ws";
+        if (expanded && Recorder.running)
+            return "recordFull";
         if (expanded)
             return clockKind !== "" && !hasMedia ? "clock" : hasMedia ? "player" : "info";
         if (Recorder.running)
@@ -701,6 +742,10 @@ Item {
             return Qt.size(340, 52);
         case "notif":
             return Qt.size(430, hovered && notifHasActions ? 132 : 92);
+        case "recordFull":
+            return Qt.size(360, 76);
+        case "count":
+            return Qt.size(200, 86);
         case "drop":
             return Qt.size(420, 110);
         case "toast":
@@ -739,7 +784,7 @@ Item {
 
     property real w: target.width
     property real h: target.height
-    readonly property real radius: Math.min(h / 2, mode === "player" || mode === "info" || mode === "notif" || mode === "bt" || mode === "shot" || mode === "clock" || mode === "drop" || mode === "toast" || mode === "done" || mode === "alarm" || (mode === "charge" && chargePlugged) ? 32 : h / 2)
+    readonly property real radius: Math.min(h / 2, mode === "player" || mode === "info" || mode === "notif" || mode === "bt" || mode === "shot" || mode === "clock" || mode === "drop" || mode === "toast" || mode === "done" || mode === "alarm" || mode === "count" || mode === "recordFull" || (mode === "charge" && chargePlugged) ? 32 : h / 2)
 
     function flash(kind: string, ms: int): void {
         if (!ready)
@@ -942,6 +987,9 @@ Item {
         {
             if (!root.ready)
                 return;
+            // Le point rouge de l'île montre déjà l'enregistrement : pas de notification en plus
+            if ((n?.appName ?? "").startsWith("caelestia") && /^Enregistrement (démarré|en pause|repris)/.test(n?.summary ?? ""))
+                return;
             if (root.isShot(n)) {
                 root.shotPath = root.shotSource(n);
                 root.shotSaved = root.shotPath.startsWith(root.shotsDir);
@@ -1094,6 +1142,20 @@ Item {
                     easing.type: Easing.OutCubic
                 }
             }
+        }
+    }
+
+    SequentialAnimation {
+        id: countPop
+
+        NumberAnimation {
+            target: countNum
+            property: "scale"
+            from: 1.6
+            to: 1
+            duration: 500
+            easing.type: Easing.OutBack
+            easing.overshoot: 1.8
         }
     }
 
@@ -1303,6 +1365,11 @@ Item {
                 root.showNext();
             } else if (root.mode === "toast" || root.mode === "done") {
                 root.dismissCurrent();
+            } else if (root.mode === "record") {
+                Recorder.stop();
+            } else if (root.mode === "count") {
+                countTimer.stop();
+                root.countLeft = 0;
             } else if (root.mode === "clockMini") {
                 root.togglePause();
             } else if (button === Qt.MiddleButton || root.mode === "media") {
@@ -2481,6 +2548,130 @@ Item {
                         onClicked: root.stopAlarm()
                     }
                 }
+            }
+        }
+
+        // ── enregistrement, vue ouverte : chrono + pause / arrêter ──
+        Face {
+            active: root.mode === "recordFull"
+
+            Rectangle {
+                id: recFullDot
+
+                anchors.left: parent.left
+                anchors.leftMargin: 24
+                anchors.verticalCenter: parent.verticalCenter
+                width: 12
+                height: 12
+                radius: 6
+                color: root.red
+
+                SequentialAnimation on opacity {
+                    running: root.mode === "recordFull" && !Recorder.paused
+                    loops: Animation.Infinite
+                    NumberAnimation {
+                        to: 0.3
+                        duration: 700
+                    }
+                    NumberAnimation {
+                        to: 1
+                        duration: 700
+                    }
+                }
+            }
+
+            Column {
+                anchors.left: recFullDot.right
+                anchors.leftMargin: 12
+                anchors.verticalCenter: parent.verticalCenter
+
+                StyledText {
+                    text: root.fmtTime(Recorder.elapsed)
+                    color: root.fg
+                    font.pointSize: 18
+                    font.weight: Font.Bold
+                    font.features: {
+                        "tnum": 1
+                    }
+                }
+                StyledText {
+                    text: Recorder.paused ? qsTr("En pause") : qsTr("Enregistrement")
+                    color: root.fgDim
+                    font.pointSize: 8.5
+                }
+            }
+
+            Row {
+                anchors.right: parent.right
+                anchors.rightMargin: 20
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 8
+
+                ShotButton {
+                    icon: Recorder.paused ? "play_arrow" : "pause"
+                    onClicked: Recorder.togglePause()
+                }
+                Rectangle {
+                    width: 40
+                    height: 40
+                    radius: 20
+                    color: stopRecArea.containsMouse ? Qt.lighter("#ff453a", 1.1) : "#ff453a"
+                    scale: stopRecArea.pressed ? 0.9 : 1
+
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: 13
+                        height: 13
+                        radius: 3
+                        color: "white"
+                    }
+
+                    MouseArea {
+                        id: stopRecArea
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: Recorder.stop()
+                    }
+                }
+            }
+        }
+
+        // ── compte à rebours avant l'enregistrement : gros chiffre qui pulse ──
+        Face {
+            active: root.mode === "count"
+
+            Rectangle {
+                anchors.left: parent.left
+                anchors.leftMargin: 26
+                anchors.verticalCenter: parent.verticalCenter
+                width: 12
+                height: 12
+                radius: 6
+                color: root.red
+            }
+
+            StyledText {
+                id: countNum
+
+                anchors.centerIn: parent
+                text: root.countLeft
+                color: root.fg
+                font.pointSize: 32
+                font.weight: Font.Bold
+                font.features: {
+                    "tnum": 1
+                }
+            }
+
+            StyledText {
+                anchors.right: parent.right
+                anchors.rightMargin: 22
+                anchors.verticalCenter: parent.verticalCenter
+                text: qsTr("clic : annuler")
+                color: root.fgDim
+                font.pointSize: 7.5
             }
         }
 

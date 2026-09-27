@@ -42,6 +42,9 @@ Singleton {
         shelf = shelf.filter(u => u !== url);
     }
 
+    // Enregistrement demandé par le Centre de contrôle : l'île fait le compte à rebours puis lance
+    signal recordRequest(var args, int delay)
+
     // Bus des notifications à afficher (émis par services/Notifs.qml)
     signal notify(var notif)
 }

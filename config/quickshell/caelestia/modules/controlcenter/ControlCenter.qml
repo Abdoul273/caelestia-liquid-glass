@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Io
 import Quickshell.Bluetooth
 import Quickshell.Services.Mpris
 import Quickshell.Services.SystemTray
@@ -24,7 +25,57 @@ Item {
 
     readonly property bool shown: screenState?.controlCenter ?? false
     property real offsetScale: shown ? 0 : 1
-    property string page: "main" // main, wifi, bt, audio
+    property string page: "main" // main, wifi, bt, audio, record
+
+    // Choix d'enregistrement, retenus d'une fois sur l'autre
+    property bool recRegion: false
+    property bool recSound: true
+    property bool recMic: false
+    property bool recCountdown: true
+    property bool recCopy: false
+
+    function saveRecPrefs(): void {
+        recPrefs.setText(JSON.stringify({
+            region: recRegion,
+            sound: recSound,
+            mic: recMic,
+            countdown: recCountdown,
+            copy: recCopy
+        }));
+    }
+
+    function startRecording(): void {
+        saveRecPrefs();
+        const args = [];
+        if (recSound)
+            args.push("-s");
+        if (recMic)
+            args.push("-m");
+        if (recCopy)
+            args.push("-c");
+        if (recRegion)
+            args.push("-r");
+        close();
+        // Compte à rebours dans l'île (plein écran seulement : la zone se choisit au lancement)
+        Island.recordRequest(args, recCountdown && !recRegion ? 3 : 0);
+    }
+
+    FileView {
+        id: recPrefs
+
+        path: `${Quickshell.env("HOME")}/.local/state/caelestia/record-prefs.json`
+        printErrors: false
+        onLoaded: {
+            try {
+                const p = JSON.parse(text());
+                root.recRegion = !!p.region;
+                root.recSound = p.sound ?? true;
+                root.recMic = !!p.mic;
+                root.recCountdown = p.countdown ?? true;
+                root.recCopy = !!p.copy;
+            } catch (e) {}
+        }
+    }
 
     // ── Couleurs (comme la Dynamic Island) ──
     readonly property color fg: Colours.palette.m3onSurface
@@ -87,7 +138,7 @@ Item {
             x: 14
             y: 14
             width: parent.width - 28
-            height: root.page === "main" ? mainPage.implicitHeight : 470
+            height: root.page === "main" ? mainPage.implicitHeight : root.page === "record" ? recordPage.implicitHeight + 50 : 470
             clip: true
 
             Behavior on height {
@@ -398,17 +449,10 @@ Item {
                             }
                         }
                         RoundToggle {
-                            icon: Recorder.running ? "stop_circle" : "screen_record"
-                            label: Recorder.running ? qsTr("Arrêter") : qsTr("Enregistrer")
+                            icon: Recorder.running ? "radio_button_checked" : "screen_record"
+                            label: Recorder.running ? qsTr("En cours") : qsTr("Enregistrer")
                             on: Recorder.running
-                            onClicked: {
-                                if (Recorder.running)
-                                    Recorder.stop();
-                                else {
-                                    root.close();
-                                    Recorder.start();
-                                }
-                            }
+                            onClicked: root.page = "record"
                         }
                         RoundToggle {
                             icon: "screenshot_region"
@@ -715,7 +759,7 @@ Item {
                         anchors.left: parent.left
                         anchors.leftMargin: 44
                         anchors.verticalCenter: parent.verticalCenter
-                        text: root.page === "wifi" ? qsTr("Wi-Fi") : root.page === "bt" ? qsTr("Bluetooth") : qsTr("Sortie audio")
+                        text: root.page === "wifi" ? qsTr("Wi-Fi") : root.page === "bt" ? qsTr("Bluetooth") : root.page === "record" ? qsTr("Enregistrement de l'écran") : qsTr("Sortie audio")
                         color: root.fg
                         font.pointSize: 13
                         font.weight: Font.Bold
@@ -996,6 +1040,234 @@ Item {
                         text: root.adapter?.enabled ? qsTr("Aucun appareil — actualise pour chercher") : qsTr("Bluetooth désactivé")
                         color: root.fgDim
                         font.pointSize: 9.5
+                    }
+                }
+
+                // ── Enregistrement de l'écran ──
+                Column {
+                    id: recordPage
+
+                    anchors.top: subHead.bottom
+                    anchors.topMargin: 8
+                    width: parent.width
+                    visible: root.page === "record"
+                    spacing: 10
+
+                    // En cours : chrono + pause / arrêter
+                    Tile {
+                        width: parent.width
+                        height: 92
+                        visible: Recorder.running
+
+                        Rectangle {
+                            id: liveDot
+
+                            x: 18
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 14
+                            height: 14
+                            radius: 7
+                            color: "#ff453a"
+
+                            SequentialAnimation on opacity {
+                                running: Recorder.running && !Recorder.paused && root.page === "record"
+                                loops: Animation.Infinite
+                                NumberAnimation {
+                                    to: 0.3
+                                    duration: 700
+                                }
+                                NumberAnimation {
+                                    to: 1
+                                    duration: 700
+                                }
+                            }
+                        }
+                        Column {
+                            anchors.left: liveDot.right
+                            anchors.leftMargin: 12
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            StyledText {
+                                text: {
+                                    const s = Math.floor(Recorder.elapsed);
+                                    return `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
+                                }
+                                color: root.fg
+                                font.pointSize: 22
+                                font.weight: Font.Bold
+                                font.features: {
+                                    "tnum": 1
+                                }
+                            }
+                            StyledText {
+                                text: Recorder.paused ? qsTr("En pause") : qsTr("Enregistrement en cours")
+                                color: root.fgDim
+                                font.pointSize: 8.5
+                            }
+                        }
+                        Row {
+                            anchors.right: parent.right
+                            anchors.rightMargin: 14
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 8
+
+                            BigPill {
+                                text: Recorder.paused ? qsTr("Reprendre") : qsTr("Pause")
+                                onClicked: Recorder.togglePause()
+                            }
+                            BigPill {
+                                text: qsTr("Arrêter")
+                                red: true
+                                onClicked: {
+                                    Recorder.stop();
+                                    root.close();
+                                }
+                            }
+                        }
+                    }
+
+                    // Ce qu'on filme
+                    Row {
+                        width: parent.width
+                        spacing: 10
+                        visible: !Recorder.running
+
+                        ChoiceCard {
+                            width: (parent.width - 10) / 2
+                            icon: "desktop_windows"
+                            title: qsTr("Plein écran")
+                            subtitle: qsTr("Tout l'écran")
+                            on: !root.recRegion
+                            onClicked: root.recRegion = false
+                        }
+                        ChoiceCard {
+                            width: (parent.width - 10) / 2
+                            icon: "crop_free"
+                            title: qsTr("Zone")
+                            subtitle: qsTr("Choisie à la souris")
+                            on: root.recRegion
+                            onClicked: root.recRegion = true
+                        }
+                    }
+
+                    // Le son
+                    Tile {
+                        width: parent.width
+                        height: 124
+                        visible: !Recorder.running
+
+                        Column {
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 4
+
+                            StyledText {
+                                text: qsTr("SON")
+                                color: root.fgDim
+                                font.pointSize: 7.5
+                                font.weight: Font.Bold
+                                font.letterSpacing: 0.8
+                            }
+                            OptionRow {
+                                icon: "volume_up"
+                                title: qsTr("Son de l'ordinateur")
+                                subtitle: Audio.sink?.description || Audio.sink?.nickname || qsTr("Sortie actuelle")
+                                on: root.recSound
+                                onToggled: root.recSound = !root.recSound
+                            }
+                            OptionRow {
+                                icon: "mic"
+                                title: qsTr("Micro")
+                                subtitle: Audio.source?.description || Audio.source?.nickname || qsTr("Entrée actuelle")
+                                on: root.recMic
+                                onToggled: root.recMic = !root.recMic
+                            }
+                        }
+
+                        StyledText {
+                            anchors.right: parent.right
+                            anchors.rightMargin: 14
+                            y: 12
+                            text: root.recSound && root.recMic ? qsTr("Son + micro") : root.recSound ? qsTr("Son seulement") : root.recMic ? qsTr("Voix seulement") : qsTr("Sans son")
+                            color: root.accent
+                            font.pointSize: 8
+                            font.weight: Font.DemiBold
+                        }
+                    }
+
+                    // Options
+                    Tile {
+                        width: parent.width
+                        height: 110
+                        visible: !Recorder.running
+
+                        Column {
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 4
+
+                            OptionRow {
+                                icon: "timer_3"
+                                title: qsTr("Compte à rebours")
+                                subtitle: root.recRegion ? qsTr("Plein écran seulement") : qsTr("3 secondes dans l'île")
+                                on: root.recCountdown && !root.recRegion
+                                enabled: !root.recRegion
+                                onToggled: root.recCountdown = !root.recCountdown
+                            }
+                            OptionRow {
+                                icon: "content_paste"
+                                title: qsTr("Copier la vidéo")
+                                subtitle: qsTr("Chemin dans le presse-papiers à la fin")
+                                on: root.recCopy
+                                onToggled: root.recCopy = !root.recCopy
+                            }
+                        }
+                    }
+
+                    // Lancer
+                    Rectangle {
+                        width: parent.width
+                        height: 50
+                        radius: 25
+                        visible: !Recorder.running
+                        color: startArea.pressed ? Qt.darker("#ff453a", 1.1) : startArea.containsMouse ? Qt.lighter("#ff453a", 1.08) : "#ff453a"
+                        scale: startArea.pressed ? 0.97 : 1
+
+                        Behavior on scale {
+                            NumberAnimation {
+                                duration: 160
+                                easing.type: Easing.OutBack
+                            }
+                        }
+
+                        Row {
+                            anchors.centerIn: parent
+                            spacing: 8
+
+                            Rectangle {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 14
+                                height: 14
+                                radius: 7
+                                color: "white"
+                            }
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: root.recRegion ? qsTr("Choisir la zone et enregistrer") : qsTr("Démarrer l'enregistrement")
+                                color: "white"
+                                font.pointSize: 11
+                                font.weight: Font.Bold
+                            }
+                        }
+
+                        MouseArea {
+                            id: startArea
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.startRecording()
+                        }
                     }
                 }
 
@@ -1426,6 +1698,153 @@ Item {
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: ib.clicked()
+        }
+    }
+
+    // Grande carte de choix (plein écran / zone)
+    component ChoiceCard: Rectangle {
+        id: cc
+
+        property string icon
+        property string title
+        property string subtitle
+        property bool on
+        signal clicked
+
+        height: 104
+        radius: 22
+        color: cc.on ? Qt.alpha(Colours.palette.m3primary, 0.2) : Qt.alpha(Colours.palette.m3onSurface, ccArea.containsMouse ? 0.1 : 0.07)
+        border.width: cc.on ? 2 : 1
+        border.color: cc.on ? Qt.alpha(Colours.palette.m3primary, 0.7) : Qt.alpha(Colours.palette.m3onSurface, 0.08)
+        scale: ccArea.pressed ? 0.97 : 1
+
+        Behavior on color {
+            ColorAnimation {
+                duration: 200
+            }
+        }
+        Behavior on scale {
+            NumberAnimation {
+                duration: 160
+                easing.type: Easing.OutBack
+            }
+        }
+
+        Column {
+            anchors.centerIn: parent
+            spacing: 4
+
+            MaterialIcon {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: cc.icon
+                color: cc.on ? Colours.palette.m3primary : Colours.palette.m3onSurface
+                fontStyle: Tokens.font.icon.size(22).build()
+                fill: cc.on ? 1 : 0
+            }
+            StyledText {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: cc.title
+                color: Colours.palette.m3onSurface
+                font.pointSize: 10
+                font.weight: Font.DemiBold
+            }
+            StyledText {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: cc.subtitle
+                color: Qt.alpha(Colours.palette.m3onSurface, 0.6)
+                font.pointSize: 8
+            }
+        }
+
+        MouseArea {
+            id: ccArea
+
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: cc.clicked()
+        }
+    }
+
+    // Ligne d'option : icône, texte, interrupteur
+    component OptionRow: Item {
+        id: orow
+
+        property string icon
+        property string title
+        property string subtitle
+        property bool on
+        signal toggled
+
+        width: parent?.width ?? 0
+        height: 44
+        opacity: enabled ? 1 : 0.45
+
+        MaterialIcon {
+            anchors.verticalCenter: parent.verticalCenter
+            text: orow.icon
+            color: orow.on ? Colours.palette.m3primary : Colours.palette.m3onSurface
+            fontStyle: Tokens.font.icon.size(14).build()
+            fill: 1
+        }
+        Column {
+            x: 30
+            anchors.verticalCenter: parent.verticalCenter
+            width: parent.width - 90
+
+            StyledText {
+                width: parent.width
+                elide: Text.ElideRight
+                text: orow.title
+                color: Colours.palette.m3onSurface
+                font.pointSize: 9.5
+                font.weight: Font.DemiBold
+            }
+            StyledText {
+                width: parent.width
+                elide: Text.ElideRight
+                text: orow.subtitle
+                color: Qt.alpha(Colours.palette.m3onSurface, 0.6)
+                font.pointSize: 8
+            }
+        }
+        Switch {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            on: orow.on
+            onToggled: orow.toggled()
+        }
+    }
+
+    component BigPill: Rectangle {
+        id: bp
+
+        property string text
+        property bool red
+        signal clicked
+
+        width: bpLbl.implicitWidth + 30
+        height: 38
+        radius: 19
+        color: bp.red ? (bpArea.containsMouse ? Qt.lighter("#ff453a", 1.08) : "#ff453a") : Qt.alpha(Colours.palette.m3onSurface, bpArea.containsMouse ? 0.18 : 0.12)
+
+        StyledText {
+            id: bpLbl
+
+            anchors.centerIn: parent
+            text: bp.text
+            color: bp.red ? "white" : Colours.palette.m3onSurface
+            font.pointSize: 9.5
+            font.weight: Font.Bold
+        }
+
+        MouseArea {
+            id: bpArea
+
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: bp.clicked()
         }
     }
 
