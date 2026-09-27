@@ -13,7 +13,7 @@ import qs.services
 // Dynamic Island façon macOS, dessinée dans le même verre que le cadre (PanelBg dans
 // ContentWindow) : elle sort du haut de l'écran et se fond dans la forme fluide.
 // Musique, lecteur complet au survol, volume/luminosité, notifications, charge,
-// enregistrement. Molette = volume, clic = lecture/pause, clic droit = tableau de bord.
+// enregistrement. Molette = volume, clic = lecture/pause.
 Item {
     id: root
 
@@ -283,12 +283,9 @@ Item {
     }
 
     TapHandler {
-        acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
+        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
         onTapped: (_, button) => {
-            if (button === Qt.RightButton) {
-                root.expanded = false;
-                root.screenState.dashboard = true;
-            } else if (root.mode === "notif") {
+            if (root.mode === "notif") {
                 const n = root.notif;
                 if (n?.actions?.length > 0)
                     n.actions[0].invoke();

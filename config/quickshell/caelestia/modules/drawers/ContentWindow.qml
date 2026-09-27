@@ -178,6 +178,8 @@ StyledWindow {
 
             panel: panels.dashboard
             deformAmount: 0.1
+            // Sans bord haut (île), le dashboard fermé doit remonter entièrement hors de l'écran
+            y: panel.y + root.borderThickness - (Island.hideTopBorder ? (root.borderThickness + 24) * panels.dashboard.offsetScale : 0)
         }
 
         // L'île fait partie de la forme fluide : même verre, même fusion que les panneaux.
