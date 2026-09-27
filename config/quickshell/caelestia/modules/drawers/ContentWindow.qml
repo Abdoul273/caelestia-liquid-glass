@@ -265,6 +265,20 @@ StyledWindow {
             visible: panels.controlCenter.visible
         }
 
+        // Dock : même verre ; replié, le rectangle descend bien sous l'écran (aucune bosse)
+        PanelBg {
+            id: dockBg
+
+            panel: panels.dock
+            deformAmount: 0.06
+            radius: 26
+            y: panel.y + root.borderThickness + panel.height - panels.dock.blobHeight + 30 * (1 - panels.dock.reveal)
+            implicitHeight: panels.dock.blobHeight + radius
+            // Replié : largeur nulle, sinon il creuse le bord bas du cadre
+            implicitWidth: panels.dock.reveal > 0.001 ? panel.width : 0
+            x: panel.x + bar.implicitWidth + (panels.dock.reveal > 0.001 ? 0 : panel.width / 2)
+        }
+
         PanelBg {
             id: launcherBg
 
@@ -436,6 +450,7 @@ StyledWindow {
                 matrix: dashBg.deformMatrix
             }
             island.fullscreen: root.hasFullscreen
+            dock.fullscreen: root.hasFullscreen
             controlCenter.transform: Matrix4x4 {
                 matrix: ccBg.deformMatrix
             }

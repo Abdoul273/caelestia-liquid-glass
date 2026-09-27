@@ -1,0 +1,538 @@
+pragma ComponentBehavior: Bound
+
+import QtQuick
+import Quickshell
+import Quickshell.Hyprland
+import Quickshell.Io
+import Quickshell.Widgets
+import Caelestia.Config
+import qs.components
+import qs.services
+
+// Dock façon macOS, pensé pour le tiling : il ne réserve aucune place à l'écran.
+// Il sort du bas (dans le verre du cadre) quand la souris touche le bord, reste visible
+// sur un bureau vide et se cache en plein écran ou quand le lanceur est ouvert.
+//   clic : ouvrir l'app / aller à sa fenêtre (clics suivants : fenêtre suivante)
+//   clic milieu : nouvelle fenêtre     clic droit : épingler / désépingler
+Item {
+    id: root
+
+    required property ShellScreen screen
+    required property ScreenState screenState
+    property bool fullscreen
+
+    readonly property HyprlandMonitor monitor: Hyprland.monitorFor(screen)
+    readonly property bool emptyWorkspace: (monitor?.activeWorkspace?.toplevels?.values?.length ?? 1) === 0
+    property bool hovered
+    property bool stayOpen // survol + petite attente avant de se cacher
+    readonly property bool shown: Island.dock && !fullscreen && !(screenState?.launcher ?? false) && !(screenState?.controlCenter ?? false) && (stayOpen || emptyWorkspace || contextFor !== "")
+    property real reveal: shown ? 1 : 0
+
+    readonly property real iconSize: 48
+    readonly property real maxIcon: 72
+    readonly property real pad: 10
+    readonly property real bodyHeight: iconSize + pad * 2 + 8
+    property real mouseX: -1000
+    property string contextFor: "" // app dont le menu (clic droit) est ouvert
+    property real contextX: 0
+
+    // ── Apps épinglées (~/.local/state/caelestia/dock.json) ──
+    property list<string> pinned: ["org.gnome.Nautilus", "kitty", "google-chrome", "aura", "antigravity", "org.telegram.desktop", "com.anthropic.Claude"]
+
+    FileView {
+        id: pinFile
+
+        path: `${Quickshell.env("HOME")}/.local/state/caelestia/dock.json`
+        printErrors: false
+        onLoaded: {
+            try {
+                const d = JSON.parse(text());
+                if (Array.isArray(d.pinned))
+                    root.pinned = d.pinned;
+            } catch (e) {}
+        }
+    }
+
+    function savePins(): void {
+        pinFile.setText(JSON.stringify({
+            pinned: pinned
+        }, null, 2));
+    }
+
+    function togglePin(id: string): void {
+        pinned = pinned.includes(id) ? pinned.filter(p => p !== id) : [...pinned, id];
+        savePins();
+    }
+
+    // ── Fenêtres ouvertes, rangées par app ──
+    function entryFor(cls: string): var {
+        return DesktopEntries.byId(cls) ?? DesktopEntries.heuristicLookup(cls);
+    }
+
+    readonly property var windowsByApp: {
+        const map = {};
+        for (const t of Hyprland.toplevels.values) {
+            const cls = t.lastIpcObject?.class ?? "";
+            if (!cls)
+                continue;
+            const e = entryFor(cls);
+            const id = e?.id ?? cls;
+            (map[id] = map[id] ?? []).push(t);
+        }
+        return map;
+    }
+
+    readonly property var items: {
+        const list = [];
+        for (const id of pinned) {
+            const e = DesktopEntries.byId(id) ?? DesktopEntries.heuristicLookup(id);
+            if (e)
+                list.push({
+                    id: e.id,
+                    entry: e,
+                    pinned: true
+                });
+        }
+        const seen = new Set(list.map(i => i.id));
+        let first = true;
+        for (const id of Object.keys(windowsByApp)) {
+            if (seen.has(id))
+                continue;
+            const e = DesktopEntries.byId(id) ?? entryFor(windowsByApp[id][0].lastIpcObject?.class ?? id);
+            list.push({
+                id: id,
+                entry: e,
+                pinned: false,
+                separator: first
+            });
+            first = false;
+        }
+        return list;
+    }
+
+    // Apps en cours de lancement (l'icône rebondit jusqu'à l'arrivée de la fenêtre)
+    property var launching: ({})
+
+    function launch(item: var): void {
+        if (!item.entry)
+            return;
+        item.entry.execute();
+        const l = Object.assign({}, launching);
+        l[item.id] = Date.now();
+        launching = l;
+        launchTimeout.restart();
+    }
+
+    Timer {
+        id: launchTimeout
+
+        interval: 8000
+        onTriggered: root.launching = ({})
+    }
+
+    onWindowsByAppChanged: {
+        let changed = false;
+        const l = Object.assign({}, launching);
+        for (const id of Object.keys(l)) {
+            if (windowsByApp[id]) {
+                delete l[id];
+                changed = true;
+            }
+        }
+        if (changed)
+            launching = l;
+    }
+
+    property var cycleIndex: ({})
+
+    function activate(item: var): void {
+        const wins = windowsByApp[item.id] ?? [];
+        if (wins.length === 0) {
+            launch(item);
+            return;
+        }
+        // Fenêtre suivante de la même app à chaque clic
+        const i = ((cycleIndex[item.id] ?? -1) + 1) % wins.length;
+        const c = Object.assign({}, cycleIndex);
+        c[item.id] = i;
+        cycleIndex = c;
+        const t = wins[i];
+        Hypr.dispatch(Hypr.usingLua ? `hl.dsp.focus({ window = "address:0x${t.address}" })` : `focuswindow address:0x${t.address}`);
+    }
+
+    function closeApp(item: var): void {
+        for (const t of windowsByApp[item.id] ?? [])
+            Hypr.dispatch(Hypr.usingLua ? `hl.dsp.window.close({ window = "address:0x${t.address}" })` : `closewindow address:0x${t.address}`);
+    }
+
+    // ── Taille : une bande invisible de 3 px garde le survol quand il est caché ──
+    // Hauteur du verre (le reste, au-dessus, sert aux icônes agrandies et au menu)
+    readonly property real blobHeight: bodyHeight * reveal
+    readonly property real headroom: reveal > 0.01 ? (contextFor !== "" ? 190 : 40) : 0
+
+    implicitWidth: row.width + pad * 2
+    implicitHeight: Math.max(3, blobHeight + headroom)
+
+    Behavior on reveal {
+        NumberAnimation {
+            duration: root.shown ? 420 : 300
+            easing.type: root.shown ? Easing.OutBack : Easing.InCubic
+            easing.overshoot: 0.8
+        }
+    }
+
+    HoverHandler {
+        onHoveredChanged: {
+            root.hovered = hovered;
+            if (hovered) {
+                hideTimer.stop();
+                root.stayOpen = true;
+            } else {
+                hideTimer.restart();
+                root.mouseX = -1000;
+            }
+        }
+        onPointChanged: root.mouseX = point.position.x
+    }
+
+    Timer {
+        id: hideTimer
+
+        interval: 450
+        onTriggered: {
+            if (!root.hovered && root.contextFor === "")
+                root.stayOpen = false;
+        }
+    }
+
+    // ════════════════════ Contenu ════════════════════
+    Item {
+        id: body
+
+        anchors.left: parent.left
+        anchors.right: parent.right
+        y: root.height - root.blobHeight
+        height: root.bodyHeight
+        opacity: Math.min(1, root.reveal * 1.5)
+
+        Row {
+            id: row
+
+            x: root.pad
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: root.pad + 6
+            spacing: 6
+
+            // Applications (lanceur de Caelestia)
+            DockIcon {
+                dock: root
+                appId: "__launcher"
+                label: qsTr("Applications")
+                symbol: "apps"
+                onPrimary: root.screenState.launcher = true
+            }
+
+            Rectangle {
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 8
+                width: 1
+                height: root.iconSize - 16
+                color: Qt.alpha(Colours.palette.m3onSurface, 0.18)
+            }
+
+            Repeater {
+                model: root.items
+
+                Row {
+                    id: slot
+
+                    required property var modelData
+
+                    anchors.bottom: parent?.bottom
+                    spacing: 6
+
+                    Rectangle {
+                        anchors.bottom: parent.bottom
+                        anchors.bottomMargin: 8
+                        visible: slot.modelData.separator ?? false
+                        width: 1
+                        height: root.iconSize - 16
+                        color: Qt.alpha(Colours.palette.m3onSurface, 0.18)
+                    }
+
+                    DockIcon {
+                        id: dockIcon
+
+                        dock: root
+                        appId: slot.modelData.id
+                        label: slot.modelData.entry?.name ?? slot.modelData.id
+                        iconSource: Quickshell.iconPath(slot.modelData.entry?.icon ?? "", "application-x-executable")
+                        running: (root.windowsByApp[slot.modelData.id]?.length ?? 0) > 0
+                        windows: root.windowsByApp[slot.modelData.id]?.length ?? 0
+                        bouncing: root.launching[slot.modelData.id] !== undefined
+                        onPrimary: root.activate(slot.modelData)
+                        onMiddle: root.launch(slot.modelData)
+                        onSecondary: {
+                            root.contextX = dockIcon.mapToItem(root, dockIcon.width / 2, 0).x;
+                            root.contextFor = root.contextFor === slot.modelData.id ? "" : slot.modelData.id;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Menu du clic droit (au-dessus du Dock) ──
+    Rectangle {
+        id: ctxMenu
+
+        readonly property var item: root.items.find(i => i.id === root.contextFor) ?? null
+
+        visible: root.contextFor !== "" && root.reveal > 0.9
+        x: Math.max(0, Math.min(root.width - width, root.contextX - width / 2))
+        anchors.bottom: body.top
+        anchors.bottomMargin: 34
+        width: ctxCol.width + 12
+        height: ctxCol.height + 12
+        radius: 16
+        color: Qt.alpha(Colours.palette.m3surface, 0.94)
+        border.width: 1
+        border.color: Qt.alpha(Colours.palette.m3onSurface, 0.12)
+
+        Column {
+            id: ctxCol
+
+            x: 6
+            y: 6
+
+            CtxEntry {
+                text: ctxMenu.item?.pinned ? qsTr("Retirer du Dock") : qsTr("Garder dans le Dock")
+                onClicked: {
+                    root.togglePin(root.contextFor);
+                    root.contextFor = "";
+                }
+            }
+            CtxEntry {
+                text: qsTr("Nouvelle fenêtre")
+                onClicked: {
+                    if (ctxMenu.item)
+                        root.launch(ctxMenu.item);
+                    root.contextFor = "";
+                }
+            }
+            CtxEntry {
+                visible: (root.windowsByApp[root.contextFor]?.length ?? 0) > 0
+                text: (root.windowsByApp[root.contextFor]?.length ?? 0) > 1 ? qsTr("Tout fermer") : qsTr("Fermer")
+                danger: true
+                onClicked: {
+                    if (ctxMenu.item)
+                        root.closeApp(ctxMenu.item);
+                    root.contextFor = "";
+                }
+            }
+        }
+    }
+
+    // Le menu se ferme si la souris quitte le Dock un moment
+    Timer {
+        running: root.contextFor !== "" && !root.hovered
+        interval: 1500
+        onTriggered: root.contextFor = ""
+    }
+
+    // ════════════════════ Composants ════════════════════
+
+    component DockIcon: Item {
+        id: di
+
+        required property var dock
+        property string appId
+        property string label
+        property string iconSource
+        property string symbol
+        property bool running
+        property int windows
+        property bool bouncing
+        signal primary
+        signal middle
+        signal secondary
+
+        // Grossissement façon macOS selon la distance au pointeur
+        // Centre de l'icône (sans compter son propre grossissement, pour éviter une boucle)
+        readonly property real centreX: {
+            di.dock.mouseX;
+            di.x;
+            parent?.x;
+            return mapToItem(di.dock, 0, 0).x + di.dock.iconSize / 2;
+        }
+        readonly property real dist: Math.abs(di.dock.mouseX - centreX)
+        readonly property real zoom: di.dock.hovered ? Math.max(0, 1 - dist / 150) : 0
+        readonly property real size: di.dock.iconSize + (di.dock.maxIcon - di.dock.iconSize) * zoom * zoom
+
+        width: size
+        height: di.dock.iconSize
+
+        Behavior on width {
+            NumberAnimation {
+                duration: 90
+            }
+        }
+
+        Item {
+            id: iconBox
+
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: parent.bottom
+            width: di.size
+            height: di.size
+
+            // Rebond pendant le lancement
+            property real hop: 0
+
+            transform: Translate {
+                y: -iconBox.hop
+            }
+
+            SequentialAnimation on hop {
+                running: di.bouncing
+                loops: Animation.Infinite
+                NumberAnimation {
+                    to: 22
+                    duration: 260
+                    easing.type: Easing.OutQuad
+                }
+                NumberAnimation {
+                    to: 0
+                    duration: 260
+                    easing.type: Easing.InQuad
+                }
+                onRunningChanged: if (!running) iconBox.hop = 0
+            }
+
+            IconImage {
+                anchors.fill: parent
+                visible: di.iconSource !== ""
+                source: di.iconSource
+                asynchronous: true
+                scale: diArea.pressed ? 0.9 : 1
+
+                Behavior on scale {
+                    NumberAnimation {
+                        duration: 140
+                        easing.type: Easing.OutBack
+                    }
+                }
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: parent.width * 0.06
+                visible: di.symbol !== ""
+                radius: width * 0.26
+                color: Qt.alpha(Colours.palette.m3primary, 0.9)
+
+                MaterialIcon {
+                    anchors.centerIn: parent
+                    text: di.symbol
+                    color: Colours.palette.m3onPrimary
+                    fontStyle: Tokens.font.icon.size(di.size * 0.28).build()
+                    fill: 1
+                }
+            }
+        }
+
+        // Point sous les apps ouvertes (deux points si plusieurs fenêtres)
+        Row {
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: parent.bottom
+            anchors.topMargin: 3
+            spacing: 3
+
+            Repeater {
+                model: di.running ? Math.min(2, di.windows) : 0
+
+                Rectangle {
+                    width: 4
+                    height: 4
+                    radius: 2
+                    color: Colours.palette.m3onSurface
+                    opacity: 0.8
+                }
+            }
+        }
+
+        // Nom de l'app au survol
+        Rectangle {
+            visible: diArea.containsMouse && di.dock.contextFor === ""
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: iconBox.top
+            anchors.bottomMargin: 10
+            width: tip.implicitWidth + 20
+            height: 26
+            radius: 13
+            color: Qt.alpha(Colours.palette.m3surface, 0.92)
+            border.width: 1
+            border.color: Qt.alpha(Colours.palette.m3onSurface, 0.12)
+
+            StyledText {
+                id: tip
+
+                anchors.centerIn: parent
+                text: di.label
+                color: Colours.palette.m3onSurface
+                font.pointSize: 9
+                font.weight: Font.Medium
+            }
+        }
+
+        MouseArea {
+            id: diArea
+
+            anchors.fill: iconBox
+            hoverEnabled: true
+            acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
+            cursorShape: Qt.PointingHandCursor
+            onClicked: e => {
+                if (e.button === Qt.MiddleButton)
+                    di.middle();
+                else if (e.button === Qt.RightButton)
+                    di.secondary();
+                else
+                    di.primary();
+            }
+        }
+    }
+
+    component CtxEntry: Rectangle {
+        id: ce
+
+        property string text
+        property bool danger
+        signal clicked
+
+        width: Math.max(170, ceLbl.implicitWidth + 28)
+        height: 34
+        radius: 10
+        color: ceArea.containsMouse ? Qt.alpha(Colours.palette.m3onSurface, 0.1) : "transparent"
+
+        StyledText {
+            id: ceLbl
+
+            anchors.left: parent.left
+            anchors.leftMargin: 12
+            anchors.verticalCenter: parent.verticalCenter
+            text: ce.text
+            color: ce.danger ? "#ff453a" : Colours.palette.m3onSurface
+            font.pointSize: 9.5
+        }
+
+        MouseArea {
+            id: ceArea
+
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: ce.clicked()
+        }
+    }
+}

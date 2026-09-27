@@ -30,6 +30,7 @@ Verre translucide partout, Mission Control, Spotlight, animations fluides façon
 - **Les couleurs suivent ton fond d'écran** : tout est régénéré automatiquement à chaque changement de thème.
 
 ### 🪟 Façon macOS
+- **Dock qui se cache**, pensé pour le tiling : il ne prend aucune place, sort du bas de l'écran quand la souris touche le bord (et reste sur un bureau vide), icônes qui grossissent au survol, point sous les apps ouvertes, rebond au lancement, clic droit pour épingler / fermer.
 - **Centre de contrôle façon macOS 27** (`Super + A`), qui descend du haut à droite dans le même verre : Wi-Fi (liste des réseaux, mot de passe directement dedans), Bluetooth (appareils, batterie), VPN, Concentration, apparence claire/sombre, lecteur, luminosité, volume et choix de la sortie audio, raccourcis rapides (caféine, mode jeu, micro, capture, horloge, calculatrice, tableau de bord), **enregistrement de l'écran** (plein écran ou zone, son de l'ordinateur et/ou micro ou sans son, compte à rebours dans l'île, pause et arrêt depuis l'île), batterie et profils d'énergie, icônes système, session. **La barre de gauche et le panneau du coin bas-droit sont retirés** : le cadre est fin et uniforme, tout passe par le Centre de contrôle.
 - **Démarrage façon Mac** (optionnel) : logo blanc et fine barre de progression sur fond noir, au lieu du texte qui défile.
 - **Curseur macOS** ([apple_cursor](https://github.com/ful1e5/apple_cursor)), jusque sur l'écran de connexion.

@@ -34,6 +34,10 @@ Region {
     }
 
     R {
+        panel: root.panels.dock
+    }
+
+    R {
         panel: root.panels.island
         y: 0
         height: panel.height

@@ -150,6 +150,12 @@ SHORTCUTS = [
         ("minuteur 5 min | chrono | stop minuteur", "Minuteur ou chronomètre dans la Dynamic Island"),
         ("Échap", "Fermer"),
     ]),
+    ("Dock (bas de l'écran)", "󰍜", [
+        ("Souris tout en bas", "Faire apparaître le Dock (il se cache tout seul, visible sur un bureau vide)"),
+        ("Clic", "Ouvrir l'app, ou aller à sa fenêtre (clics suivants : fenêtre suivante)"),
+        ("Clic milieu", "Nouvelle fenêtre"),
+        ("Clic droit", "Garder / retirer du Dock, nouvelle fenêtre, fermer"),
+    ]),
     ("Dynamic Island (en haut au centre)", "󰍹", [
         ("Survol", "Lecteur complet, ou heure / météo / batterie"),
         ("Molette", "Volume"),

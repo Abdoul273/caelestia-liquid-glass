@@ -28,6 +28,9 @@ Singleton {
     // Centre de notifications dans l'île (clic sur l'île au repos ou Super + N)
     property bool notifCenter
 
+    // Dock qui se cache (bas de l'écran), sans réserver de place aux fenêtres
+    readonly property bool dock: enabled
+
     // Étagère : fichiers déposés sur l'île, gardés jusqu'au redémarrage du shell
     property list<string> shelf: []
 

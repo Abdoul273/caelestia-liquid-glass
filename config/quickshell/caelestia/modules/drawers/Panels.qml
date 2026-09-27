@@ -15,6 +15,7 @@ import qs.modules.bar.popouts as BarPopouts
 import qs.modules.utilities.toasts as Toasts
 import qs.modules.island as IslandModule
 import qs.modules.controlcenter as CC
+import qs.modules.dock as DockModule
 
 Item {
     id: root
@@ -38,6 +39,7 @@ Item {
     readonly property alias sidebar: sidebar
     readonly property alias island: island
     readonly property alias controlCenter: controlCenter
+    readonly property alias dock: dock
 
     anchors.fill: parent
     anchors.margins: borderThickness
@@ -144,6 +146,18 @@ Item {
         anchors.rightMargin: 6
         anchors.top: parent.top
         anchors.topMargin: -root.borderThickness - (height + 40) * offsetScale
+    }
+
+    // Dock : sort du bas de l'écran au survol
+    DockModule.Dock {
+        id: dock
+
+        screen: root.screen
+        screenState: root.screenState
+
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: -root.borderThickness
     }
 
     BarPopouts.ClipWrapper {
