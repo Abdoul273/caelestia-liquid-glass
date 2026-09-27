@@ -34,6 +34,9 @@ Item {
     readonly property real brightness: brightMon?.brightness ?? 0
     readonly property real battery: UPower.displayDevice.percentage ?? 0
     readonly property bool charging: !UPower.onBattery
+    // Batterie au repos : icône toujours (sur portable), pourcentage seulement faible ou en charge
+    readonly property bool showBattery: UPower.displayDevice.isLaptopBattery
+    readonly property bool batteryPctShown: charging && battery < 0.995 || battery < 0.2
 
     // ── Couleurs du thème (le verre suit le thème clair/sombre) ──
     readonly property color fg: Colours.palette.m3onSurface
@@ -782,7 +785,7 @@ Item {
             return Qt.size(hasLyrics ? 400 : 290, 40);
         default:
             // Au repos : juste l'heure (ou rien si Island.clock est coupé)
-            return Island.clock ? Qt.size(240 + (micInUse || camInUse ? 24 : 0) + (shelf.length > 0 ? 34 : 0), 40) : Qt.size(150, 0);
+            return Island.clock ? Qt.size(240 + (showBattery ? 34 : 0) + (showBattery && batteryPctShown ? 42 : 0) + (micInUse || camInUse ? 24 : 0) + (shelf.length > 0 ? 34 : 0), 40) : Qt.size(150, 0);
         }
     }
 
@@ -1436,6 +1439,8 @@ Item {
             active: root.mode === "idle"
 
             StyledText {
+                id: idleDate
+
                 anchors.left: parent.left
                 anchors.leftMargin: 22
                 anchors.verticalCenter: parent.verticalCenter
@@ -1448,9 +1453,11 @@ Item {
                 font.weight: Font.Medium
             }
 
-            // Centre : notifications non lues (accent), micro (orange), caméra (vert), étagère
+            // Après la date : notifications non lues (accent), micro (orange), caméra (vert), étagère
             Row {
-                anchors.centerIn: parent
+                anchors.left: idleDate.right
+                anchors.leftMargin: 10
+                anchors.verticalCenter: parent.verticalCenter
                 spacing: 7
 
                 Rectangle {
@@ -1502,17 +1509,109 @@ Item {
                 }
             }
 
-            StyledText {
+            // À droite : batterie (façon barre de menus macOS) puis l'heure
+            Row {
                 anchors.right: parent.right
                 anchors.rightMargin: 22
                 anchors.verticalCenter: parent.verticalCenter
-                text: Time.format("HH:mm")
-                color: root.fg
-                font.pointSize: 14
-                font.weight: Font.Bold
-                font.letterSpacing: 0.3
-                font.features: {
-                    "tnum": 1
+                spacing: 9
+
+                StyledText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: root.showBattery && root.batteryPctShown
+                    text: `${Math.round(root.battery * 100)} %`
+                    color: root.charging ? root.green : root.battery < 0.2 ? root.red : root.fgDim
+                    font.pointSize: 9
+                    font.weight: Font.DemiBold
+                    font.features: {
+                        "tnum": 1
+                    }
+                }
+
+                // Icône de batterie : se vide selon le niveau, éclair en charge, pulse sous 10 %
+                Item {
+                    id: idleBatt
+
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: root.showBattery
+                    width: 25
+                    height: 12
+
+                    SequentialAnimation on opacity {
+                        running: root.showBattery && root.battery < 0.1 && !root.charging && root.mode === "idle"
+                        loops: Animation.Infinite
+                        onRunningChanged: if (!running) idleBatt.opacity = 1
+                        NumberAnimation {
+                            to: 0.35
+                            duration: 800
+                            easing.type: Easing.InOutQuad
+                        }
+                        NumberAnimation {
+                            to: 1
+                            duration: 800
+                            easing.type: Easing.InOutQuad
+                        }
+                    }
+
+                    Rectangle {
+                        id: battShell
+
+                        width: 22
+                        height: 12
+                        radius: 3.5
+                        color: "transparent"
+                        border.width: 1.2
+                        border.color: Qt.alpha(root.fg, 0.55)
+
+                        Rectangle {
+                            x: 2
+                            y: 2
+                            height: parent.height - 4
+                            width: Math.max(2, (parent.width - 4) * root.battery)
+                            radius: 1.8
+                            color: root.charging ? root.green : root.battery < 0.2 ? root.red : root.fg
+
+                            Behavior on width {
+                                NumberAnimation {
+                                    duration: 400
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
+                        }
+
+                        MaterialIcon {
+                            anchors.centerIn: parent
+                            visible: root.charging
+                            text: "bolt"
+                            color: "white"
+                            style: Text.Outline
+                            styleColor: Qt.alpha("black", 0.35)
+                            fontStyle: Tokens.font.icon.size(8).build()
+                            fill: 1
+                        }
+                    }
+
+                    Rectangle {
+                        anchors.left: battShell.right
+                        anchors.leftMargin: 1
+                        anchors.verticalCenter: battShell.verticalCenter
+                        width: 2
+                        height: 4
+                        radius: 1
+                        color: Qt.alpha(root.fg, 0.55)
+                    }
+                }
+
+                StyledText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: Time.format("HH:mm")
+                    color: root.fg
+                    font.pointSize: 14
+                    font.weight: Font.Bold
+                    font.letterSpacing: 0.3
+                    font.features: {
+                        "tnum": 1
+                    }
                 }
             }
         }

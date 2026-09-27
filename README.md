@@ -35,6 +35,7 @@ Verre translucide partout, Mission Control, Spotlight, animations fluides façon
 - **Démarrage façon Mac** (optionnel) : logo blanc et fine barre de progression sur fond noir, au lieu du texte qui défile.
 - **Curseur macOS** ([apple_cursor](https://github.com/ful1e5/apple_cursor)), jusque sur l'écran de connexion.
 - **Dynamic Island** en liquid glass, fondue dans le cadre (le bord du haut disparaît, elle sort directement de l'écran) : musique avec visualiseur, lecteur complet au survol (pochette, progression cliquable, commandes), volume et luminosité façon macOS (jauge glissable), **connexion des écouteurs façon AirPods** (ondes + anneau de batterie), **chargeur branché/débranché** (batterie qui se remplit, éclair, temps restant), **captures d'écran** (miniature avec flash, Annoter / Enregistrer / Dossier), **notifications** (file d'attente, actions au survol), charge, enregistrement d'écran. Molette = volume, clic = lecture/pause.
+  - **Au repos** : date, heure et batterie façon barre de menus macOS (verte avec un éclair en charge, rouge et pourcentage sous 20 %, pulse sous 10 %).
   - **Centre de notifications** : clic sur l'heure (ou `Super + N`) : l'île se déroule avec tes notifications (Tout effacer, Ne pas déranger, × au survol). L'ancien volet latéral est retiré.
   - **Tout passe par elle** : bulles de Caelestia (Ne pas déranger, batterie faible, thème…), changement de bureau, Verr. Maj, Wi-Fi et VPN.
   - **Micro et caméra** : point orange ou vert à côté de l'heure quand une app les utilise, comme sur macOS.
