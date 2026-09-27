@@ -99,10 +99,12 @@ Singleton {
                 Sounds.playNotification();
 
             const comp = notifComp.createObject(root, {
-                popup: isPopup,
+                popup: isPopup && !Island.notifications,
                 notification: notif
             });
             root.list = [comp, ...root.list];
+            if (isPopup && Island.notifications)
+                Island.notify(comp);
         }
     }
 

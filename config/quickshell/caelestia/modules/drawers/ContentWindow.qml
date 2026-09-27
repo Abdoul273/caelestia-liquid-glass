@@ -167,7 +167,8 @@ StyledWindow {
             radius: root.borderRounding
             borderLeft: bar.implicitWidth - anchors.margins - root.sdfBorderOffset
             borderRight: root.borderThickness - anchors.margins - root.sdfBorderOffset
-            borderTop: root.borderThickness - anchors.margins - root.sdfBorderOffset
+            // Avec l'île, le bord haut disparaît : elle sort directement du haut de l'écran
+            borderTop: (Island.hideTopBorder ? 0 : root.borderThickness) - anchors.margins - root.sdfBorderOffset
             borderBottom: root.borderThickness - anchors.margins - root.sdfBorderOffset
         }
 
@@ -177,6 +178,18 @@ StyledWindow {
 
             panel: panels.dashboard
             deformAmount: 0.1
+        }
+
+        // L'île fait partie de la forme fluide : même verre, même fusion que les panneaux.
+        // Le rectangle dépasse au-dessus de l'écran pour que seuls les coins du bas soient arrondis.
+        PanelBg {
+            id: islandBg
+
+            panel: panels.island
+            deformAmount: 0.12
+            radius: panels.island.radius
+            y: -radius
+            implicitHeight: panel.height + radius
         }
 
         PanelBg {
@@ -348,6 +361,10 @@ StyledWindow {
 
             dashboard.transform: Matrix4x4 {
                 matrix: dashBg.deformMatrix
+            }
+            island.fullscreen: root.hasFullscreen
+            island.transform: Matrix4x4 {
+                matrix: islandBg.deformMatrix
             }
             launcher.transform: Matrix4x4 {
                 matrix: launcherBg.deformMatrix

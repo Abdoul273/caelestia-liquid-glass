@@ -12,6 +12,7 @@ import qs.modules.sidebar as Sidebar
 import qs.modules.utilities as Utilities
 import qs.modules.bar.popouts as BarPopouts
 import qs.modules.utilities.toasts as Toasts
+import qs.modules.island as IslandModule
 
 Item {
     id: root
@@ -33,6 +34,7 @@ Item {
     readonly property alias utilities: utilities
     readonly property alias toasts: toasts
     readonly property alias sidebar: sidebar
+    readonly property alias island: island
 
     anchors.fill: parent
     anchors.margins: borderThickness
@@ -114,6 +116,18 @@ Item {
 
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
+    }
+
+    // Dynamic Island : collée au haut de l'écran, au-dessus de la marge du cadre
+    IslandModule.Island {
+        id: island
+
+        screen: root.screen
+        screenState: root.screenState
+
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        anchors.topMargin: -root.borderThickness
     }
 
     BarPopouts.ClipWrapper {
