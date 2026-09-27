@@ -483,6 +483,7 @@ Item {
                             label: qsTr("Tableau")
                             onClicked: {
                                 root.close();
+                                root.screenState.quickNotes = false;
                                 root.screenState.dashboard = true;
                             }
                         }

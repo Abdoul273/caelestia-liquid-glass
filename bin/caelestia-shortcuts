@@ -44,6 +44,7 @@ SHORTCUTS = [
     ]),
     ("Panneaux du shell", "󰕮", [
         ("Super + A", "Centre de contrôle : Wi-Fi, Bluetooth, VPN, son, écran, raccourcis rapides, session (le tableau de bord y est en bouton)"),
+        ("Super + Maj + N", "Notes rapides : écrire immédiatement et gérer les tâches AuraTask"),
         ("Super + N | clic sur l'heure", "Centre de notifications dans la Dynamic Island (Tout effacer, Ne pas déranger)"),
         ("Super + K", "Afficher/masquer lanceur, tableau de bord et OSD ensemble"),
         ("Ctrl + Alt + C", "Effacer toutes les notifications"),

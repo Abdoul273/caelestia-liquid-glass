@@ -44,10 +44,29 @@ Scope {
             const screenState = ShellState.forActive();
             if (Island.controlCenter) {
                 screenState.dashboard = false;
+                screenState.quickNotes = false;
                 screenState.controlCenter = !screenState.controlCenter;
                 return;
             }
+            screenState.quickNotes = false;
             screenState.dashboard = !screenState.dashboard;
+        }
+    }
+
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
+        name: "quicknotes"
+        description: qsTr("Ouvrir les notes rapides")
+        onPressed: {
+            if (root.hasFullscreen)
+                return;
+            const screenState = ShellState.forActive();
+            const wasOpen = screenState.dashboard && screenState.quickNotes;
+            screenState.controlCenter = false;
+            screenState.quickNotes = true;
+            screenState.dashboardTab = 0;
+            screenState.dashboard = !wasOpen;
         }
     }
 

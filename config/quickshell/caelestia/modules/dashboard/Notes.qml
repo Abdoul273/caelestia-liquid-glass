@@ -20,6 +20,10 @@ Item {
 
     property string query
 
+    // Super+Maj+N : panneau de notes seules, sans le sélecteur Notes | Tâches
+    readonly property bool quick: screenState.quickNotes
+    readonly property string shownMode: quick ? "notes" : Notes.mode
+
     readonly property list<var> visibleNotes: {
         const q = query.trim().toLowerCase();
         return q ? Notes.sorted.filter(n => n.body.toLowerCase().includes(q)) : Notes.sorted;
@@ -47,7 +51,7 @@ Item {
     }
 
     function focusMode(): void {
-        if (Notes.mode === "tasks") {
+        if (root.shownMode === "tasks") {
             tasksPane.focusInput();
             return;
         }
@@ -76,6 +80,8 @@ Item {
     Component.onCompleted: {
         if (Notes.loaded && !Notes.current)
             Notes.currentId = Notes.sorted[0]?.id ?? "";
+        if (root.screenState.notesActive)
+            focusTimer.restart();
     }
 
     // Curseur directement dans la note quand on arrive sur l'onglet
@@ -84,6 +90,11 @@ Item {
 
         function onNotesActiveChanged(): void {
             if (root.screenState.notesActive)
+                focusTimer.restart();
+        }
+
+        function onDashboardChanged(): void {
+            if (root.screenState.dashboard && root.screenState.notesActive)
                 focusTimer.restart();
         }
     }
@@ -103,8 +114,8 @@ Item {
 
     Shortcut {
         sequence: "Ctrl+T"
-        enabled: root.screenState.notesActive
-        onActivated: root.setMode(Notes.mode === "tasks" ? "notes" : "tasks")
+        enabled: root.screenState.notesActive && !root.quick
+        onActivated: root.setMode(root.shownMode === "tasks" ? "notes" : "tasks")
     }
 
     Shortcut {
@@ -145,17 +156,60 @@ Item {
                 anchors.margins: Tokens.padding.medium
                 spacing: Tokens.spacing.small
 
+                // En-tête des notes rapides
+                RowLayout {
+                    visible: root.quick
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Tokens.padding.small
+                    Layout.topMargin: Tokens.padding.extraSmall
+                    Layout.bottomMargin: Tokens.padding.extraSmall
+                    spacing: Tokens.spacing.small
+
+                    StyledRect {
+                        implicitWidth: 34
+                        implicitHeight: 34
+                        radius: Tokens.rounding.full
+                        color: Colours.palette.m3primary
+
+                        MaterialIcon {
+                            anchors.centerIn: parent
+                            text: "edit_note"
+                            fill: 1
+                            color: Colours.palette.m3onPrimary
+                            fontStyle: Tokens.font.icon.builders.medium.scale(0.85).build()
+                        }
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 0
+
+                        StyledText {
+                            text: qsTr("Notes")
+                            font: Tokens.font.body.builders.large.size(15).weight(Font.DemiBold).build()
+                            color: Colours.palette.m3onSurface
+                        }
+
+                        StyledText {
+                            text: qsTr("Ctrl+N nouvelle · Échap fermer")
+                            font: Tokens.font.label.small
+                            color: Colours.palette.m3outline
+                        }
+                    }
+                }
+
                 // Sélecteur Notes | Tâches
                 StyledRect {
                     id: modeSwitch
 
+                    visible: !root.quick
                     Layout.fillWidth: true
                     implicitHeight: 40
                     radius: Tokens.rounding.full
                     color: Glass.tile(Colours.tPalette.m3surfaceContainerHigh)
 
                     StyledRect {
-                        x: Notes.mode === "tasks" ? parent.width / 2 + 2 : 4
+                        x: root.shownMode === "tasks" ? parent.width / 2 + 2 : 4
                         y: 4
                         width: parent.width / 2 - 6
                         height: parent.height - 8
@@ -185,7 +239,7 @@ Item {
                 }
 
                 RowLayout {
-                    visible: Notes.mode === "notes"
+                    visible: root.shownMode === "notes"
                     Layout.fillWidth: true
                     spacing: Tokens.spacing.small
 
@@ -220,7 +274,7 @@ Item {
                 StyledListView {
                     id: list
 
-                    visible: Notes.mode === "notes"
+                    visible: root.shownMode === "notes"
                     Layout.fillWidth: true
                     Layout.fillHeight: true
 
@@ -344,7 +398,7 @@ Item {
 
                 // Résumé des tâches (mode Tâches)
                 ColumnLayout {
-                    visible: Notes.mode === "tasks"
+                    visible: root.shownMode === "tasks"
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     spacing: Tokens.spacing.medium
@@ -408,7 +462,7 @@ Item {
                 }
 
                 StyledText {
-                    visible: Notes.mode === "notes"
+                    visible: root.shownMode === "notes"
                     Layout.alignment: Qt.AlignHCenter
                     readonly property int n: Notes.notes.filter(n => n.body.trim()).length
 
@@ -432,11 +486,11 @@ Item {
 
                 anchors.fill: parent
                 anchors.margins: Tokens.padding.medium
-                visible: Notes.mode === "tasks"
+                visible: root.shownMode === "tasks"
             }
 
             ColumnLayout {
-                visible: Notes.mode === "notes"
+                visible: root.shownMode === "notes"
                 anchors.fill: parent
                 anchors.margins: Tokens.padding.large
                 anchors.topMargin: Tokens.padding.medium
@@ -460,6 +514,11 @@ Item {
                     Row {
                         spacing: Tokens.spacing.extraSmall
                         opacity: Notes.current ? 1 : 0
+                        scale: Notes.dirty ? 1.04 : 1
+
+                        Behavior on scale {
+                            Anim {}
+                        }
 
                         MaterialIcon {
                             anchors.verticalCenter: parent.verticalCenter

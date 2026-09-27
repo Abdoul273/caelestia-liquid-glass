@@ -9,6 +9,7 @@ PersistentProperties {
     property bool session
     property bool launcher
     property bool dashboard
+    property bool quickNotes
     property bool utilities
     property bool sidebar
     property bool controlCenter
