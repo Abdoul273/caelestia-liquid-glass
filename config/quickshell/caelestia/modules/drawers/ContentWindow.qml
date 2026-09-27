@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Effects
+import QtQuick.Shapes
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Wayland
@@ -193,6 +194,62 @@ StyledWindow {
             // Repliée : le rectangle remonte bien au-dessus de l'écran pour que la fusion ne laisse aucune bosse
             y: -radius - Math.max(0, 30 - panels.island.h * 3)
             implicitHeight: panels.island.h + radius
+        }
+
+        // Épaules de l'île : deux arrondis concaves qui la font sortir du bord de l'écran
+        Shape {
+            id: islandShoulders
+
+            readonly property real s: Math.min(18, panels.island.h * 0.55)
+            readonly property real lx: islandBg.x
+            readonly property real rx: islandBg.x + islandBg.width
+
+            anchors.fill: parent
+            visible: Island.hideTopBorder && s > 0.5
+            preferredRendererType: Shape.CurveRenderer
+
+            ShapePath {
+                fillColor: blobGroup.color
+                strokeColor: "transparent"
+                startX: islandShoulders.lx - islandShoulders.s
+                startY: -1
+                PathLine {
+                    x: islandShoulders.lx + 1
+                    y: -1
+                }
+                PathLine {
+                    x: islandShoulders.lx + 1
+                    y: islandShoulders.s
+                }
+                PathArc {
+                    x: islandShoulders.lx - islandShoulders.s
+                    y: 0
+                    radiusX: islandShoulders.s
+                    radiusY: islandShoulders.s
+                    direction: PathArc.Counterclockwise
+                }
+            }
+
+            ShapePath {
+                fillColor: blobGroup.color
+                strokeColor: "transparent"
+                startX: islandShoulders.rx + islandShoulders.s
+                startY: -1
+                PathLine {
+                    x: islandShoulders.rx - 1
+                    y: -1
+                }
+                PathLine {
+                    x: islandShoulders.rx - 1
+                    y: islandShoulders.s
+                }
+                PathArc {
+                    x: islandShoulders.rx + islandShoulders.s
+                    y: 0
+                    radiusX: islandShoulders.s
+                    radiusY: islandShoulders.s
+                }
+            }
         }
 
         PanelBg {

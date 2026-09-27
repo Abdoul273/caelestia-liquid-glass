@@ -256,13 +256,13 @@ install_files() {
 
     install_item config/caelestia/tools-base.css "$HOME/.config/caelestia/tools-base.css"
     install_item config/caelestia/templates/caelestia-tools.css "$HOME/.config/caelestia/templates/caelestia-tools.css"
-    for tool in caelestia-clipboard-pro caelestia-display-pro caelestia-emoji-pro caelestia-spotlight caelestia-shortcuts; do
+    for tool in caelestia-clipboard-pro caelestia-display-pro caelestia-emoji-pro caelestia-spotlight caelestia-shortcuts caelestia-clock; do
         install_item "config/$tool/style.css" "$HOME/.config/$tool/style.css"
     done
     for script in "$REPO_DIR"/bin/*; do
         install_item "bin/$(basename "$script")" "$HOME/.local/bin/$(basename "$script")"
     done
-    ok "Outils : presse-papiers, emojis, projection, recherche, calculatrice, raccourcis"
+    ok "Outils : presse-papiers, emojis, projection, recherche, calculatrice, horloge, raccourcis"
 
     install_item config/kitty/kitty.conf "$HOME/.config/kitty/kitty.conf"
     install_item config/kitty/liquid-glass.conf "$HOME/.config/kitty/liquid-glass.conf"

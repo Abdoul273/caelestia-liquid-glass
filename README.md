@@ -42,6 +42,7 @@ Verre translucide partout, Mission Control, Spotlight, animations fluides façon
 - **Mission Control** (`Super + Tab` ou **3 doigts vers le haut**) : tes fenêtres glissent en grille, tes bureaux s'affichent en haut, et un clic t'y emmène.
 - **Spotlight** (`Super + Espace`) : suggestions Google instantanées, fiche Wikipédia, résultats web, calculs.
 - **Calculatrice** (`Super + O`) : le résultat s'affiche pendant que tu tapes (`12,5 × 4 + 20 %`), et Entrée le copie.
+- **Horloge** (`Super + Maj + O`) : minuteur avec anneau, chronomètre à cadran et tours, pomodoro automatique et alarmes. Tout tourne dans la Dynamic Island : le minuteur continue et l'alarme sonne même app fermée.
 - **Aperçu rapide** : dans Nautilus, sélectionne un fichier et appuie sur **Espace**.
 - **Indicateur de bureau** en verre pendant les changements de bureau.
 - **Animations façon macOS** : ressorts courts et nets, léger rebond, glissade visible entre les bureaux. Consommation identique au Caelestia d'origine.
@@ -123,6 +124,7 @@ Appuie sur **`Super + H`** : une fenêtre en verre liste **tous** les raccourcis
 | `Super` | Lanceur d'applications |
 | `Super + Espace` | Recherche façon Spotlight |
 | `Super + O` | Calculatrice |
+| `Super + Maj + O` | Horloge (minuteur, chrono, pomodoro, alarmes) |
 | `Super + Tab` | Mission Control |
 | `Super + H` | Tous les raccourcis |
 | `Super + I` | Paramètres de Caelestia |

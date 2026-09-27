@@ -141,6 +141,17 @@ hl.window_rule({
     border_color = glass_border,
     animation    = "popin 90%",
 })
+-- Horloge : minuteur, chrono, pomodoro, alarmes, reliée à la Dynamic Island
+hl.window_rule({
+    match        = { class = "io.caelestia.Clock" },
+    float        = true,
+    size         = "440 700",
+    move         = "(monitor_w*0.5-220) (monitor_h*0.1)",
+    opacity      = "1.0 override 1.0 override",
+    border_size  = 2,
+    border_color = glass_border,
+    animation    = "popin 90%",
+})
 hl.window_rule({
     match        = { class = "io.caelestia.Calc" },
     float        = true,
@@ -157,6 +168,7 @@ rebind("SUPER + Period", hl.dsp.exec_cmd(bin .. "caelestia-emoji-pro"))
 rebind("SUPER + P", hl.dsp.exec_cmd(bin .. "caelestia-display-pro"))
 rebind("SUPER + Space", hl.dsp.exec_cmd(bin .. "caelestia-spotlight"))
 rebind("SUPER + O", hl.dsp.exec_cmd(bin .. "caelestia-spotlight calc"))
+rebind("SUPER + SHIFT + O", hl.dsp.exec_cmd(bin .. "caelestia-clock"))
 rebind("SUPER + H", hl.dsp.exec_cmd(bin .. "caelestia-shortcuts"))
 
 

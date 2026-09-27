@@ -1,0 +1,841 @@
+#!/usr/bin/env python3
+"""Horloge Caelestia : minuteur, chronomètre, pomodoro et alarmes, en liquid glass.
+
+L'app est la télécommande de la Dynamic Island : tout tourne dans le shell
+(le minuteur continue et l'alarme sonne même app fermée).
+  - commandes : qs -c caelestia ipc call island …
+  - état en direct : ~/.local/state/caelestia/island-clock.json (écrit par l'île)
+  - alarmes : ~/.local/share/caelestia/alarms.json (lu par l'île)
+
+Super + Maj + O pour l'ouvrir, Échap pour la fermer.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import re
+import subprocess
+import sys
+import time
+import uuid
+from datetime import datetime, timedelta
+from pathlib import Path
+
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Gdk", "4.0")
+gi.require_version("PangoCairo", "1.0")
+from gi.repository import Gdk, Gio, GLib, Gtk, Pango, PangoCairo  # noqa: E402
+
+HOME = Path.home()
+CSS_FILE = HOME / ".config/caelestia-clock/style.css"
+THEME_FILE = HOME / ".local/state/caelestia/theme/caelestia-tools.css"
+STATE_FILE = HOME / ".local/state/caelestia/island-clock.json"
+ALARMS_FILE = HOME / ".local/share/caelestia/alarms.json"
+PREFS_FILE = HOME / ".local/state/caelestia/clock-app.json"
+
+ORANGE = (1.0, 0.624, 0.039)
+GREEN = (0.196, 0.843, 0.294)
+DAYS = ["L", "M", "M", "J", "V", "S", "D"]  # lundi → dimanche
+DAY_JS = [1, 2, 3, 4, 5, 6, 0]  # jour JavaScript (0 = dimanche) pour chaque case
+DAY_NAMES = ["lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim."]
+
+
+# ---------------------------------------------------------------- utilitaires
+
+def island(*args: str) -> None:
+    subprocess.Popen(["qs", "-c", "caelestia", "ipc", "call", "island", *args],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+
+
+def theme_colours() -> dict[str, tuple[float, float, float]]:
+    colours = {"t_on_surface": (0.9, 0.88, 0.9), "t_primary": (0.76, 0.77, 0.89), "t_surface": (0.08, 0.08, 0.09)}
+    try:
+        for name, hexa in re.findall(r"@define-color\s+(\w+)\s+#([0-9a-fA-F]{6})", THEME_FILE.read_text()):
+            colours[name] = tuple(int(hexa[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    except OSError:
+        pass
+    return colours
+
+
+def fmt(sec: float, centi: bool = False) -> str:
+    sec = max(0.0, sec)
+    h, rem = divmod(int(sec), 3600)
+    m, s = divmod(rem, 60)
+    if centi:
+        cs = int((sec - int(sec)) * 100)
+        return f"{h}:{m:02d}:{s:02d},{cs:02d}" if h else f"{m:02d}:{s:02d},{cs:02d}"
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
+
+
+def load_json(path: Path, default):
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return default
+
+
+def save_json(path: Path, data) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+    tmp.replace(path)
+
+
+# ---------------------------------------------------------------- cadrans
+
+class Ring(Gtk.DrawingArea):
+    """Anneau de progression avec extrémité lumineuse (minuteur, pomodoro)."""
+
+    def __init__(self, size: int = 250) -> None:
+        super().__init__()
+        self.set_content_width(size)
+        self.set_content_height(size)
+        self.progress = 1.0
+        self.colour = ORANGE
+        self.dim = False
+        self.set_draw_func(self.draw)
+
+    def draw(self, _area, cr, w, h) -> None:
+        theme = theme_colours()
+        fg = theme["t_on_surface"]
+        cx, cy = w / 2, h / 2
+        lw = 14
+        r = min(w, h) / 2 - lw
+        cr.set_line_cap(1)  # rond
+        cr.set_line_width(lw)
+        cr.set_source_rgba(*fg, 0.08)
+        cr.arc(cx, cy, r, 0, 2 * math.pi)
+        cr.stroke()
+        p = max(0.0, min(1.0, self.progress))
+        if p <= 0.001:
+            return
+        a0 = -math.pi / 2
+        a1 = a0 + p * 2 * math.pi
+        alpha = 0.45 if self.dim else 1.0
+        # Halo doux sous l'arc
+        cr.set_line_width(lw + 10)
+        cr.set_source_rgba(*self.colour, 0.10 * alpha)
+        cr.arc(cx, cy, r, a0, a1)
+        cr.stroke()
+        cr.set_line_width(lw)
+        cr.set_source_rgba(*self.colour, alpha)
+        cr.arc(cx, cy, r, a0, a1)
+        cr.stroke()
+        # Point lumineux au bout
+        ex, ey = cx + r * math.cos(a1), cy + r * math.sin(a1)
+        cr.set_source_rgba(1, 1, 1, 0.9 * alpha)
+        cr.arc(ex, ey, lw / 2 - 3.5, 0, 2 * math.pi)
+        cr.fill()
+
+
+class Dial(Gtk.DrawingArea):
+    """Cadran de chronomètre : graduations, aiguille des secondes et du tour en cours."""
+
+    def __init__(self, size: int = 250) -> None:
+        super().__init__()
+        self.set_content_width(size)
+        self.set_content_height(size)
+        self.elapsed = 0.0
+        self.lap_elapsed = None
+        self.set_draw_func(self.draw)
+
+    def draw(self, _area, cr, w, h) -> None:
+        theme = theme_colours()
+        fg = theme["t_on_surface"]
+        cx, cy = w / 2, h / 2
+        r = min(w, h) / 2 - 6
+        for i in range(240):
+            a = i / 240 * 2 * math.pi - math.pi / 2
+            major = i % 20 == 0
+            mid = i % 4 == 0
+            if not (major or mid):
+                continue
+            ln = 12 if major else 6
+            cr.set_line_width(2.2 if major else 1.2)
+            cr.set_source_rgba(*fg, 0.85 if major else 0.3)
+            cr.move_to(cx + (r - ln) * math.cos(a), cy + (r - ln) * math.sin(a))
+            cr.line_to(cx + r * math.cos(a), cy + r * math.sin(a))
+            cr.stroke()
+        layout = PangoCairo.create_layout(cr)
+        layout.set_font_description(Pango.FontDescription.from_string("Rubik 11"))
+        for n in range(5, 61, 5):
+            a = n / 60 * 2 * math.pi - math.pi / 2
+            layout.set_text(str(n), -1)
+            tw, th = layout.get_pixel_size()
+            cr.set_source_rgba(*fg, 0.75)
+            cr.move_to(cx + (r - 30) * math.cos(a) - tw / 2, cy + (r - 30) * math.sin(a) - th / 2)
+            PangoCairo.show_layout(cr, layout)
+
+        def hand(value: float, colour, width: float, alpha: float = 1.0) -> None:
+            a = (value % 60) / 60 * 2 * math.pi - math.pi / 2
+            cr.set_line_cap(1)
+            cr.set_line_width(width)
+            cr.set_source_rgba(*colour, alpha)
+            cr.move_to(cx - 18 * math.cos(a), cy - 18 * math.sin(a))
+            cr.line_to(cx + (r - 8) * math.cos(a), cy + (r - 8) * math.sin(a))
+            cr.stroke()
+
+        if self.lap_elapsed is not None:
+            hand(self.lap_elapsed, theme["t_primary"], 2.5, 0.9)
+        hand(self.elapsed, ORANGE, 3)
+        cr.set_source_rgba(*ORANGE)
+        cr.arc(cx, cy, 5.5, 0, 2 * math.pi)
+        cr.fill()
+        cr.set_source_rgba(*theme["t_surface"])
+        cr.arc(cx, cy, 2.2, 0, 2 * math.pi)
+        cr.fill()
+
+
+class Picker(Gtk.Box):
+    """Sélecteur h / min / s façon roue : molette, flèches ou clic sur ▲ ▼."""
+
+    def __init__(self, units=("h", "min", "s"), limits=(23, 59, 59), values=(0, 5, 0), on_change=None) -> None:
+        super().__init__(spacing=6, halign=Gtk.Align.CENTER)
+        self.add_css_class("picker")
+        self.limits = limits
+        self.values = list(values)
+        self.labels: list[Gtk.Label] = []
+        self.on_change = on_change
+        for i, unit in enumerate(units):
+            if i:
+                sep = Gtk.Label(label=":")
+                sep.add_css_class("picker-sep")
+                self.append(sep)
+            col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            col.add_css_class("picker-col")
+            up = Gtk.Button(label="󰅃")
+            up.add_css_class("picker-arrow")
+            up.connect("clicked", lambda _b, i=i: self.step(i, 1))
+            col.append(up)
+            lab = Gtk.Label(label=f"{self.values[i]:02d}")
+            lab.add_css_class("picker-value")
+            self.labels.append(lab)
+            col.append(lab)
+            down = Gtk.Button(label="󰅀")
+            down.add_css_class("picker-arrow")
+            down.connect("clicked", lambda _b, i=i: self.step(i, -1))
+            col.append(down)
+            u = Gtk.Label(label=unit)
+            u.add_css_class("picker-unit")
+            col.append(u)
+            scroll = Gtk.EventControllerScroll.new(Gtk.EventControllerScrollFlags.VERTICAL)
+            scroll.connect("scroll", lambda _c, _dx, dy, i=i: (self.step(i, -1 if dy > 0 else 1), True)[1])
+            col.add_controller(scroll)
+            self.append(col)
+
+    def step(self, i: int, d: int) -> None:
+        self.values[i] = (self.values[i] + d) % (self.limits[i] + 1)
+        self.refresh()
+        if self.on_change:
+            self.on_change()
+
+    def set(self, values) -> None:
+        self.values = list(values)
+        self.refresh()
+
+    def refresh(self) -> None:
+        for lab, v in zip(self.labels, self.values):
+            lab.set_label(f"{v:02d}")
+
+
+def pill(label: str, css: str, cb) -> Gtk.Button:
+    b = Gtk.Button(label=label)
+    b.add_css_class("pill")
+    b.add_css_class(css)
+    b.connect("clicked", lambda *_: cb())
+    return b
+
+
+# ---------------------------------------------------------------- application
+
+class ClockApp(Gtk.Application):
+    def __init__(self) -> None:
+        super().__init__(application_id="io.caelestia.Clock", flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
+        self.window: Gtk.ApplicationWindow | None = None
+        self.state: dict = {}
+        self.prefs = load_json(PREFS_FILE, {"tab": "timer", "timer": [0, 5, 0], "work": 25, "rest": 5})
+        self.alarms: list[dict] = load_json(ALARMS_FILE, [])
+        self.monitors: list[Gio.FileMonitor] = []
+        self.tick_id = 0
+        self.start_tab = None
+
+    # -- cycle de vie
+
+    def do_command_line(self, cmd) -> int:
+        args = cmd.get_arguments()[1:]
+        if args and args[0] in ("timer", "stopwatch", "pomodoro", "alarms"):
+            self.start_tab = args[0]
+        self.activate()
+        return 0
+
+    def do_activate(self) -> None:
+        if self.window is not None:
+            if self.start_tab:
+                self.tab_buttons[self.start_tab].set_active(True)
+            self.window.present()
+            return
+        self.load_css()
+        self.build()
+        self.watch()
+        self.read_state()
+        self.window.present()
+        self.tick_id = GLib.timeout_add(33, self.tick)
+
+    def load_css(self) -> None:
+        provider = Gtk.CssProvider()
+        try:
+            provider.load_from_path(str(CSS_FILE))
+            Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        except GLib.Error:
+            pass
+
+    def watch(self) -> None:
+        for path, cb in ((STATE_FILE, self.read_state), (ALARMS_FILE, self.read_alarms), (THEME_FILE, self.queue_redraw)):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            mon = Gio.File.new_for_path(str(path)).monitor_file(Gio.FileMonitorFlags.WATCH_MOVES, None)
+            mon.connect("changed", lambda *_a, cb=cb: GLib.idle_add(cb))
+            self.monitors.append(mon)
+
+    def save_prefs(self) -> None:
+        save_json(PREFS_FILE, self.prefs)
+
+    # -- construction
+
+    def build(self) -> None:
+        self.window = Gtk.ApplicationWindow(application=self, title="Horloge")
+        self.window.set_default_size(440, 700)
+        self.window.set_resizable(False)
+        keys = Gtk.EventControllerKey()
+        keys.connect("key-pressed", self.on_key)
+        self.window.add_controller(keys)
+
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        root.add_css_class("clock-root")
+        self.window.set_child(root)
+
+        # Contrôle segmenté
+        tabs = Gtk.Box(spacing=4, halign=Gtk.Align.CENTER)
+        tabs.add_css_class("segmented")
+        root.append(tabs)
+        self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.SLIDE_LEFT_RIGHT, transition_duration=280, vexpand=True)
+        self.tab_buttons: dict[str, Gtk.ToggleButton] = {}
+        group = None
+        for name, icon, title in (("timer", "󰔛", "Minuteur"), ("stopwatch", "󱎫", "Chrono"),
+                                  ("pomodoro", "󰄉", "Pomodoro"), ("alarms", "󰀠", "Alarmes")):
+            b = Gtk.ToggleButton()
+            box = Gtk.Box(spacing=6)
+            ic = Gtk.Label(label=icon)
+            ic.add_css_class("seg-icon")
+            box.append(ic)
+            box.append(Gtk.Label(label=title))
+            b.set_child(box)
+            b.add_css_class("seg")
+            if group:
+                b.set_group(group)
+            group = group or b
+            b.connect("toggled", lambda btn, n=name: btn.get_active() and self.show_tab(n))
+            tabs.append(b)
+            self.tab_buttons[name] = b
+        root.append(self.stack)
+
+        self.stack.add_named(self.build_timer(), "timer")
+        self.stack.add_named(self.build_stopwatch(), "stopwatch")
+        self.stack.add_named(self.build_pomodoro(), "pomodoro")
+        self.stack.add_named(self.build_alarms(), "alarms")
+
+        hint = Gtk.Label(label="Tout continue dans la Dynamic Island, même app fermée  •  Échap : fermer")
+        hint.add_css_class("hint")
+        root.append(hint)
+
+        tab = self.start_tab or self.prefs.get("tab", "timer")
+        self.tab_buttons.get(tab, self.tab_buttons["timer"]).set_active(True)
+        self.stack.set_visible_child_name(tab)
+
+    def show_tab(self, name: str) -> None:
+        self.stack.set_visible_child_name(name)
+        self.prefs["tab"] = name
+        self.save_prefs()
+
+    def page(self) -> Gtk.Box:
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        box.add_css_class("page")
+        return box
+
+    # Minuteur ----------------------------------------------------------
+
+    def build_timer(self) -> Gtk.Widget:
+        page = self.page()
+        overlay = Gtk.Overlay(halign=Gtk.Align.CENTER)
+        self.t_ring = Ring(300)
+        overlay.set_child(self.t_ring)
+        centre = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
+        overlay.add_overlay(centre)
+        self.t_label = Gtk.Label()
+        self.t_label.add_css_class("ring-label")
+        centre.append(self.t_label)
+        self.t_time = Gtk.Label(label="05:00")
+        self.t_time.add_css_class("big-time")
+        centre.append(self.t_time)
+        self.t_end = Gtk.Label()
+        self.t_end.add_css_class("ring-sub")
+        centre.append(self.t_end)
+        self.t_picker = Picker(values=self.prefs.get("timer", [0, 5, 0]), on_change=self.on_timer_pick)
+        centre.append(self.t_picker)
+        page.append(overlay)
+
+        self.t_presets = Gtk.FlowBox(max_children_per_line=5, min_children_per_line=5, selection_mode=Gtk.SelectionMode.NONE,
+                                     homogeneous=True, column_spacing=6, row_spacing=6)
+        self.t_presets.add_css_class("presets")
+        for m in (1, 3, 5, 10, 15, 20, 25, 30, 45, 60):
+            b = Gtk.Button(label=f"{m} min" if m < 60 else "1 h")
+            b.add_css_class("chip")
+            b.connect("clicked", lambda _b, m=m: self.t_picker.set((m // 60, m % 60, 0)) or self.on_timer_pick())
+            self.t_presets.append(b)
+        page.append(self.t_presets)
+
+        self.t_name = Gtk.Entry(placeholder_text="Nom du minuteur (optionnel) — ex. Pâtes")
+        self.t_name.add_css_class("name-entry")
+        self.t_name.connect("activate", lambda *_: self.timer_start())
+        page.append(self.t_name)
+
+        row = Gtk.Box(spacing=12, halign=Gtk.Align.CENTER)
+        row.add_css_class("actions")
+        self.t_cancel = pill("Annuler", "grey", lambda: island("stop"))
+        self.t_plus = pill("+1 min", "grey", lambda: island("addMinute"))
+        self.t_main = pill("Démarrer", "orange", self.timer_main)
+        for b in (self.t_cancel, self.t_plus, self.t_main):
+            row.append(b)
+        page.append(row)
+        return page
+
+    def on_timer_pick(self) -> None:
+        self.prefs["timer"] = self.t_picker.values
+        self.save_prefs()
+        self.refresh()
+
+    def timer_seconds(self) -> int:
+        h, m, s = self.t_picker.values
+        return h * 3600 + m * 60 + s
+
+    def timer_start(self) -> None:
+        sec = self.timer_seconds()
+        if sec <= 0:
+            return
+        island("timerFor", f"{sec}s", self.t_name.get_text().strip())
+
+    def timer_main(self) -> None:
+        if self.state.get("kind") == "timer" and not self.state.get("pomodoro", {}).get("on"):
+            island("pause")
+        else:
+            self.timer_start()
+
+    # Chronomètre -------------------------------------------------------
+
+    def build_stopwatch(self) -> Gtk.Widget:
+        page = self.page()
+        self.s_dial = Dial(250)
+        self.s_dial.set_halign(Gtk.Align.CENTER)
+        page.append(self.s_dial)
+        self.s_time = Gtk.Label(label="00:00,00")
+        self.s_time.add_css_class("big-time")
+        self.s_time.add_css_class("stopwatch-time")
+        page.append(self.s_time)
+        row = Gtk.Box(spacing=12, halign=Gtk.Align.CENTER)
+        row.add_css_class("actions")
+        self.s_left = pill("Tour", "grey", self.stopwatch_left)
+        self.s_main = pill("Démarrer", "green", self.stopwatch_main)
+        row.append(self.s_left)
+        row.append(self.s_main)
+        page.append(row)
+        scroll = Gtk.ScrolledWindow(vexpand=True)
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.s_laps = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
+        self.s_laps.add_css_class("laps")
+        scroll.set_child(self.s_laps)
+        page.append(scroll)
+        self.laps_shown = None
+        return page
+
+    def stopwatch_main(self) -> None:
+        st = self.state
+        if st.get("kind") == "stopwatch":
+            island("pause")
+        else:
+            island("stopwatch")
+
+    def stopwatch_left(self) -> None:
+        st = self.state
+        if st.get("kind") != "stopwatch":
+            return
+        if st.get("paused"):
+            island("stop")  # Réinitialiser
+        else:
+            island("lap")
+
+    # Pomodoro ----------------------------------------------------------
+
+    def build_pomodoro(self) -> Gtk.Widget:
+        page = self.page()
+        overlay = Gtk.Overlay(halign=Gtk.Align.CENTER)
+        self.p_ring = Ring(290)
+        overlay.set_child(self.p_ring)
+        centre = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
+        overlay.add_overlay(centre)
+        self.p_phase = Gtk.Label(label="Focus")
+        self.p_phase.add_css_class("ring-label")
+        centre.append(self.p_phase)
+        self.p_time = Gtk.Label(label="25:00")
+        self.p_time.add_css_class("big-time")
+        centre.append(self.p_time)
+        self.p_round = Gtk.Label(label="Session 1")
+        self.p_round.add_css_class("ring-sub")
+        centre.append(self.p_round)
+        page.append(overlay)
+
+        grid = Gtk.Box(spacing=14, halign=Gtk.Align.CENTER)
+        grid.add_css_class("pomo-settings")
+        self.p_work = self.spin_card(grid, "Focus", self.prefs.get("work", 25), 5, 90, "work")
+        self.p_rest = self.spin_card(grid, "Pause", self.prefs.get("rest", 5), 1, 30, "rest")
+        page.append(grid)
+
+        presets = Gtk.Box(spacing=8, halign=Gtk.Align.CENTER)
+        for w, r in ((25, 5), (50, 10), (90, 15)):
+            b = Gtk.Button(label=f"{w} / {r}")
+            b.add_css_class("chip")
+            b.connect("clicked", lambda _b, w=w, r=r: (self.p_work.set_value(w), self.p_rest.set_value(r)))
+            presets.append(b)
+        page.append(presets)
+
+        row = Gtk.Box(spacing=12, halign=Gtk.Align.CENTER)
+        row.add_css_class("actions")
+        self.p_stop = pill("Arrêter", "grey", lambda: island("stop"))
+        self.p_main = pill("Commencer", "orange", self.pomo_main)
+        row.append(self.p_stop)
+        row.append(self.p_main)
+        page.append(row)
+        return page
+
+    def spin_card(self, parent: Gtk.Box, title: str, value: int, lo: int, hi: int, key: str) -> Gtk.SpinButton:
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        card.add_css_class("card")
+        lab = Gtk.Label(label=title)
+        lab.add_css_class("card-title")
+        card.append(lab)
+        spin = Gtk.SpinButton.new_with_range(lo, hi, 1)
+        spin.set_value(value)
+        spin.add_css_class("card-spin")
+
+        def changed(s):
+            self.prefs[key] = int(s.get_value())
+            self.save_prefs()
+            self.refresh()
+
+        spin.connect("value-changed", changed)
+        card.append(spin)
+        unit = Gtk.Label(label="minutes")
+        unit.add_css_class("picker-unit")
+        card.append(unit)
+        parent.append(card)
+        return spin
+
+    def pomo_main(self) -> None:
+        st = self.state
+        if st.get("pomodoro", {}).get("on") and st.get("kind") == "timer":
+            island("pause")
+        else:
+            island("pomodoro", f"{int(self.p_work.get_value())}m", f"{int(self.p_rest.get_value())}m")
+
+    # Alarmes -----------------------------------------------------------
+
+    def build_alarms(self) -> Gtk.Widget:
+        page = self.page()
+        head = Gtk.Box(spacing=8)
+        self.a_next = Gtk.Label(xalign=0, hexpand=True)
+        self.a_next.add_css_class("next-alarm")
+        head.append(self.a_next)
+        add = Gtk.Button(label="󰐕")
+        add.add_css_class("round-add")
+        add.connect("clicked", lambda *_: self.toggle_editor())
+        head.append(add)
+        page.append(head)
+
+        # Éditeur (replié par défaut)
+        self.a_editor = Gtk.Revealer(transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN, transition_duration=260)
+        ed = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        ed.add_css_class("editor")
+        now = datetime.now() + timedelta(hours=1)
+        self.a_picker = Picker(units=("h", "min"), limits=(23, 59), values=(now.hour, 0))
+        ed.append(self.a_picker)
+        self.a_name = Gtk.Entry(placeholder_text="Nom de l'alarme — ex. Réveil")
+        self.a_name.add_css_class("name-entry")
+        ed.append(self.a_name)
+        days = Gtk.Box(spacing=6, halign=Gtk.Align.CENTER)
+        self.a_days: list[Gtk.ToggleButton] = []
+        for d in DAYS:
+            t = Gtk.ToggleButton(label=d)
+            t.add_css_class("day")
+            days.append(t)
+            self.a_days.append(t)
+        ed.append(days)
+        hint = Gtk.Label(label="Aucun jour coché : l'alarme sonne une seule fois")
+        hint.add_css_class("hint")
+        ed.append(hint)
+        row = Gtk.Box(spacing=10, halign=Gtk.Align.CENTER)
+        row.append(pill("Annuler", "grey", self.toggle_editor))
+        row.append(pill("Enregistrer", "orange", self.save_alarm))
+        ed.append(row)
+        self.a_editor.set_child(ed)
+        page.append(self.a_editor)
+
+        scroll = Gtk.ScrolledWindow(vexpand=True)
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.a_list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
+        self.a_list.add_css_class("alarms")
+        scroll.set_child(self.a_list)
+        page.append(scroll)
+        self.render_alarms()
+        return page
+
+    def toggle_editor(self) -> None:
+        self.a_editor.set_reveal_child(not self.a_editor.get_reveal_child())
+
+    def save_alarm(self) -> None:
+        h, m = self.a_picker.values
+        days = [DAY_JS[i] for i, t in enumerate(self.a_days) if t.get_active()]
+        self.alarms.append({"id": uuid.uuid4().hex[:8], "time": f"{h:02d}:{m:02d}",
+                            "label": self.a_name.get_text().strip(), "days": days, "enabled": True})
+        self.alarms.sort(key=lambda a: a["time"])
+        save_json(ALARMS_FILE, self.alarms)
+        self.a_name.set_text("")
+        for t in self.a_days:
+            t.set_active(False)
+        self.a_editor.set_reveal_child(False)
+        self.render_alarms()
+
+    def read_alarms(self) -> bool:
+        self.alarms = load_json(ALARMS_FILE, [])
+        self.render_alarms()
+        return False
+
+    def render_alarms(self) -> None:
+        while (row := self.a_list.get_first_child()) is not None:
+            self.a_list.remove(row)
+        if not self.alarms:
+            empty = Gtk.Label(label="Aucune alarme.\nAppuie sur + pour en créer une.")
+            empty.add_css_class("empty")
+            empty.set_justify(Gtk.Justification.CENTER)
+            self.a_list.append(empty)
+        for a in self.alarms:
+            row = Gtk.Box(spacing=12)
+            row.add_css_class("alarm-row")
+            if not a.get("enabled"):
+                row.add_css_class("off")
+            left = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True)
+            t = Gtk.Label(label=a["time"], xalign=0)
+            t.add_css_class("alarm-time")
+            left.append(t)
+            days = a.get("days") or []
+            if not days:
+                when = "Une fois"
+            elif sorted(days) == [0, 1, 2, 3, 4, 5, 6]:
+                when = "Tous les jours"
+            elif sorted(days) == [1, 2, 3, 4, 5]:
+                when = "En semaine"
+            elif sorted(days) == [0, 6]:
+                when = "Le week-end"
+            else:
+                when = " ".join(DAY_NAMES[DAY_JS.index(d)] for d in sorted(days, key=lambda d: DAY_JS.index(d)))
+            sub = Gtk.Label(label=f"{a.get('label') or 'Alarme'}  ·  {when}", xalign=0)
+            sub.add_css_class("alarm-sub")
+            left.append(sub)
+            row.append(left)
+            delete = Gtk.Button(label="󰩹")
+            delete.add_css_class("alarm-delete")
+            delete.connect("clicked", lambda _b, i=a["id"]: self.delete_alarm(i))
+            row.append(delete)
+            sw = Gtk.Switch(active=bool(a.get("enabled")), valign=Gtk.Align.CENTER)
+            sw.connect("notify::active", lambda s, _p, i=a["id"]: self.enable_alarm(i, s.get_active()))
+            row.append(sw)
+            self.a_list.append(row)
+        self.update_next_alarm()
+
+    def enable_alarm(self, alarm_id: str, on: bool) -> None:
+        for a in self.alarms:
+            if a["id"] == alarm_id:
+                a["enabled"] = on
+        save_json(ALARMS_FILE, self.alarms)
+        self.render_alarms()
+
+    def delete_alarm(self, alarm_id: str) -> None:
+        self.alarms = [a for a in self.alarms if a["id"] != alarm_id]
+        save_json(ALARMS_FILE, self.alarms)
+        self.render_alarms()
+
+    def update_next_alarm(self) -> None:
+        now = datetime.now()
+        best = None
+        for a in self.alarms:
+            if not a.get("enabled"):
+                continue
+            h, m = map(int, a["time"].split(":"))
+            for add in range(8):
+                d = (now + timedelta(days=add)).replace(hour=h, minute=m, second=0, microsecond=0)
+                js_day = (d.weekday() + 1) % 7
+                if d > now and (not a.get("days") or js_day in a["days"]):
+                    best = d if best is None or d < best else best
+                    break
+        if best is None:
+            self.a_next.set_label("Aucune alarme prévue")
+            return
+        delta = best - now
+        hrs, rem = divmod(int(delta.total_seconds()), 3600)
+        mins = rem // 60
+        self.a_next.set_label(f"Prochaine alarme dans {hrs} h {mins:02d}" if hrs else f"Prochaine alarme dans {mins} min")
+
+    # -- état en direct
+
+    def read_state(self) -> bool:
+        self.state = load_json(STATE_FILE, {})
+        self.refresh()
+        return False
+
+    def queue_redraw(self) -> bool:
+        for w in (self.t_ring, self.p_ring, self.s_dial):
+            w.queue_draw()
+        return False
+
+    def value(self) -> float:
+        st = self.state
+        t = st.get("paused") or time.time() * 1000
+        if st.get("kind") == "timer":
+            return max(0.0, (st.get("end", 0) - t) / 1000)
+        if st.get("kind") == "stopwatch":
+            return (t - st.get("start", 0)) / 1000
+        return 0.0
+
+    def refresh(self) -> None:
+        st = self.state
+        kind = st.get("kind", "")
+        paused = bool(st.get("paused"))
+        pomo = st.get("pomodoro", {}) or {}
+        pomo_on = pomo.get("on") and kind == "timer"
+        timer_on = kind == "timer" and not pomo_on
+
+        # Minuteur
+        self.t_picker.set_visible(not timer_on)
+        self.t_presets.set_visible(not timer_on)
+        self.t_name.set_visible(not timer_on)
+        self.t_time.set_visible(timer_on)
+        self.t_end.set_visible(timer_on)
+        self.t_cancel.set_sensitive(timer_on)
+        self.t_plus.set_visible(timer_on)
+        self.t_label.set_label(st.get("label") if timer_on and st.get("label") else ("Minuteur" if timer_on else "Durée"))
+        self.t_main.set_label("Reprendre" if timer_on and paused else "Pause" if timer_on else "Démarrer")
+        self.t_ring.dim = paused or not timer_on
+        if timer_on:
+            end = datetime.fromtimestamp(st.get("end", 0) / 1000)
+            self.t_end.set_label("En pause" if paused else f"Fin à {end:%H:%M}")
+
+        # Chrono
+        sw_on = kind == "stopwatch"
+        self.s_main.set_label("Reprendre" if sw_on and paused else "Arrêter" if sw_on else "Démarrer")
+        for c in ("green", "red"):
+            self.s_main.remove_css_class(c)
+        self.s_main.add_css_class("red" if sw_on and not paused else "green")
+        self.s_left.set_label("Réinitialiser" if sw_on and paused else "Tour")
+        self.s_left.set_sensitive(sw_on)
+        laps = st.get("laps", []) if sw_on else []
+        if laps != self.laps_shown:
+            self.laps_shown = list(laps)
+            self.render_laps(laps)
+
+        # Pomodoro
+        rest = pomo.get("phase") == "rest"
+        self.p_phase.set_label(("Pause" if rest else "Focus") if pomo_on else "Pomodoro")
+        self.p_round.set_label(f"Session {pomo.get('round', 1)}" if pomo_on else f"{int(self.p_work.get_value())} min / {int(self.p_rest.get_value())} min")
+        self.p_main.set_label("Reprendre" if pomo_on and paused else "Pause" if pomo_on else "Commencer")
+        self.p_stop.set_sensitive(bool(pomo_on))
+        self.p_ring.colour = GREEN if pomo_on and rest else ORANGE
+        self.p_ring.dim = paused
+        for w in (self.p_work, self.p_rest):
+            w.set_sensitive(not pomo_on)
+        self.tick()
+
+    def render_laps(self, laps: list[float]) -> None:
+        while (row := self.s_laps.get_first_child()) is not None:
+            self.s_laps.remove(row)
+        splits = [laps[i] - (laps[i - 1] if i else 0) for i in range(len(laps))]
+        best = min(splits) if len(splits) > 1 else None
+        worst = max(splits) if len(splits) > 1 else None
+        for i in reversed(range(len(splits))):
+            row = Gtk.Box()
+            row.add_css_class("lap-row")
+            if splits[i] == best:
+                row.add_css_class("best")
+            elif splits[i] == worst:
+                row.add_css_class("worst")
+            n = Gtk.Label(label=f"Tour {i + 1}", xalign=0, hexpand=True)
+            v = Gtk.Label(label=fmt(splits[i], centi=True), xalign=1)
+            v.add_css_class("lap-time")
+            row.append(n)
+            row.append(v)
+            self.s_laps.append(row)
+
+    def tick(self) -> bool:
+        st = self.state
+        kind = st.get("kind", "")
+        v = self.value()
+        pomo = st.get("pomodoro", {}) or {}
+        pomo_on = pomo.get("on") and kind == "timer"
+        total = st.get("total") or 1
+        if kind == "timer" and not pomo_on:
+            self.t_time.set_label(fmt(v))
+            self.t_ring.progress = v / total
+        else:
+            self.t_ring.progress = 1.0 if self.timer_seconds() > 0 else 0.0
+            self.t_ring.dim = True
+        self.t_ring.queue_draw()
+
+        if kind == "stopwatch":
+            self.s_time.set_label(fmt(v, centi=True))
+            laps = st.get("laps", [])
+            self.s_dial.elapsed = v
+            self.s_dial.lap_elapsed = v - laps[-1] if laps else None
+        else:
+            self.s_time.set_label("00:00,00")
+            self.s_dial.elapsed = 0
+            self.s_dial.lap_elapsed = None
+        self.s_dial.queue_draw()
+
+        if pomo_on:
+            self.p_time.set_label(fmt(v))
+            self.p_ring.progress = v / total
+        else:
+            self.p_time.set_label(fmt(self.p_work.get_value() * 60))
+            self.p_ring.progress = 1.0
+            self.p_ring.dim = True
+        self.p_ring.queue_draw()
+        return True
+
+    def on_key(self, _ctrl, keyval, _code, state) -> bool:
+        if keyval == Gdk.KEY_Escape:
+            self.window.close()
+            return True
+        # Ctrl + 1…4 : onglets ; Espace : action principale de l'onglet
+        ctrl = state & Gdk.ModifierType.CONTROL_MASK
+        order = ["timer", "stopwatch", "pomodoro", "alarms"]
+        if ctrl and Gdk.KEY_1 <= keyval <= Gdk.KEY_4:
+            self.tab_buttons[order[keyval - Gdk.KEY_1]].set_active(True)
+            return True
+        if keyval == Gdk.KEY_space and not isinstance(self.window.get_focus(), Gtk.Text):
+            tab = self.stack.get_visible_child_name()
+            {"timer": self.timer_main, "stopwatch": self.stopwatch_main, "pomodoro": self.pomo_main}.get(tab, lambda: None)()
+            return True
+        return False
+
+
+if __name__ == "__main__":
+    sys.exit(ClockApp().run(sys.argv))

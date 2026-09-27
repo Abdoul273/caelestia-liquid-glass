@@ -1,0 +1,246 @@
+@import url("file://@HOME@/.local/state/caelestia/theme/caelestia-tools.css");
+
+/* Horloge Caelestia — minuteur, chrono, pomodoro, alarmes en liquid glass.
+ * Le flou vient de Hyprland ; les couleurs suivent le thème (fond d'écran).
+ * Orange = minuteur / alarme (comme dans la Dynamic Island), vert = pause. */
+
+@define-color orange #ff9f0a;
+@define-color green #32d74b;
+@define-color red #ff453a;
+
+window {
+  background: alpha(@t_surface, 0.52);
+  color: @t_on_surface;
+  font-family: "Rubik", "Inter", sans-serif;
+  font-size: 13px;
+}
+
+.clock-root {
+  padding: 16px 18px 12px;
+  background-image: linear-gradient(to bottom, alpha(white, 0.07), alpha(white, 0.015) 30%, transparent 60%);
+}
+
+/* ---------- Contrôle segmenté ---------- */
+.segmented {
+  padding: 4px;
+  margin-bottom: 14px;
+  border-radius: 14px;
+  background: alpha(@t_on_surface, 0.06);
+  box-shadow: inset 0 1px alpha(white, 0.05);
+}
+.seg {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: alpha(@t_on_surface, 0.62);
+  font-weight: 600;
+  font-size: 12px;
+  transition: all 220ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+.seg:hover { color: @t_on_surface; background: alpha(@t_on_surface, 0.05); }
+.seg:checked {
+  color: @t_on_surface;
+  background: alpha(@t_on_surface, 0.14);
+  box-shadow: inset 0 1px alpha(white, 0.14), 0 2px 8px alpha(black, 0.25);
+}
+.seg-icon { font-family: "Symbols Nerd Font", "JetBrainsMono Nerd Font"; font-size: 14px; }
+
+.page { padding: 4px 4px 0; }
+
+/* ---------- Cadrans ---------- */
+.big-time {
+  font-size: 50px;
+  font-weight: 700;
+  font-feature-settings: "tnum";
+  letter-spacing: -1px;
+}
+.stopwatch-time { font-size: 44px; margin-top: -4px; }
+.ring-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  color: alpha(@t_on_surface_variant, 0.75);
+}
+.ring-sub {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: @orange;
+  font-feature-settings: "tnum";
+}
+
+/* ---------- Sélecteur h / min / s ---------- */
+.picker { margin: 4px 0; }
+.picker-col { min-width: 50px; }
+.picker-value {
+  font-size: 34px;
+  font-weight: 700;
+  font-feature-settings: "tnum";
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+.picker-col:hover .picker-value { background: alpha(@t_on_surface, 0.06); }
+.picker-sep { font-size: 28px; font-weight: 700; margin-bottom: 26px; color: alpha(@t_on_surface, 0.35); }
+.picker-unit { font-size: 10.5px; font-weight: 600; color: alpha(@t_on_surface_variant, 0.55); }
+.picker-arrow {
+  min-height: 22px;
+  padding: 0;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  font-family: "Symbols Nerd Font", "JetBrainsMono Nerd Font";
+  color: alpha(@t_on_surface, 0.45);
+}
+.picker-arrow:hover { color: @t_on_surface; background: alpha(@t_on_surface, 0.08); }
+
+/* ---------- Pastilles de durée ---------- */
+.chip {
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 15px;
+  font-size: 12px;
+  font-weight: 600;
+  color: @t_on_surface;
+  background: alpha(@t_on_surface, 0.07);
+  border: 1px solid alpha(@t_on_surface, 0.07);
+  box-shadow: inset 0 1px alpha(white, 0.06);
+  transition: all 160ms ease;
+}
+.chip:hover { background: alpha(@orange, 0.18); border-color: alpha(@orange, 0.4); }
+.chip:active { background: alpha(@orange, 0.28); }
+
+.name-entry {
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 12px;
+  color: @t_on_surface;
+  background: alpha(@t_on_surface, 0.06);
+  border: 1px solid alpha(@t_on_surface, 0.08);
+  box-shadow: inset 0 1px alpha(white, 0.05);
+}
+.name-entry:focus-within {
+  border-color: alpha(@orange, 0.6);
+  box-shadow: 0 0 0 3px alpha(@orange, 0.15);
+}
+
+/* ---------- Gros boutons ronds façon iOS ---------- */
+.actions { margin: 6px 0 4px; }
+.pill {
+  min-width: 96px;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 22px;
+  font-weight: 700;
+  font-size: 13.5px;
+  border: none;
+  transition: all 180ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+.pill:active { transform: scale(0.95); }
+.pill.grey { background: alpha(@t_on_surface, 0.10); color: @t_on_surface; box-shadow: inset 0 1px alpha(white, 0.08); }
+.pill.grey:hover { background: alpha(@t_on_surface, 0.16); }
+.pill.orange { background: @orange; color: #1c1206; box-shadow: 0 4px 16px alpha(@orange, 0.35), inset 0 1px alpha(white, 0.35); }
+.pill.orange:hover { background: mix(@orange, white, 0.12); }
+.pill.green { background: alpha(@green, 0.22); color: @green; box-shadow: inset 0 1px alpha(white, 0.08); }
+.pill.green:hover { background: alpha(@green, 0.30); }
+.pill.red { background: alpha(@red, 0.22); color: @red; box-shadow: inset 0 1px alpha(white, 0.08); }
+.pill.red:hover { background: alpha(@red, 0.30); }
+.pill:disabled { opacity: 0.35; }
+
+/* ---------- Tours ---------- */
+.laps { background: transparent; }
+.laps > row { background: transparent; padding: 0; }
+.lap-row {
+  padding: 10px 6px;
+  border-bottom: 1px solid alpha(@t_on_surface, 0.07);
+  font-weight: 500;
+}
+.lap-time { font-feature-settings: "tnum"; font-weight: 600; }
+.lap-row.best { color: @green; }
+.lap-row.worst { color: @red; }
+
+/* ---------- Pomodoro ---------- */
+.card {
+  min-width: 130px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: alpha(@t_on_surface, 0.06);
+  border: 1px solid alpha(@t_on_surface, 0.07);
+  box-shadow: inset 0 1px alpha(white, 0.06);
+}
+.card-title { font-size: 11px; font-weight: 700; letter-spacing: 0.6px; color: alpha(@t_on_surface_variant, 0.7); }
+.card-spin { font-size: 22px; font-weight: 700; font-feature-settings: "tnum"; background: transparent; border: none; box-shadow: none; }
+.card-spin text { background: transparent; }
+.card-spin button { min-height: 28px; min-width: 28px; border-radius: 9px; background: alpha(@t_on_surface, 0.08); border: none; }
+
+/* ---------- Alarmes ---------- */
+.next-alarm { font-size: 13px; font-weight: 600; color: alpha(@t_on_surface_variant, 0.8); margin-left: 4px; }
+.round-add {
+  min-width: 38px;
+  min-height: 38px;
+  padding: 0;
+  border-radius: 19px;
+  font-family: "Symbols Nerd Font", "JetBrainsMono Nerd Font";
+  font-size: 18px;
+  color: #1c1206;
+  background: @orange;
+  border: none;
+  box-shadow: 0 4px 14px alpha(@orange, 0.35);
+}
+.round-add:hover { background: mix(@orange, white, 0.12); }
+.editor {
+  margin-top: 10px;
+  padding: 14px;
+  border-radius: 18px;
+  background: alpha(@t_on_surface, 0.05);
+  border: 1px solid alpha(@t_on_surface, 0.08);
+}
+.day {
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0;
+  border-radius: 17px;
+  font-weight: 700;
+  background: alpha(@t_on_surface, 0.07);
+  border: none;
+  color: alpha(@t_on_surface, 0.7);
+}
+.day:checked { background: @orange; color: #1c1206; }
+.alarms { background: transparent; margin-top: 8px; }
+.alarms > row { background: transparent; padding: 0; }
+.alarm-row {
+  padding: 12px 8px;
+  border-bottom: 1px solid alpha(@t_on_surface, 0.07);
+}
+.alarm-time { font-size: 38px; font-weight: 600; font-feature-settings: "tnum"; letter-spacing: -0.5px; }
+.alarm-sub { font-size: 12px; color: alpha(@t_on_surface_variant, 0.75); }
+.alarm-row.off .alarm-time, .alarm-row.off .alarm-sub { opacity: 0.4; }
+.alarm-delete {
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0;
+  border-radius: 17px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  font-family: "Symbols Nerd Font", "JetBrainsMono Nerd Font";
+  color: alpha(@red, 0.0);
+  transition: all 160ms ease;
+}
+.alarm-row:hover .alarm-delete { color: alpha(@red, 0.8); }
+.alarm-delete:hover { background: alpha(@red, 0.14); }
+switch { border-radius: 14px; background: alpha(@t_on_surface, 0.14); border: none; }
+switch:checked { background: @green; }
+switch slider { border-radius: 12px; background: white; min-width: 22px; min-height: 22px; box-shadow: 0 1px 3px alpha(black, 0.3); }
+.empty { margin: 40px 0; color: alpha(@t_on_surface_variant, 0.55); font-size: 13px; }
+
+/* ---------- Divers ---------- */
+.hint { margin-top: 8px; font-size: 11px; color: alpha(@t_on_surface_variant, 0.45); }
+scrollbar { background: transparent; }
+scrollbar slider { min-width: 4px; border-radius: 2px; background: alpha(@t_on_surface, 0.2); }
+
+/* Dans l'éditeur d'alarme, le sélecteur est hors de l'anneau : plus grand */
+.editor .picker-value { font-size: 44px; }
+.editor .picker-col { min-width: 70px; }

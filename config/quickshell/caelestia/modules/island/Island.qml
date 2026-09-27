@@ -245,8 +245,44 @@ Item {
         flash("blip", 1800);
     }
 
-    readonly property bool capsLock: Hypr.capsLock
-    onCapsLockChanged: blip(capsLock ? "keyboard_capslock_badge" : "keyboard_capslock", capsLock ? qsTr("Verr. Maj activé") : qsTr("Verr. Maj désactivé"), "", capsLock)
+    // Hyprland ne signale pas Verr. Maj : on lit le voyant du clavier (/sys/class/leds/*::capslock)
+    property bool capsLock
+    property string capsLed: ""
+    property bool capsKnown
+
+    Process {
+        running: true
+        command: ["sh", "-c", "ls -d /sys/class/leds/*::capslock 2>/dev/null | head -1"]
+        stdout: StdioCollector {
+            onStreamFinished: root.capsLed = text.trim() ? `${text.trim()}/brightness` : ""
+        }
+    }
+
+    FileView {
+        id: capsFile
+
+        path: root.capsLed
+        printErrors: false
+        onLoaded: {
+            const on = text().trim() !== "0";
+            if (!root.capsKnown) {
+                root.capsKnown = true;
+                root.capsLock = on;
+                return;
+            }
+            if (on !== root.capsLock)
+                root.capsLock = on;
+        }
+    }
+
+    Timer {
+        running: root.capsLed !== ""
+        interval: 250
+        repeat: true
+        onTriggered: capsFile.reload()
+    }
+
+    onCapsLockChanged: if (capsKnown && ready) blip(capsLock ? "keyboard_capslock_badge" : "keyboard_capslock", capsLock ? qsTr("Verr. Maj activé") : qsTr("Verr. Maj désactivé"), "", capsLock)
 
     readonly property string wifiName: Nmcli.active?.ssid ?? ""
     onWifiNameChanged: {
@@ -265,6 +301,16 @@ Item {
     property real clockStart: 0 // chronomètre : départ (ms)
     property real clockPaused: 0 // ms figées pendant une pause (0 = en marche)
     property real clockTotal: 0
+    property string clockLabel: ""
+    property list<real> laps: [] // chronomètre : temps écoulé à chaque tour (s)
+    // Pomodoro : enchaîne travail / pause tout seul
+    property bool pomoOn
+    property real pomoWork: 25 * 60
+    property real pomoRest: 5 * 60
+    property string pomoPhase: "work"
+    property int pomoRound: 1
+    property string doneTitle: qsTr("Minuteur terminé")
+    property string doneSub: ""
     property real now: Date.now()
     readonly property real clockValue: {
         const t = clockPaused > 0 ? clockPaused : now;
@@ -281,11 +327,8 @@ Item {
         repeat: true
         onTriggered: {
             root.now = Date.now();
-            if (root.clockKind === "timer" && root.clockPaused === 0 && root.now >= root.clockEnd) {
-                root.clockKind = "";
-                Quickshell.execDetached(["pw-play", "/usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga"]);
-                root.flash("done", 8000);
-            }
+            if (root.clockKind === "timer" && root.clockPaused === 0 && root.now >= root.clockEnd)
+                root.timerFinished();
         }
     }
 
@@ -302,21 +345,201 @@ Item {
         return total;
     }
 
-    function startTimer(sec: real): void {
+    function startTimer(sec: real, label: string): void {
         if (!(sec > 0))
             return;
         clockKind = "timer";
         clockTotal = sec;
+        clockLabel = label ?? "";
         clockPaused = 0;
+        laps = [];
         now = Date.now();
         clockEnd = now + sec * 1000;
+        saveClock();
     }
 
     function startStopwatch(): void {
+        pomoOn = false;
         clockKind = "stopwatch";
+        clockLabel = "";
         clockPaused = 0;
+        laps = [];
         now = Date.now();
         clockStart = now;
+        saveClock();
+    }
+
+    function startPomodoro(work: real, rest: real): void {
+        pomoOn = true;
+        pomoWork = work > 0 ? work : 25 * 60;
+        pomoRest = rest > 0 ? rest : 5 * 60;
+        pomoPhase = "work";
+        pomoRound = 1;
+        startTimer(pomoWork, qsTr("Focus"));
+    }
+
+    function addLap(): void {
+        if (clockKind !== "stopwatch")
+            return;
+        laps = [...laps, clockValue];
+        saveClock();
+    }
+
+    function addMinute(): void {
+        if (clockKind !== "timer")
+            return;
+        clockEnd += 60000;
+        clockTotal += 60;
+        saveClock();
+    }
+
+    function timerFinished(): void {
+        const label = clockLabel;
+        const total = clockTotal;
+        clockKind = "";
+        Quickshell.execDetached(["pw-play", "/usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga"]);
+        if (pomoOn) {
+            // Pomodoro : on enchaîne tout seul sur la phase suivante
+            if (pomoPhase === "work") {
+                pomoPhase = "rest";
+                doneTitle = qsTr("Focus terminé");
+                doneSub = qsTr("Pause de %1").arg(fmtClock(pomoRest));
+                startTimer(pomoRest, qsTr("Pause"));
+            } else {
+                pomoPhase = "work";
+                pomoRound += 1;
+                doneTitle = qsTr("Pause terminée");
+                doneSub = qsTr("Session %1").arg(pomoRound);
+                startTimer(pomoWork, qsTr("Focus"));
+            }
+            flash("done", 4500);
+            return;
+        }
+        doneTitle = label ? qsTr("%1 : terminé").arg(label) : qsTr("Minuteur terminé");
+        doneSub = fmtClock(total);
+        saveClock();
+        flash("done", 8000);
+    }
+
+    // État publié pour l'app Horloge (~/.local/state/caelestia/island-clock.json)
+    function saveClock(): void {
+        clockState.setText(JSON.stringify({
+            kind: clockKind,
+            end: clockEnd,
+            start: clockStart,
+            paused: clockPaused,
+            total: clockTotal,
+            label: clockLabel,
+            laps: laps,
+            pomodoro: {
+                on: pomoOn,
+                work: pomoWork,
+                rest: pomoRest,
+                phase: pomoPhase,
+                round: pomoRound
+            },
+            alarm: alarmRinging ? alarmLabel : null
+        }));
+    }
+
+    FileView {
+        id: clockState
+
+        path: `${Quickshell.env("HOME")}/.local/state/caelestia/island-clock.json`
+        printErrors: false
+        atomicWrites: true
+    }
+
+    // ── Alarmes (écrites par l'app Horloge dans ~/.local/share/caelestia/alarms.json) ──
+    property var alarms: []
+    property bool alarmRinging
+    property string alarmLabel: ""
+    property string alarmTime: ""
+    property string lastAlarmKey: ""
+
+    FileView {
+        id: alarmsFile
+
+        path: `${Quickshell.env("HOME")}/.local/share/caelestia/alarms.json`
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+        onLoaded: {
+            try {
+                root.alarms = JSON.parse(text()) ?? [];
+            } catch (e) {
+                root.alarms = [];
+            }
+        }
+    }
+
+    Timer {
+        running: root.screen === Quickshell.screens[0] && root.alarms.length > 0
+        interval: 1000
+        repeat: true
+        onTriggered: {
+            const d = new Date();
+            const hm = `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
+            const key = `${d.toDateString()} ${hm}`;
+            if (key === root.lastAlarmKey)
+                return;
+            let changed = false;
+            for (const a of root.alarms) {
+                if (!a.enabled || a.time !== hm)
+                    continue;
+                const days = a.days ?? [];
+                if (days.length > 0 && !days.includes(d.getDay()))
+                    continue;
+                root.lastAlarmKey = key;
+                root.ringAlarm(a.label || qsTr("Alarme"), hm);
+                // Alarme ponctuelle : elle se désactive après avoir sonné
+                if (days.length === 0) {
+                    a.enabled = false;
+                    changed = true;
+                }
+                break;
+            }
+            if (changed)
+                alarmsFile.setText(JSON.stringify(root.alarms, null, 2));
+        }
+    }
+
+    function ringAlarm(label: string, hm: string): void {
+        alarmLabel = label;
+        alarmTime = hm;
+        alarmRinging = true;
+        saveClock();
+        flash("alarm", 5 * 60 * 1000);
+    }
+
+    function stopAlarm(): void {
+        alarmRinging = false;
+        saveClock();
+        if (pulse === "alarm") {
+            pulseTimer.stop();
+            pulse = "";
+            if (queue.length > 0)
+                showNext();
+        }
+    }
+
+    function snoozeAlarm(): void {
+        const label = alarmLabel;
+        stopAlarm();
+        startTimer(9 * 60, qsTr("%1 (répétition)").arg(label));
+    }
+
+    // Sonnerie qui se répète tant que l'alarme n'est pas arrêtée
+    Timer {
+        running: root.alarmRinging
+        interval: 2600
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: Quickshell.execDetached(["pw-play", "/usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga"])
+    }
+
+    function openClockApp(): void {
+        Quickshell.execDetached([`${Quickshell.env("HOME")}/.local/bin/caelestia-clock`]);
     }
 
     function togglePause(): void {
@@ -331,11 +554,16 @@ Item {
             clockPaused = Date.now();
         }
         now = Date.now();
+        saveClock();
     }
 
     function stopClock(): void {
         clockKind = "";
         clockPaused = 0;
+        clockLabel = "";
+        pomoOn = false;
+        laps = [];
+        saveClock();
     }
 
     function fmtClock(sec: real): string {
@@ -430,6 +658,8 @@ Item {
             return "hidden";
         if (dropping)
             return "drop";
+        if (alarmRinging)
+            return "alarm";
         if (pulse === "level")
             return "level";
         if (pulse === "shot")
@@ -476,7 +706,9 @@ Item {
         case "toast":
             return Qt.size(400, toastData?.message ? 76 : 52);
         case "done":
-            return Qt.size(360, 64);
+            return Qt.size(380, 68);
+        case "alarm":
+            return Qt.size(430, 96);
         case "blip":
             return Qt.size(blipSub ? 320 : 280, 44);
         case "ws":
@@ -484,7 +716,7 @@ Item {
         case "clock":
             return Qt.size(360, 118 + shelfExtra);
         case "clockMini":
-            return Qt.size(230, 40);
+            return Qt.size(clockLabel ? 290 : 230, 40);
         case "shot":
             return Qt.size(460, 100);
         case "bt":
@@ -507,7 +739,7 @@ Item {
 
     property real w: target.width
     property real h: target.height
-    readonly property real radius: Math.min(h / 2, mode === "player" || mode === "info" || mode === "notif" || mode === "bt" || mode === "shot" || mode === "clock" || mode === "drop" || mode === "toast" || mode === "done" || (mode === "charge" && chargePlugged) ? 32 : h / 2)
+    readonly property real radius: Math.min(h / 2, mode === "player" || mode === "info" || mode === "notif" || mode === "bt" || mode === "shot" || mode === "clock" || mode === "drop" || mode === "toast" || mode === "done" || mode === "alarm" || (mode === "charge" && chargePlugged) ? 32 : h / 2)
 
     function flash(kind: string, ms: int): void {
         if (!ready)
@@ -593,6 +825,8 @@ Item {
             root.lastSink = Audio.sink?.id ?? -1;
             root.lastBright = Math.round(root.brightness * 100);
             root.ready = true;
+            if (root.screen === Quickshell.screens[0])
+                root.saveClock();
         }
     }
 
@@ -763,16 +997,43 @@ Item {
         enabled: root.screen === Quickshell.screens[0]
 
         function timer(duration: string): void {
-            root.startTimer(root.parseDuration(duration));
+            root.pomoOn = false;
+            root.startTimer(root.parseDuration(duration), "");
+        }
+        function timerFor(duration: string, label: string): void {
+            root.pomoOn = false;
+            root.startTimer(root.parseDuration(duration), label);
         }
         function stopwatch(): void {
             root.startStopwatch();
+        }
+        function lap(): void {
+            root.addLap();
+        }
+        function pomodoro(work: string, rest: string): void {
+            root.startPomodoro(root.parseDuration(work), root.parseDuration(rest));
+        }
+        function addMinute(): void {
+            root.addMinute();
         }
         function pause(): void {
             root.togglePause();
         }
         function stop(): void {
             root.stopClock();
+        }
+        function stopAlarm(): void {
+            root.stopAlarm();
+        }
+        function snooze(): void {
+            root.snoozeAlarm();
+        }
+        function testAlarm(label: string): void {
+            root.ringAlarm(label || qsTr("Alarme"), Time.format("HH:mm"));
+        }
+        function state(): string {
+            root.saveClock();
+            return "ok";
         }
     }
 
@@ -1947,6 +2208,7 @@ Item {
             // Mini anneau de progression du minuteur
             Shape {
                 anchors.centerIn: parent
+                anchors.horizontalCenterOffset: root.clockLabel ? 30 : 0
                 width: 20
                 height: 20
                 visible: root.clockKind === "timer"
@@ -1970,11 +2232,22 @@ Item {
             }
 
             StyledText {
+                anchors.left: parent.left
+                anchors.leftMargin: 44
+                anchors.verticalCenter: parent.verticalCenter
+                visible: root.clockLabel !== ""
+                text: root.clockLabel
+                color: root.fgDim
+                font.pointSize: 9.5
+                font.weight: Font.Medium
+            }
+
+            StyledText {
                 anchors.right: parent.right
                 anchors.rightMargin: 20
                 anchors.verticalCenter: parent.verticalCenter
                 text: root.fmtClock(root.clockValue)
-                color: "#ff9f0a"
+                color: root.pomoOn && root.pomoPhase === "rest" ? root.green : "#ff9f0a"
                 opacity: root.clockPaused > 0 ? 0.55 : 1
                 font.pointSize: 12
                 font.weight: Font.Bold
@@ -1993,14 +2266,20 @@ Item {
                 y: 22
 
                 StyledText {
-                    text: root.clockKind === "timer" ? qsTr("Minuteur") : qsTr("Chronomètre")
+                    text: {
+                        if (root.pomoOn)
+                            return qsTr("Pomodoro · %1 · session %2").arg(root.clockLabel).arg(root.pomoRound);
+                        if (root.clockKind === "timer")
+                            return root.clockLabel ? qsTr("Minuteur · %1").arg(root.clockLabel) : qsTr("Minuteur");
+                        return root.laps.length > 0 ? qsTr("Chronomètre · %1 tours").arg(root.laps.length) : qsTr("Chronomètre");
+                    }
                     color: root.fgDim
                     font.pointSize: 9
                     font.weight: Font.Medium
                 }
                 StyledText {
                     text: root.fmtClock(root.clockValue)
-                    color: "#ff9f0a"
+                    color: root.pomoOn && root.pomoPhase === "rest" ? root.green : "#ff9f0a"
                     font.pointSize: 30
                     font.weight: Font.Bold
                     font.features: {
@@ -2018,10 +2297,12 @@ Item {
                 ShotButton {
                     visible: root.clockKind === "timer"
                     icon: "exposure_plus_1"
-                    onClicked: {
-                        root.clockEnd += 60000;
-                        root.clockTotal += 60;
-                    }
+                    onClicked: root.addMinute()
+                }
+                ShotButton {
+                    visible: root.clockKind === "stopwatch"
+                    icon: "flag"
+                    onClicked: root.addLap()
                 }
                 ShotButton {
                     icon: root.clockPaused > 0 ? "play_arrow" : "pause"
@@ -2030,6 +2311,10 @@ Item {
                 ShotButton {
                     icon: "stop"
                     onClicked: root.stopClock()
+                }
+                ShotButton {
+                    icon: "open_in_new"
+                    onClicked: root.openClockApp()
                 }
             }
         }
@@ -2062,7 +2347,7 @@ Item {
                 anchors.left: doneIcon.right
                 anchors.leftMargin: 14
                 anchors.verticalCenter: parent.verticalCenter
-                text: qsTr("Minuteur terminé")
+                text: root.doneTitle
                 color: root.fg
                 font.pointSize: 11
                 font.weight: Font.DemiBold
@@ -2072,11 +2357,128 @@ Item {
                 anchors.right: parent.right
                 anchors.rightMargin: 24
                 anchors.verticalCenter: parent.verticalCenter
-                text: root.fmtClock(root.clockTotal)
+                text: root.doneSub
                 color: root.fgDim
                 font.pointSize: 10
                 font.features: {
                     "tnum": 1
+                }
+            }
+        }
+
+        // ── alarme qui sonne ──
+        Face {
+            active: root.mode === "alarm"
+
+            Rectangle {
+                id: alarmIcon
+
+                anchors.left: parent.left
+                anchors.leftMargin: 22
+                anchors.verticalCenter: parent.verticalCenter
+                width: 48
+                height: 48
+                radius: 24
+                color: Qt.alpha("#ff9f0a", 0.22)
+
+                SequentialAnimation on scale {
+                    running: root.mode === "alarm"
+                    loops: Animation.Infinite
+                    NumberAnimation {
+                        to: 1.12
+                        duration: 380
+                        easing.type: Easing.OutCubic
+                    }
+                    NumberAnimation {
+                        to: 1
+                        duration: 520
+                        easing.type: Easing.InOutQuad
+                    }
+                }
+
+                MaterialIcon {
+                    anchors.centerIn: parent
+                    text: "alarm"
+                    color: "#ff9f0a"
+                    fontStyle: Tokens.font.icon.size(20).build()
+                    fill: 1
+                }
+            }
+
+            Column {
+                anchors.left: alarmIcon.right
+                anchors.leftMargin: 14
+                anchors.verticalCenter: parent.verticalCenter
+
+                StyledText {
+                    text: root.alarmTime
+                    color: root.fg
+                    font.pointSize: 20
+                    font.weight: Font.Bold
+                    font.features: {
+                        "tnum": 1
+                    }
+                }
+                StyledText {
+                    text: root.alarmLabel
+                    color: root.fgDim
+                    font.pointSize: 9.5
+                }
+            }
+
+            Row {
+                anchors.right: parent.right
+                anchors.rightMargin: 22
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 8
+
+                Rectangle {
+                    width: snoozeLbl.implicitWidth + 28
+                    height: 38
+                    radius: 19
+                    color: Qt.alpha(root.fg, snoozeArea.containsMouse ? 0.2 : 0.12)
+
+                    StyledText {
+                        id: snoozeLbl
+
+                        anchors.centerIn: parent
+                        text: qsTr("Répéter")
+                        color: root.fg
+                        font.pointSize: 9.5
+                        font.weight: Font.DemiBold
+                    }
+                    MouseArea {
+                        id: snoozeArea
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.snoozeAlarm()
+                    }
+                }
+                Rectangle {
+                    width: stopLbl.implicitWidth + 28
+                    height: 38
+                    radius: 19
+                    color: stopArea.containsMouse ? Qt.lighter("#ff9f0a", 1.1) : "#ff9f0a"
+
+                    StyledText {
+                        id: stopLbl
+
+                        anchors.centerIn: parent
+                        text: qsTr("Arrêter")
+                        color: "#1c1206"
+                        font.pointSize: 9.5
+                        font.weight: Font.Bold
+                    }
+                    MouseArea {
+                        id: stopArea
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.stopAlarm()
+                    }
                 }
             }
         }
