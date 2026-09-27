@@ -748,6 +748,8 @@ Item {
 
     readonly property bool notifHasActions: (notif?.actions?.length ?? 0) > 0
     readonly property real shelfExtra: shelf.length > 0 ? 78 : 0
+    // Même largeur pour les pages qu'on fait défiler : l'île ne rétrécit pas sous la souris
+    readonly property real pageWidth: 470
 
     // Taille visible (depuis le haut de l'écran) pour chaque mode
     readonly property size target: {
@@ -787,11 +789,11 @@ Item {
         case "charge":
             return chargePlugged ? Qt.size(420, 78) : Qt.size(330, 48);
         case "player":
-            return Qt.size(450, (hasLyrics ? 202 : 178) + (shelf.length > 0 ? shelfExtra : 10));
+            return Qt.size(pageWidth, (hasLyrics ? 202 : 178) + (shelf.length > 0 ? shelfExtra : 10));
         case "info":
-            return Qt.size(390, 118 + shelfExtra);
+            return Qt.size(pageWidth, 118 + shelfExtra);
         case "perf":
-            return Qt.size(500, 132);
+            return Qt.size(pageWidth, 142);
         case "record":
             return Qt.size(210, 40);
         case "media":
@@ -1296,6 +1298,10 @@ Item {
         return i < cur ? -90 : 90;
     }
 
+    // Geste molette/pavé en cours : axe choisi au début, une seule page tournée par geste
+    property string wheelAxis: ""
+    property bool wheelDone
+
     function flipPage(dir: int): void {
         const next = Math.max(0, Math.min(pages.length - 1, pageIndex + dir));
         if (next === pageIndex) {
@@ -1376,24 +1382,35 @@ Item {
     Timer {
         id: wheelReset
 
-        interval: 350
+        interval: 260
         onTriggered: {
             root.wheelX = 0;
             root.wheelY = 0;
+            root.wheelAxis = "";
+            root.wheelDone = false;
+            if (!dragH.active)
+                root.swipeX = 0;
         }
     }
 
     // WheelHandler ignore les évènements hors de son orientation (verticale par défaut) :
     // un second, horizontal, reçoit les glissements à deux doigts gauche/droite
+    // Chaque évènement n'est traité que par un des deux (sinon diagonale = page + volume)
     WheelHandler {
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
         orientation: Qt.Horizontal
-        onWheel: e => root.handleWheel(e)
+        onWheel: e => {
+            if (Math.abs(e.angleDelta.x) > Math.abs(e.angleDelta.y))
+                root.handleWheel(e);
+        }
     }
 
     WheelHandler {
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-        onWheel: e => root.handleWheel(e)
+        onWheel: e => {
+            if (Math.abs(e.angleDelta.x) <= Math.abs(e.angleDelta.y))
+                root.handleWheel(e);
+        }
     }
 
     function handleWheel(e: var): void {
@@ -1401,14 +1418,23 @@ Item {
         if (root.mode === "center")
             return;
         const media = root.mode === "media" || root.mode === "player";
-        if (root.paged && Math.abs(e.angleDelta.x) > Math.abs(e.angleDelta.y)) {
-            root.wheelX += e.angleDelta.x;
-            wheelReset.restart();
-            if (Math.abs(root.wheelX) > 160) {
-                root.flipPage(root.wheelX < 0 ? 1 : -1);
-                root.wheelX = -root.wheelX * 4;
+        if (root.paged) {
+            if (root.wheelAxis === "")
+                root.wheelAxis = Math.abs(e.angleDelta.x) > Math.abs(e.angleDelta.y) ? "x" : "y";
+            if (root.wheelAxis === "x") {
+                wheelReset.restart();
+                if (root.wheelDone)
+                    return; // reste du même geste (ou inertie) : ignoré
+                root.wheelX += e.angleDelta.x;
+                if (Math.abs(root.wheelX) > 150) {
+                    root.wheelDone = true;
+                    root.flipPage(root.wheelX < 0 ? 1 : -1);
+                } else {
+                    // L'île suit les doigts avant de basculer
+                    root.swipeX = Math.max(-30, Math.min(30, root.wheelX * 0.18));
+                }
+                return;
             }
-            return;
         }
         const notifLike = root.mode === "notif" || root.mode === "toast" || root.mode === "shot";
         if (media && Math.abs(e.angleDelta.x) > Math.abs(e.angleDelta.y)) {
@@ -3518,10 +3544,10 @@ Item {
 
             Row {
                 anchors.left: parent.left
-                anchors.leftMargin: 26
+                anchors.leftMargin: 22
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.verticalCenterOffset: -2
-                spacing: 10
+                spacing: 4
 
                 PerfRing {
                     icon: "memory"
@@ -3546,10 +3572,10 @@ Item {
             // Réseau : débit descendant / montant + courbe
             Item {
                 anchors.right: parent.right
-                anchors.rightMargin: 26
+                anchors.rightMargin: 22
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.verticalCenterOffset: -2
-                width: 150
+                width: 138
                 height: 86
 
                 Rectangle {
@@ -3882,8 +3908,8 @@ Item {
         property real shown: value
         readonly property color tint: shown > 0.85 ? root.red : shown > 0.6 ? (Colours.light ? "#c77700" : "#ff9f0a") : root.accent
 
-        spacing: 3
-        width: 88
+        spacing: 2
+        width: 86
 
         Behavior on shown {
             NumberAnimation {
@@ -3965,9 +3991,21 @@ Item {
 
         StyledText {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: ring.sub ? `${ring.label} · ${ring.sub}` : ring.label
+            text: ring.label
+            color: root.fg
+            font.pointSize: 8
+            font.weight: Font.DemiBold
+        }
+        StyledText {
+            anchors.horizontalCenter: parent.horizontalCenter
+            topPadding: -3
+            width: Math.min(implicitWidth, ring.width)
+            horizontalAlignment: Text.AlignHCenter
+            elide: Text.ElideRight
+            text: ring.sub
+            visible: text !== ""
             color: root.fgDim
-            font.pointSize: 7.5
+            font.pointSize: 7
             font.weight: Font.Medium
             font.features: {
                 "tnum": 1
