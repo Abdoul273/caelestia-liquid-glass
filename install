@@ -25,6 +25,7 @@ PACKAGES=(
     libnotify xdg-utils xdg-user-dirs # notifications, ouverture de liens, dossiers
     libpulse pipewire-pulse           # bascule audio Bluetooth automatique
     kitty nautilus sushi              # terminal, fichiers, aperçu rapide (Espace)
+    psmisc pipewire-audio swappy      # Dynamic Island : caméra utilisée, sonneries, annoter les captures
     ttf-jetbrains-mono-nerd noto-fonts-emoji
 )
 AUR_PACKAGES=(ttf-rubik-vf)
@@ -455,6 +456,7 @@ ${OK}${B}  ✓ Caelestia Liquid Glass est installé !${R}
     ${ACC}Super + H${R}         tous les raccourcis (ouvre-la, tu vas l'adorer)
     ${ACC}Super + Espace${R}    recherche façon Spotlight
     ${ACC}Super + O${R}         calculatrice
+    ${ACC}Super + Maj + O${R}   horloge (minuteur, chrono, pomodoro, alarmes)
     ${ACC}Super + Tab${R}       Mission Control   ${D}(ou 3 doigts vers le haut)${R}
     ${ACC}Super + I${R}         paramètres de Caelestia
     ${ACC}Super + V${R}         presse-papiers
