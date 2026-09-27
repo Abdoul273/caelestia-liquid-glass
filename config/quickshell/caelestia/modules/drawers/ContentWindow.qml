@@ -190,8 +190,9 @@ StyledWindow {
             panel: panels.island
             deformAmount: 0.12
             radius: panels.island.radius
-            y: -radius
-            implicitHeight: panel.height + radius
+            // Repliée : le rectangle remonte bien au-dessus de l'écran pour que la fusion ne laisse aucune bosse
+            y: -radius - Math.max(0, 30 - panels.island.h * 3)
+            implicitHeight: panels.island.h + radius
         }
 
         PanelBg {

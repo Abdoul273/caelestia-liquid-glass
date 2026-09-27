@@ -93,7 +93,8 @@ Item {
         case "media":
             return Qt.size(290, 40);
         default:
-            return Qt.size(hovered ? 170 : 150, hovered ? 36 : 32);
+            // Au repos : rien à l'écran (une pastille vide ne sert à rien)
+            return Qt.size(150, 0);
         }
     }
 
@@ -138,7 +139,8 @@ Item {
     }
 
     implicitWidth: w
-    implicitHeight: h
+    // Au repos, une bande invisible de 4 px en haut de l'écran garde le survol actif
+    implicitHeight: Math.max(h, 4)
     clip: true
 
     Behavior on w {
@@ -716,7 +718,7 @@ Item {
                 }
                 StyledText {
                     text: {
-                        const s = Time.format("dddd d MMMM");
+                        const s = Qt.locale("fr_FR").toString(Time.date, "dddd d MMMM");
                         return s.charAt(0).toUpperCase() + s.slice(1);
                     }
                     color: root.fgDim
