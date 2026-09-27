@@ -300,9 +300,12 @@ from pathlib import Path
 path = Path(sys.argv[1])
 data = json.loads(path.read_text()) if path.exists() and path.read_text().strip() else {}
 data.setdefault("session", {}).setdefault("commands", {})["logout"] = ["caelestia-logout"]
+# Dynamic Island : elle remplace l'OSD et prend la place du dashboard au survol (Super+A reste)
+data.setdefault("dashboard", {})["showOnHover"] = False
+data.setdefault("osd", {})["enabled"] = False
 path.write_text(json.dumps(data, indent=4) + "\n")
 PY
-    ok "Déconnexion propre vers l'écran de connexion"
+    ok "Déconnexion propre vers l'écran de connexion, Dynamic Island à la place de l'OSD"
 }
 
 # ---------------------------------------------------------------- finalisation

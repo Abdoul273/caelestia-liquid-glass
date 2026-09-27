@@ -10,6 +10,7 @@ import "modules/background"
 import "modules/areapicker"
 import "modules/lock"
 import "modules/missioncontrol"
+import "modules/island"
 import QtQuick
 import Quickshell
 import qs.services
@@ -37,6 +38,7 @@ ShellRoot {
 
     MissionControl {}
     WorkspaceHud {}
+    DynamicIsland {}
     ConfigToasts {}
     Shortcuts {}
     BatteryMonitor {}

@@ -32,6 +32,7 @@ Verre translucide partout, Mission Control, Spotlight, animations fluides façon
 ### 🪟 Façon macOS
 - **Démarrage façon Mac** (optionnel) : logo blanc et fine barre de progression sur fond noir, au lieu du texte qui défile.
 - **Curseur macOS** ([apple_cursor](https://github.com/ful1e5/apple_cursor)), jusque sur l'écran de connexion.
+- **Dynamic Island** en haut de l'écran, qui sort du cadre : musique en cours avec visualiseur, lecteur complet au survol (pochette, progression cliquable, commandes), volume et luminosité, notifications, charge, enregistrement d'écran. Molette = volume, clic droit = tableau de bord.
 - **Mission Control** (`Super + Tab` ou **3 doigts vers le haut**) : tes fenêtres glissent en grille, tes bureaux s'affichent en haut, et un clic t'y emmène.
 - **Spotlight** (`Super + Espace`) : suggestions Google instantanées, fiche Wikipédia, résultats web, calculs.
 - **Calculatrice** (`Super + O`) : le résultat s'affiche pendant que tu tapes (`12,5 × 4 + 20 %`), et Entrée le copie.
@@ -196,6 +197,7 @@ Rien n'est imposé : ta disposition reste celle de ta config Hyprland, et les do
 
 **Caelestia · Liquid Glass** brings a macOS-style liquid glass look to Hyprland, on top of the [Caelestia](https://github.com/caelestia-dots/caelestia) shell. You get:
 - the whole shell in glass (two custom shaders, a light rim and a highlight that follows the cursor) ;
+- a Dynamic Island at the top (music, volume, brightness, notifications, charging) ;
 - Mission Control and a Spotlight-style search ;
 - a live calculator, clipboard, emoji and display pickers ;
 - a searchable shortcuts window (`Super + H`) ;
