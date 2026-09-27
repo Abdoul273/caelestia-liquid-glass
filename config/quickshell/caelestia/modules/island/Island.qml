@@ -1369,46 +1369,56 @@ Item {
         }
     }
 
+    // WheelHandler ignore les évènements hors de son orientation (verticale par défaut) :
+    // un second, horizontal, reçoit les glissements à deux doigts gauche/droite
     WheelHandler {
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-        onWheel: e => {
-            // Dans le centre de notifications, la molette fait défiler la liste
-            if (root.mode === "center")
-                return;
-            const media = root.mode === "media" || root.mode === "player";
-            if (root.paged && Math.abs(e.angleDelta.x) > Math.abs(e.angleDelta.y)) {
-                root.wheelX += e.angleDelta.x;
-                wheelReset.restart();
-                if (Math.abs(root.wheelX) > 160) {
-                    root.flipPage(root.wheelX < 0 ? 1 : -1);
-                    root.wheelX = -root.wheelX * 4;
-                }
-                return;
+        orientation: Qt.Horizontal
+        onWheel: e => root.handleWheel(e)
+    }
+
+    WheelHandler {
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+        onWheel: e => root.handleWheel(e)
+    }
+
+    function handleWheel(e: var): void {
+        // Dans le centre de notifications, la molette fait défiler la liste
+        if (root.mode === "center")
+            return;
+        const media = root.mode === "media" || root.mode === "player";
+        if (root.paged && Math.abs(e.angleDelta.x) > Math.abs(e.angleDelta.y)) {
+            root.wheelX += e.angleDelta.x;
+            wheelReset.restart();
+            if (Math.abs(root.wheelX) > 160) {
+                root.flipPage(root.wheelX < 0 ? 1 : -1);
+                root.wheelX = -root.wheelX * 4;
             }
-            const notifLike = root.mode === "notif" || root.mode === "toast" || root.mode === "shot";
-            if (media && Math.abs(e.angleDelta.x) > Math.abs(e.angleDelta.y)) {
-                root.wheelX += e.angleDelta.x;
-                wheelReset.restart();
-                if (Math.abs(root.wheelX) > 240) {
-                    root.swipeTrack(root.wheelX < 0 ? 1 : -1);
-                    root.wheelX = -root.wheelX * 4; // pas de double déclenchement dans le même geste
-                }
-                return;
-            }
-            if (notifLike && e.pixelDelta.y !== 0) {
-                root.wheelY += e.angleDelta.y;
-                wheelReset.restart();
-                if (root.wheelY < -200) {
-                    root.dismissCurrent();
-                    root.wheelY = 10000;
-                }
-                return;
-            }
-            if (e.angleDelta.y > 0)
-                Audio.incrementVolume();
-            else if (e.angleDelta.y < 0)
-                Audio.decrementVolume();
+            return;
         }
+        const notifLike = root.mode === "notif" || root.mode === "toast" || root.mode === "shot";
+        if (media && Math.abs(e.angleDelta.x) > Math.abs(e.angleDelta.y)) {
+            root.wheelX += e.angleDelta.x;
+            wheelReset.restart();
+            if (Math.abs(root.wheelX) > 240) {
+                root.swipeTrack(root.wheelX < 0 ? 1 : -1);
+                root.wheelX = -root.wheelX * 4; // pas de double déclenchement dans le même geste
+            }
+            return;
+        }
+        if (notifLike && e.pixelDelta.y !== 0) {
+            root.wheelY += e.angleDelta.y;
+            wheelReset.restart();
+            if (root.wheelY < -200) {
+                root.dismissCurrent();
+                root.wheelY = 10000;
+            }
+            return;
+        }
+        if (e.angleDelta.y > 0)
+            Audio.incrementVolume();
+        else if (e.angleDelta.y < 0)
+            Audio.decrementVolume();
     }
 
     DragHandler {
