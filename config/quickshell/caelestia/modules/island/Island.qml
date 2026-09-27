@@ -125,6 +125,45 @@ Item {
         }
     }
 
+    // Capture d'écran : fichier d'origine (pas la miniature en cache des notifications)
+    property string shotPath: ""
+    property bool shotSaved
+    property real shotIn: 1
+
+    readonly property string shotsDir: `${Quickshell.env("HOME")}/Images/Captures`
+
+    function isShot(n: var): bool {
+        return (n?.appName ?? "").startsWith("caelestia") && (n?.summary ?? "").startsWith("Capture d'écran");
+    }
+
+    function shotSource(n: var): string {
+        const hints = n?.notification?.hints ?? n?.hints ?? {};
+        let src = hints["image-path"] || n?.notification?.image || n?.notification?.appIcon || n?.image || n?.appIcon || "";
+        return String(src).replace(/^file:\/\//, "");
+    }
+
+    function closeShot(): void {
+        pulseTimer.stop();
+        pulse = "";
+        showNext();
+    }
+
+    SequentialAnimation {
+        id: shotIntro
+
+        ScriptAction {
+            script: root.shotIn = 0
+        }
+        NumberAnimation {
+            target: root
+            property: "shotIn"
+            to: 1
+            duration: 700
+            easing.type: Easing.OutBack
+            easing.overshoot: 1.3
+        }
+    }
+
     readonly property bool hidden: !Island.enabled || fullscreen || (screenState?.dashboard ?? false)
 
     readonly property string mode: {
@@ -132,6 +171,8 @@ Item {
             return "hidden";
         if (pulse === "level")
             return "level";
+        if (pulse === "shot")
+            return "shot";
         if (pulse === "notif" && notif)
             return "notif";
         if (pulse === "bt" && btDevice)
@@ -158,6 +199,8 @@ Item {
             return Qt.size(340, 52);
         case "notif":
             return Qt.size(430, hovered && notifHasActions ? 132 : 92);
+        case "shot":
+            return Qt.size(460, 100);
         case "bt":
             return btOn ? Qt.size(400, 76) : Qt.size(330, 48);
         case "charge":
@@ -178,7 +221,7 @@ Item {
 
     property real w: target.width
     property real h: target.height
-    readonly property real radius: Math.min(h / 2, mode === "player" || mode === "info" || mode === "notif" || mode === "bt" || (mode === "charge" && chargePlugged) ? 32 : h / 2)
+    readonly property real radius: Math.min(h / 2, mode === "player" || mode === "info" || mode === "notif" || mode === "bt" || mode === "shot" || (mode === "charge" && chargePlugged) ? 32 : h / 2)
 
     function flash(kind: string, ms: int): void {
         if (!ready)
@@ -325,6 +368,16 @@ Item {
         function onNotify(n: var): void {
             if (!root.ready)
                 return;
+            if (root.isShot(n)) {
+                root.shotPath = root.shotSource(n);
+                root.shotSaved = root.shotPath.startsWith(root.shotsDir);
+                // La capture plein écran (caelestia screenshot) ne joue pas de son, la zone oui
+                if (!root.shotPath.includes("caelestia-picker"))
+                    Sounds.playScreenshot();
+                root.flash("shot", 6500);
+                shotIntro.restart();
+                return;
+            }
             if (root.pulse === "notif" && root.notif) {
                 root.queue = [...root.queue, n];
                 return;
@@ -336,7 +389,7 @@ Item {
 
     // Petit rebond quand un évènement arrive
     onPulseChanged: {
-        if (pulse === "notif" || pulse === "charge" || pulse === "bt")
+        if (pulse === "notif" || pulse === "charge" || pulse === "bt" || pulse === "shot")
             bump.restart();
         if (pulse === "bt" && btOn)
             btIntro.restart();
@@ -990,6 +1043,128 @@ Item {
             }
         }
 
+        // ── capture d'écran : la miniature tombe dans l'île avec un flash d'obturateur ──
+        Face {
+            active: root.mode === "shot"
+
+            Item {
+                id: shotThumb
+
+                readonly property real ratio: shotImg.status === Image.Ready && shotImg.implicitHeight > 0 ? shotImg.implicitWidth / shotImg.implicitHeight : 16 / 9
+
+                x: 22
+                anchors.verticalCenter: parent.verticalCenter
+                height: 62
+                width: Math.min(130, Math.max(44, height * ratio))
+                scale: 1.9 - 0.9 * root.shotIn
+                opacity: Math.min(1, root.shotIn * 2)
+                transformOrigin: Item.Center
+
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: -2
+                    radius: 12
+                    color: Qt.alpha(root.fg, 0.25)
+                }
+
+                Rectangle {
+                    id: shotClip
+
+                    anchors.fill: parent
+                    radius: 10
+                    color: root.fgFaint
+                    clip: true
+
+                    Image {
+                        id: shotImg
+
+                        anchors.fill: parent
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        cache: false
+                        sourceSize.height: 180
+                        source: root.shotPath ? `file://${root.shotPath}` : ""
+                    }
+
+                    // Flash d'obturateur
+                    Rectangle {
+                        anchors.fill: parent
+                        color: "white"
+                        opacity: Math.max(0, 1 - root.shotIn * 1.6)
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        Quickshell.execDetached(["xdg-open", root.shotPath]);
+                        root.closeShot();
+                    }
+                }
+            }
+
+            Column {
+                anchors.left: shotThumb.right
+                anchors.leftMargin: 16
+                anchors.right: shotBtns.left
+                anchors.rightMargin: 10
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 2
+
+                StyledText {
+                    width: parent.width
+                    elide: Text.ElideRight
+                    text: qsTr("Capture d'écran")
+                    color: root.fg
+                    font.pointSize: 11
+                    font.weight: Font.DemiBold
+                }
+                StyledText {
+                    width: parent.width
+                    elide: Text.ElideRight
+                    text: root.shotSaved ? qsTr("Enregistrée et copiée") : qsTr("Copiée dans le presse-papiers")
+                    color: root.fgDim
+                    font.pointSize: 9
+                }
+            }
+
+            Row {
+                id: shotBtns
+
+                anchors.right: parent.right
+                anchors.rightMargin: 20
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 8
+
+                ShotButton {
+                    icon: "edit"
+                    tip: qsTr("Annoter")
+                    onClicked: {
+                        Quickshell.execDetached(["swappy", "-f", root.shotPath]);
+                        root.closeShot();
+                    }
+                }
+                ShotButton {
+                    icon: root.shotSaved ? "folder_open" : "download"
+                    tip: root.shotSaved ? qsTr("Dossier") : qsTr("Enregistrer")
+                    onClicked: {
+                        if (root.shotSaved) {
+                            Quickshell.execDetached(["xdg-open", root.shotsDir]);
+                            root.closeShot();
+                        } else {
+                            const name = Qt.formatDateTime(new Date(), "yyyyMMddhhmmss") + ".png";
+                            const dest = `${root.shotsDir}/${name}`;
+                            Quickshell.execDetached(["sh", "-c", 'mkdir -p "$1" && cp "$2" "$3"', "sh", root.shotsDir, root.shotPath, dest]);
+                            root.shotPath = dest;
+                            root.shotSaved = true;
+                            pulseTimer.restart();
+                        }
+                    }
+                }
+            }
+        }
+
         // ── notification ──
         Face {
             active: root.mode === "notif"
@@ -1491,6 +1666,44 @@ Item {
             height: 4
             radius: 1
             color: Qt.alpha(parent.fg, 0.5)
+        }
+    }
+
+    component ShotButton: Rectangle {
+        id: sb
+
+        property string icon
+        property string tip
+        signal clicked
+
+        width: 40
+        height: 40
+        radius: 20
+        color: Qt.alpha(Colours.palette.m3onSurface, sbArea.pressed ? 0.24 : sbArea.containsMouse ? 0.17 : 0.1)
+        scale: sbArea.pressed ? 0.9 : 1
+
+        Behavior on scale {
+            NumberAnimation {
+                duration: 160
+                easing.type: Easing.OutBack
+            }
+        }
+
+        MaterialIcon {
+            anchors.centerIn: parent
+            text: sb.icon
+            color: Colours.palette.m3onSurface
+            fontStyle: Tokens.font.icon.size(15).build()
+            fill: 1
+        }
+
+        MouseArea {
+            id: sbArea
+
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: sb.clicked()
         }
     }
 
