@@ -695,6 +695,8 @@ Item {
             return "hidden";
         if (countLeft > 0)
             return "count";
+        if (Island.notifCenter && screen === Quickshell.screens[0])
+            return "center";
         if (dropping)
             return "drop";
         if (alarmRinging)
@@ -742,6 +744,8 @@ Item {
             return Qt.size(340, 52);
         case "notif":
             return Qt.size(430, hovered && notifHasActions ? 132 : 92);
+        case "center":
+            return Qt.size(460, Math.min(600, Math.max(170, 86 + centerList.contentHeight)));
         case "recordFull":
             return Qt.size(360, 76);
         case "count":
@@ -784,7 +788,7 @@ Item {
 
     property real w: target.width
     property real h: target.height
-    readonly property real radius: Math.min(h / 2, mode === "player" || mode === "info" || mode === "notif" || mode === "bt" || mode === "shot" || mode === "clock" || mode === "drop" || mode === "toast" || mode === "done" || mode === "alarm" || mode === "count" || mode === "recordFull" || (mode === "charge" && chargePlugged) ? 32 : h / 2)
+    readonly property real radius: Math.min(h / 2, mode === "player" || mode === "info" || mode === "notif" || mode === "bt" || mode === "shot" || mode === "clock" || mode === "drop" || mode === "toast" || mode === "done" || mode === "alarm" || mode === "count" || mode === "recordFull" || mode === "center" || (mode === "charge" && chargePlugged) ? 32 : h / 2)
 
     function flash(kind: string, ms: int): void {
         if (!ready)
@@ -902,7 +906,37 @@ Item {
         onTriggered: root.expanded = root.hovered && root.pulse === ""
     }
 
-    onHoveredChanged: hoverTimer.restart()
+    onHoveredChanged: {
+        hoverTimer.restart();
+        if (Island.notifCenter)
+            centerClose.restart();
+    }
+
+    // Centre de notifications : se referme quand la souris part (vite) ou n'est jamais venue (après 5 s)
+    property bool centerVisited
+
+    Connections {
+        target: Island
+
+        function onNotifCenterChanged(): void {
+            root.centerVisited = root.hovered;
+            if (Island.notifCenter)
+                centerClose.restart();
+        }
+    }
+
+    Timer {
+        id: centerClose
+
+        interval: root.centerVisited ? 700 : 5000
+        onTriggered: {
+            if (root.hovered) {
+                root.centerVisited = true;
+                return;
+            }
+            Island.notifCenter = false;
+        }
+    }
 
     // ── Déclencheurs ──
     Connections {
@@ -989,6 +1023,8 @@ Item {
                 return;
             // Le point rouge de l'île montre déjà l'enregistrement : pas de notification en plus
             if ((n?.appName ?? "").startsWith("caelestia") && /^Enregistrement (démarré|en pause|repris)/.test(n?.summary ?? ""))
+                return;
+            if (Island.notifCenter && !n?.isToast)
                 return;
             if (root.isShot(n)) {
                 root.shotPath = root.shotSource(n);
@@ -1286,6 +1322,9 @@ Item {
     WheelHandler {
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
         onWheel: e => {
+            // Dans le centre de notifications, la molette fait défiler la liste
+            if (root.mode === "center")
+                return;
             const media = root.mode === "media" || root.mode === "player";
             const notifLike = root.mode === "notif" || root.mode === "toast" || root.mode === "shot";
             if (media && Math.abs(e.angleDelta.x) > Math.abs(e.angleDelta.y)) {
@@ -1374,8 +1413,8 @@ Item {
                 root.togglePause();
             } else if (button === Qt.MiddleButton || root.mode === "media") {
                 root.player?.togglePlaying();
-            } else if (root.mode === "idle") {
-                root.expanded = true;
+            } else if (root.mode === "idle" || root.mode === "info") {
+                Island.notifCenter = true;
             }
         }
     }
@@ -2546,6 +2585,324 @@ Item {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: root.stopAlarm()
+                    }
+                }
+            }
+        }
+
+        // ── Centre de notifications (clic sur l'île, Super + N) ──
+        Face {
+            active: root.mode === "center"
+
+            Item {
+                id: centerHead
+
+                x: 22
+                y: 16
+                width: parent.width - 44
+                height: 36
+
+                Column {
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    StyledText {
+                        text: qsTr("Notifications")
+                        color: root.fg
+                        font.pointSize: 13
+                        font.weight: Font.Bold
+                    }
+                    StyledText {
+                        text: Notifs.notClosed.length === 0 ? qsTr("Tout est lu") : Notifs.notClosed.length === 1 ? qsTr("1 notification") : qsTr("%1 notifications").arg(Notifs.notClosed.length)
+                        color: root.fgDim
+                        font.pointSize: 8.5
+                    }
+                }
+
+                Row {
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 8
+
+                    // Ne pas déranger
+                    Rectangle {
+                        width: 34
+                        height: 34
+                        radius: 17
+                        color: Notifs.dnd ? root.accent : Qt.alpha(root.fg, dndArea.containsMouse ? 0.16 : 0.1)
+
+                        MaterialIcon {
+                            anchors.centerIn: parent
+                            text: Notifs.dnd ? "do_not_disturb_on" : "do_not_disturb_off"
+                            color: Notifs.dnd ? Colours.palette.m3onPrimary : root.fg
+                            fontStyle: Tokens.font.icon.size(13).build()
+                            fill: 1
+                        }
+                        MouseArea {
+                            id: dndArea
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: Notifs.dnd = !Notifs.dnd
+                        }
+                    }
+
+                    // Tout effacer
+                    Rectangle {
+                        visible: Notifs.notClosed.length > 0
+                        width: clearLbl.implicitWidth + 26
+                        height: 34
+                        radius: 17
+                        color: Qt.alpha(root.fg, clearArea.containsMouse ? 0.16 : 0.1)
+
+                        StyledText {
+                            id: clearLbl
+
+                            anchors.centerIn: parent
+                            text: qsTr("Tout effacer")
+                            color: root.fg
+                            font.pointSize: 9
+                            font.weight: Font.DemiBold
+                        }
+                        MouseArea {
+                            id: clearArea
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                for (const n of [...Notifs.notClosed])
+                                    n.close();
+                            }
+                        }
+                    }
+                }
+            }
+
+            ListView {
+                id: centerList
+
+                x: 14
+                anchors.top: centerHead.bottom
+                anchors.topMargin: 12
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 14
+                width: parent.width - 28
+                clip: true
+                spacing: 8
+                boundsBehavior: Flickable.StopAtBounds
+                model: Notifs.notClosed
+
+                add: Transition {
+                    NumberAnimation {
+                        properties: "opacity"
+                        from: 0
+                        to: 1
+                        duration: 250
+                    }
+                }
+                remove: Transition {
+                    ParallelAnimation {
+                        NumberAnimation {
+                            property: "opacity"
+                            to: 0
+                            duration: 200
+                        }
+                        NumberAnimation {
+                            property: "x"
+                            to: 80
+                            duration: 220
+                            easing.type: Easing.InCubic
+                        }
+                    }
+                }
+                displaced: Transition {
+                    NumberAnimation {
+                        properties: "y"
+                        duration: 260
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
+                delegate: Rectangle {
+                    id: card
+
+                    required property var modelData
+                    readonly property string icon: modelData.appIcon ? Quickshell.iconPath(modelData.appIcon, true) : ""
+
+                    width: centerList.width
+                    height: cardBody.implicitHeight + 24
+                    radius: 18
+                    color: Qt.alpha(root.fg, cardArea.containsMouse ? 0.1 : 0.065)
+                    border.width: 1
+                    border.color: Qt.alpha(root.fg, 0.07)
+
+                    Behavior on color {
+                        ColorAnimation {
+                            duration: 150
+                        }
+                    }
+
+                    // Icône de l'app ou image de la notification
+                    Rectangle {
+                        id: cardIcon
+
+                        x: 12
+                        y: 12
+                        width: 38
+                        height: 38
+                        radius: 11
+                        color: root.fgFaint
+                        clip: true
+
+                        Image {
+                            id: cardImg
+
+                            anchors.fill: parent
+                            anchors.margins: card.modelData.image ? 0 : 6
+                            fillMode: Image.PreserveAspectCrop
+                            asynchronous: true
+                            sourceSize: Qt.size(76, 76)
+                            source: card.modelData.image || card.icon
+                        }
+                        MaterialIcon {
+                            anchors.centerIn: parent
+                            visible: cardImg.status !== Image.Ready
+                            text: "notifications"
+                            color: root.fg
+                            fontStyle: Tokens.font.icon.size(14).build()
+                            fill: 1
+                        }
+                    }
+
+                    Column {
+                        id: cardBody
+
+                        anchors.left: cardIcon.right
+                        anchors.leftMargin: 12
+                        anchors.right: parent.right
+                        anchors.rightMargin: 14
+                        y: 11
+                        spacing: 2
+
+                        Item {
+                            width: parent.width
+                            height: cardApp.implicitHeight
+
+                            StyledText {
+                                id: cardApp
+
+                                anchors.left: parent.left
+                                anchors.right: cardTime.left
+                                anchors.rightMargin: 8
+                                elide: Text.ElideRight
+                                text: card.modelData.appName || qsTr("Notification")
+                                color: root.fgDim
+                                font.pointSize: 8
+                                font.weight: Font.Medium
+                            }
+                            StyledText {
+                                id: cardTime
+
+                                anchors.right: parent.right
+                                anchors.rightMargin: cardArea.containsMouse ? 26 : 0
+                                text: card.modelData.timeStr
+                                color: root.fgDim
+                                font.pointSize: 8
+
+                                Behavior on anchors.rightMargin {
+                                    NumberAnimation {
+                                        duration: 150
+                                    }
+                                }
+                            }
+                        }
+                        StyledText {
+                            width: parent.width
+                            elide: Text.ElideRight
+                            text: card.modelData.summary
+                            color: root.fg
+                            font.pointSize: 9.5
+                            font.weight: Font.DemiBold
+                        }
+                        StyledText {
+                            width: parent.width
+                            visible: text.length > 0
+                            wrapMode: Text.Wrap
+                            maximumLineCount: 3
+                            elide: Text.ElideRight
+                            textFormat: Text.PlainText
+                            text: (card.modelData.body ?? "").replace(/<[^>]*>/g, "")
+                            color: Qt.alpha(root.fg, 0.78)
+                            font.pointSize: 8.5
+                        }
+                    }
+
+                    MouseArea {
+                        id: cardArea
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            const n = card.modelData;
+                            if (n.actions?.length > 0)
+                                n.actions[0].invoke();
+                            n.close();
+                        }
+                    }
+
+                    // Fermer (au survol)
+                    Rectangle {
+                        anchors.right: parent.right
+                        anchors.rightMargin: 8
+                        y: 8
+                        width: 22
+                        height: 22
+                        radius: 11
+                        opacity: cardArea.containsMouse || xArea.containsMouse ? 1 : 0
+                        color: Qt.alpha(root.fg, xArea.containsMouse ? 0.22 : 0.13)
+
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: 150
+                            }
+                        }
+
+                        MaterialIcon {
+                            anchors.centerIn: parent
+                            text: "close"
+                            color: root.fg
+                            fontStyle: Tokens.font.icon.size(10).build()
+                        }
+                        MouseArea {
+                            id: xArea
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: card.modelData.close()
+                        }
+                    }
+                }
+
+                // Rien à lire
+                Column {
+                    anchors.centerIn: parent
+                    visible: centerList.count === 0
+                    spacing: 6
+
+                    MaterialIcon {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: "notifications_paused"
+                        color: root.fgDim
+                        fontStyle: Tokens.font.icon.size(22).build()
+                    }
+                    StyledText {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: qsTr("Aucune notification")
+                        color: root.fgDim
+                        font.pointSize: 9.5
                     }
                 }
             }

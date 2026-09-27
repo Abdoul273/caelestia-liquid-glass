@@ -44,7 +44,7 @@ SHORTCUTS = [
     ]),
     ("Panneaux du shell", "󰕮", [
         ("Super + A", "Centre de contrôle : Wi-Fi, Bluetooth, VPN, son, écran, raccourcis rapides, session (le tableau de bord y est en bouton)"),
-        ("Super + N", "Barre latérale et centre de notifications"),
+        ("Super + N | clic sur l'heure", "Centre de notifications dans la Dynamic Island (Tout effacer, Ne pas déranger)"),
         ("Super + K", "Afficher/masquer lanceur, tableau de bord et OSD ensemble"),
         ("Ctrl + Alt + C", "Effacer toutes les notifications"),
     ]),
@@ -153,7 +153,7 @@ SHORTCUTS = [
     ("Dynamic Island (en haut au centre)", "󰍹", [
         ("Survol", "Lecteur complet, ou heure / météo / batterie"),
         ("Molette", "Volume"),
-        ("Clic | clic milieu", "Lecture / pause (musique), action (notification)"),
+        ("Clic", "Heure : centre de notifications • musique : lecture / pause • notification : action • point rouge : arrêter l'enregistrement"),
         ("Glisser ← → | deux doigts ← →", "Morceau précédent / suivant"),
         ("Glisser ↑ | deux doigts ↑", "Chasser la notification"),
         ("Déposer un fichier", "Le ranger sur l'étagère (clic = ouvrir, glisser = le reprendre, clic milieu = retirer)"),

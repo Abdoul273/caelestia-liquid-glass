@@ -4,6 +4,7 @@ import QtQuick
 import Caelestia
 import Caelestia.Config
 import qs.components
+import qs.services
 
 Item {
     id: root
@@ -11,7 +12,8 @@ Item {
     required property ScreenState screenState
     readonly property Props props: Props {}
 
-    readonly property bool shouldBeActive: screenState.sidebar && Config.sidebar.enabled
+    // Avec le Centre de contrôle, les notifications passent par l'île (clic sur l'heure / Super + N)
+    readonly property bool shouldBeActive: !Island.controlCenter && screenState.sidebar && Config.sidebar.enabled
     property real offsetScale: shouldBeActive ? 0 : 1
 
     visible: offsetScale < 1

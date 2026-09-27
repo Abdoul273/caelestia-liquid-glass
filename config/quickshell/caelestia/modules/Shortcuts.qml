@@ -95,6 +95,10 @@ Scope {
         onPressed: {
             if (root.hasFullscreen)
                 return;
+            if (Island.controlCenter) {
+                Island.notifCenter = !Island.notifCenter;
+                return;
+            }
             const screenState = ShellState.forActive();
             screenState.sidebar = !screenState.sidebar;
         }

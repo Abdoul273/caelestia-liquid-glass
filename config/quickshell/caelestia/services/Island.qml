@@ -25,6 +25,9 @@ Singleton {
     readonly property bool controlCenter: enabled
     readonly property bool noBar: controlCenter
 
+    // Centre de notifications dans l'île (clic sur l'île au repos ou Super + N)
+    property bool notifCenter
+
     // Étagère : fichiers déposés sur l'île, gardés jusqu'au redémarrage du shell
     property list<string> shelf: []
 
