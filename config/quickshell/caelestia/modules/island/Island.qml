@@ -48,7 +48,8 @@ Item {
     property bool levelHeld // doigt/souris sur la jauge : l'île reste ouverte
     property string levelKind: "volume"
     property string levelIcon: "volume_up"
-    property real levelValue: 0
+    // Valeur en direct selon le type : chaque jauge garde la sienne, pas de glissement de l'une à l'autre
+    readonly property real levelValue: levelKind === "volume" ? Audio.volume : brightness
 
     readonly property bool hidden: !Island.enabled || fullscreen || (screenState?.dashboard ?? false)
 
@@ -198,7 +199,6 @@ Item {
         function onVolumeChanged(): void {
             root.levelKind = "volume";
             root.levelIcon = Audio.muted || Audio.volume <= 0 ? "volume_off" : Audio.volume < 0.34 ? "volume_mute" : Audio.volume < 0.67 ? "volume_down" : "volume_up";
-            root.levelValue = Audio.volume;
             root.flash("level", 1700);
         }
 
@@ -210,7 +210,6 @@ Item {
     onBrightnessChanged: {
         levelKind = "brightness";
         levelIcon = brightness < 0.34 ? "brightness_low" : brightness < 0.67 ? "brightness_medium" : "brightness_high";
-        levelValue = brightness;
         flash("level", 1700);
     }
 
@@ -439,18 +438,27 @@ Item {
                     }
                 }
 
-                Rectangle {
-                    height: parent.height
-                    radius: parent.radius
-                    width: Math.max(parent.height, parent.width * Math.max(0, Math.min(1, root.levelValue)))
-                    color: root.levelKind === "volume" && Audio.muted ? Qt.alpha(root.fg, 0.35) : root.fg
+                // Une jauge par type (volume, luminosité), chacune liée à sa propre valeur
+                Repeater {
+                    model: ["volume", "brightness"]
 
-                    Behavior on width {
-                        enabled: !gaugeArea.pressed
+                    Rectangle {
+                        required property string modelData
+                        readonly property real value: modelData === "volume" ? Audio.volume : root.brightness
 
-                        SpringAnimation {
-                            spring: 5
-                            damping: 0.42
+                        visible: root.levelKind === modelData
+                        height: parent.height
+                        radius: parent.radius
+                        width: Math.max(parent.height, parent.width * Math.max(0, Math.min(1, value)))
+                        color: modelData === "volume" && Audio.muted ? Qt.alpha(root.fg, 0.35) : root.fg
+
+                        Behavior on width {
+                            enabled: !gaugeArea.pressed
+
+                            SpringAnimation {
+                                spring: 5
+                                damping: 0.42
+                            }
                         }
                     }
                 }
