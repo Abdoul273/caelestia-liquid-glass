@@ -2,6 +2,8 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
+import QtQuick.Shapes
+import Quickshell.Bluetooth
 import Quickshell.Services.Mpris
 import Quickshell.Services.UPower
 import Caelestia
@@ -51,6 +53,32 @@ Item {
     // Valeur en direct selon le type : chaque jauge garde la sienne, pas de glissement de l'une à l'autre
     readonly property real levelValue: levelKind === "volume" ? Audio.volume : brightness
 
+    // Appareil Bluetooth qui vient de se connecter / déconnecter
+    property BluetoothDevice btDevice: null
+    property bool btOn
+    readonly property bool btBattery: btDevice?.batteryAvailable ?? false
+    readonly property real btLevel: btDevice?.battery ?? 0
+    readonly property string btIcon: {
+        const d = btDevice;
+        if (!d)
+            return "bluetooth";
+        const icon = d.icon ?? "";
+        const name = d.name ?? "";
+        if (/pod|bud|tws|\bbx|cetw/i.test(name))
+            return "earbuds";
+        if (icon.includes("headset") || icon.includes("headphone") || icon.includes("audio"))
+            return "headphones";
+        if (icon.includes("keyboard"))
+            return "keyboard";
+        if (icon.includes("mouse"))
+            return "mouse";
+        if (icon.includes("phone"))
+            return "smartphone";
+        if (icon.includes("gaming") || icon.includes("joystick"))
+            return "stadia_controller";
+        return "bluetooth";
+    }
+
     readonly property bool hidden: !Island.enabled || fullscreen || (screenState?.dashboard ?? false)
 
     readonly property string mode: {
@@ -60,6 +88,8 @@ Item {
             return "level";
         if (pulse === "notif" && notif)
             return "notif";
+        if (pulse === "bt" && btDevice)
+            return "bt";
         if (pulse === "charge")
             return "charge";
         if (expanded)
@@ -82,6 +112,8 @@ Item {
             return Qt.size(340, 52);
         case "notif":
             return Qt.size(430, hovered && notifHasActions ? 132 : 92);
+        case "bt":
+            return btOn ? Qt.size(400, 76) : Qt.size(330, 48);
         case "charge":
             return Qt.size(310, 48);
         case "player":
@@ -94,13 +126,13 @@ Item {
             return Qt.size(290, 40);
         default:
             // Au repos : juste l'heure (ou rien si Island.clock est coupé)
-            return Island.clock ? Qt.size(hovered ? 124 : 112, 32) : Qt.size(150, 0);
+            return Island.clock ? Qt.size(hovered ? 222 : 208, 36) : Qt.size(150, 0);
         }
     }
 
     property real w: target.width
     property real h: target.height
-    readonly property real radius: Math.min(h / 2, mode === "player" || mode === "info" || mode === "notif" ? 32 : h / 2)
+    readonly property real radius: Math.min(h / 2, mode === "player" || mode === "info" || mode === "notif" || mode === "bt" ? 32 : h / 2)
 
     function flash(kind: string, ms: int): void {
         if (!ready)
@@ -220,6 +252,24 @@ Item {
             flash("charge", 2800);
     }
 
+    // Connexion / déconnexion d'un appareil Bluetooth (on suit chaque appareil connu)
+    Instantiator {
+        model: Bluetooth.devices
+
+        delegate: QtObject {
+            required property BluetoothDevice modelData
+            readonly property bool on: modelData?.connected ?? false
+
+            onOnChanged: {
+                if (!root.ready)
+                    return;
+                root.btDevice = modelData;
+                root.btOn = on;
+                root.flash("bt", on ? 4200 : 2200);
+            }
+        }
+    }
+
     Connections {
         target: Island
 
@@ -236,7 +286,61 @@ Item {
     }
 
     // Petit rebond quand un évènement arrive
-    onPulseChanged: if (pulse === "notif" || pulse === "charge") bump.restart()
+    onPulseChanged: {
+        if (pulse === "notif" || pulse === "charge" || pulse === "bt")
+            bump.restart();
+        if (pulse === "bt" && btOn)
+            btIntro.restart();
+    }
+
+    // Arrivée des écouteurs : l'icône surgit, deux ondes partent, l'anneau de batterie se remplit
+    property real btPop: 1
+    property real btWave: 1
+    property real btRing: 1
+
+    SequentialAnimation {
+        id: btIntro
+
+        ScriptAction {
+            script: {
+                root.btPop = 0;
+                root.btWave = 0;
+                root.btRing = 0;
+            }
+        }
+        PauseAnimation {
+            duration: 120
+        }
+        ParallelAnimation {
+            NumberAnimation {
+                target: root
+                property: "btPop"
+                to: 1
+                duration: 620
+                easing.type: Easing.OutBack
+                easing.overshoot: 2.4
+            }
+            NumberAnimation {
+                target: root
+                property: "btWave"
+                to: 1
+                duration: 1500
+                easing.type: Easing.OutCubic
+            }
+            SequentialAnimation {
+                PauseAnimation {
+                    duration: 250
+                }
+                NumberAnimation {
+                    target: root
+                    property: "btRing"
+                    to: 1
+                    duration: 1100
+                    easing.type: Easing.OutCubic
+                }
+            }
+        }
+    }
 
     SequentialAnimation {
         id: bump
@@ -311,18 +415,210 @@ Item {
         height: root.h
         transformOrigin: Item.Top
 
-        // ── repos : l'heure ──
+        // ── repos : date à gauche, heure à droite, comme de part et d'autre d'une encoche ──
         Face {
             active: root.mode === "idle"
 
             StyledText {
+                anchors.left: parent.left
+                anchors.leftMargin: 20
+                anchors.verticalCenter: parent.verticalCenter
+                text: {
+                    const s = Qt.locale("fr_FR").toString(Time.date, "ddd d");
+                    return s.charAt(0).toUpperCase() + s.slice(1);
+                }
+                color: root.fgDim
+                font.pointSize: 10
+                font.weight: Font.Medium
+            }
+
+            // Point d'accent : notifications non lues
+            Rectangle {
                 anchors.centerIn: parent
+                width: 6
+                height: 6
+                radius: 3
+                color: root.accent
+                opacity: Notifs.notClosed.length > 0 ? 0.9 : 0
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 250
+                    }
+                }
+            }
+
+            StyledText {
+                anchors.right: parent.right
+                anchors.rightMargin: 20
+                anchors.verticalCenter: parent.verticalCenter
                 text: Time.format("HH:mm")
                 color: root.fg
-                font.pointSize: 10.5
-                font.weight: Font.DemiBold
+                font.pointSize: 13
+                font.weight: Font.Bold
+                font.letterSpacing: 0.3
                 font.features: {
                     "tnum": 1
+                }
+            }
+        }
+
+        // ── Bluetooth : connexion façon AirPods ──
+        Face {
+            active: root.mode === "bt"
+
+            Item {
+                id: btIconBox
+
+                anchors.left: parent.left
+                anchors.leftMargin: root.btOn ? 22 : 18
+                anchors.verticalCenter: parent.verticalCenter
+                width: root.btOn ? 46 : 28
+                height: width
+
+                // Ondes qui partent de l'icône
+                Repeater {
+                    model: 2
+
+                    Rectangle {
+                        required property int index
+                        readonly property real t: Math.max(0, Math.min(1, root.btWave * 1.25 - index * 0.25))
+
+                        anchors.centerIn: parent
+                        width: parent.width * (1 + t * 0.9)
+                        height: width
+                        radius: width / 2
+                        color: "transparent"
+                        border.width: 2
+                        border.color: root.accent
+                        opacity: root.btOn && t > 0 && t < 1 ? (1 - t) * 0.7 : 0
+                    }
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: width / 2
+                    color: root.btOn ? Qt.alpha(root.accent, 0.22) : root.fgFaint
+                    scale: 0.4 + 0.6 * root.btPop
+
+                    MaterialIcon {
+                        anchors.centerIn: parent
+                        text: root.btIcon
+                        color: root.btOn ? root.accent : root.fgDim
+                        fontStyle: Tokens.font.icon.size(root.btOn ? 20 : 13).build()
+                        fill: 1
+                    }
+                }
+            }
+
+            Column {
+                anchors.left: btIconBox.right
+                anchors.leftMargin: 14
+                anchors.right: btRight.left
+                anchors.rightMargin: 12
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 1
+
+                StyledText {
+                    width: parent.width
+                    elide: Text.ElideRight
+                    text: root.btDevice?.name ?? ""
+                    color: root.fg
+                    font.pointSize: root.btOn ? 11 : 10
+                    font.weight: Font.DemiBold
+                }
+                StyledText {
+                    visible: root.btOn
+                    width: parent.width
+                    elide: Text.ElideRight
+                    text: qsTr("Connecté")
+                    color: root.fgDim
+                    font.pointSize: 9
+                }
+            }
+
+            Item {
+                id: btRight
+
+                anchors.right: parent.right
+                anchors.rightMargin: 22
+                anchors.verticalCenter: parent.verticalCenter
+                width: root.btOn ? 42 : discLbl.implicitWidth
+                height: 42
+
+                StyledText {
+                    id: discLbl
+
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: !root.btOn
+                    text: qsTr("Déconnecté")
+                    color: root.fgDim
+                    font.pointSize: 9
+                    font.weight: Font.Medium
+                }
+
+                // Anneau de batterie (ou coche si l'appareil ne donne pas sa batterie)
+                Shape {
+                    anchors.fill: parent
+                    visible: root.btOn
+                    preferredRendererType: Shape.CurveRenderer
+
+                    ShapePath {
+                        strokeWidth: 3.5
+                        strokeColor: root.fgFaint
+                        fillColor: "transparent"
+                        capStyle: ShapePath.RoundCap
+
+                        PathAngleArc {
+                            centerX: 21
+                            centerY: 21
+                            radiusX: 18
+                            radiusY: 18
+                            startAngle: -90
+                            sweepAngle: 360
+                        }
+                    }
+
+                    ShapePath {
+                        readonly property color ring: !root.btBattery ? root.green : root.btLevel < 0.2 ? root.red : root.green
+
+                        strokeWidth: 3.5
+                        strokeColor: ring
+                        fillColor: "transparent"
+                        capStyle: ShapePath.RoundCap
+
+                        PathAngleArc {
+                            centerX: 21
+                            centerY: 21
+                            radiusX: 18
+                            radiusY: 18
+                            startAngle: -90
+                            sweepAngle: 360 * root.btRing * (root.btBattery ? root.btLevel : 1)
+                        }
+                    }
+                }
+
+                StyledText {
+                    anchors.centerIn: parent
+                    visible: root.btOn && root.btBattery
+                    text: Math.round(root.btLevel * 100)
+                    color: root.fg
+                    font.pointSize: 9
+                    font.weight: Font.Bold
+                    font.features: {
+                        "tnum": 1
+                    }
+                }
+
+                MaterialIcon {
+                    anchors.centerIn: parent
+                    visible: root.btOn && !root.btBattery
+                    text: "check"
+                    color: root.green
+                    scale: root.btRing
+                    fontStyle: Tokens.font.icon.size(14).build()
+                    fill: 1
                 }
             }
         }
