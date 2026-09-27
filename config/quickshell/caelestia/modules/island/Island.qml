@@ -79,6 +79,52 @@ Item {
         return "bluetooth";
     }
 
+    // Chargeur : état au moment de l'évènement + animation (remplissage, éclair, reflet)
+    property bool chargePlugged
+    property real chargeFill: 1
+    property real chargeBolt: 1
+    property real chargeShine: 0
+
+    SequentialAnimation {
+        id: chargeIntro
+
+        ScriptAction {
+            script: {
+                root.chargeFill = root.chargePlugged ? 0 : 1;
+                root.chargeBolt = 0;
+                root.chargeShine = 0;
+            }
+        }
+        PauseAnimation {
+            duration: 150
+        }
+        ParallelAnimation {
+            NumberAnimation {
+                target: root
+                property: "chargeBolt"
+                to: 1
+                duration: 560
+                easing.type: Easing.OutBack
+                easing.overshoot: 3
+            }
+            NumberAnimation {
+                target: root
+                property: "chargeFill"
+                to: 1
+                duration: 1100
+                easing.type: Easing.OutCubic
+            }
+        }
+        NumberAnimation {
+            target: root
+            property: "chargeShine"
+            from: 0
+            to: 1
+            duration: 900
+            easing.type: Easing.InOutQuad
+        }
+    }
+
     readonly property bool hidden: !Island.enabled || fullscreen || (screenState?.dashboard ?? false)
 
     readonly property string mode: {
@@ -115,7 +161,7 @@ Item {
         case "bt":
             return btOn ? Qt.size(400, 76) : Qt.size(330, 48);
         case "charge":
-            return Qt.size(310, 48);
+            return chargePlugged ? Qt.size(420, 78) : Qt.size(330, 48);
         case "player":
             return Qt.size(450, 178);
         case "info":
@@ -132,7 +178,7 @@ Item {
 
     property real w: target.width
     property real h: target.height
-    readonly property real radius: Math.min(h / 2, mode === "player" || mode === "info" || mode === "notif" || mode === "bt" ? 32 : h / 2)
+    readonly property real radius: Math.min(h / 2, mode === "player" || mode === "info" || mode === "notif" || mode === "bt" || (mode === "charge" && chargePlugged) ? 32 : h / 2)
 
     function flash(kind: string, ms: int): void {
         if (!ready)
@@ -248,8 +294,11 @@ Item {
     }
 
     onChargingChanged: {
-        if (UPower.displayDevice.ready && charging)
-            flash("charge", 2800);
+        if (!UPower.displayDevice.ready || !UPower.displayDevice.isLaptopBattery)
+            return;
+        chargePlugged = charging;
+        flash("charge", charging ? 3600 : 2600);
+        chargeIntro.restart();
     }
 
     // Connexion / déconnexion d'un appareil Bluetooth (on suit chaque appareil connu)
@@ -794,47 +843,149 @@ Item {
             }
         }
 
-        // ── charge ──
+        // ── chargeur branché / débranché ──
         Face {
+            id: chargeFace
+
+            readonly property bool plugged: root.chargePlugged
+            readonly property color tone: plugged ? root.green : root.battery < 0.2 ? root.red : root.fg
+
             active: root.mode === "charge"
 
-            Row {
+            // Grande batterie : se remplit depuis zéro, reflet qui la traverse, éclair qui surgit
+            Item {
+                id: bigBatt
+
                 anchors.left: parent.left
-                anchors.leftMargin: 22
+                anchors.leftMargin: chargeFace.plugged ? 24 : 20
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 6
+                width: chargeFace.plugged ? 58 : 34
+                height: chargeFace.plugged ? 28 : 17
+
+                Rectangle {
+                    id: shell
+
+                    width: parent.width - (chargeFace.plugged ? 5 : 3)
+                    height: parent.height
+                    radius: height * 0.3
+                    color: "transparent"
+                    border.width: chargeFace.plugged ? 2 : 1.4
+                    border.color: Qt.alpha(root.fg, 0.4)
+
+                    Rectangle {
+                        id: fillBar
+
+                        readonly property real m: chargeFace.plugged ? 3.5 : 2.5
+
+                        x: m
+                        y: m
+                        height: parent.height - m * 2
+                        width: Math.max(radius * 2, (parent.width - m * 2) * root.battery * root.chargeFill)
+                        radius: shell.radius - m / 2
+                        color: chargeFace.tone
+                        clip: true
+
+                        // Reflet lumineux qui balaie la batterie pendant la charge
+                        Rectangle {
+                            visible: chargeFace.plugged
+                            width: 22
+                            height: parent.height * 2
+                            y: -parent.height / 2
+                            x: -width + (parent.width + width * 2) * root.chargeShine
+                            rotation: 20
+                            gradient: Gradient {
+                                orientation: Gradient.Horizontal
+                                GradientStop {
+                                    position: 0
+                                    color: "transparent"
+                                }
+                                GradientStop {
+                                    position: 0.5
+                                    color: Qt.rgba(1, 1, 1, 0.55)
+                                }
+                                GradientStop {
+                                    position: 1
+                                    color: "transparent"
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    anchors.left: shell.right
+                    anchors.leftMargin: 1.5
+                    anchors.verticalCenter: shell.verticalCenter
+                    width: chargeFace.plugged ? 3 : 2
+                    height: shell.height * 0.36
+                    radius: width / 2
+                    color: Qt.alpha(root.fg, 0.4)
+                }
+
+                // Halo vert derrière l'éclair
+                Rectangle {
+                    anchors.centerIn: shell
+                    visible: chargeFace.plugged
+                    width: 30
+                    height: 30
+                    radius: 15
+                    color: root.green
+                    opacity: 0.35 * (1 - root.chargeBolt) * (root.chargeBolt > 0 ? 1 : 0)
+                    scale: 0.6 + root.chargeBolt * 1.2
+                }
 
                 MaterialIcon {
-                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.centerIn: shell
+                    visible: chargeFace.plugged
                     text: "bolt"
-                    color: root.green
-                    fontStyle: Tokens.font.icon.size(13).build()
+                    color: "white"
+                    style: Text.Outline
+                    styleColor: Qt.alpha("black", 0.25)
+                    fontStyle: Tokens.font.icon.size(17).build()
                     fill: 1
-                }
-                StyledText {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: qsTr("En charge")
-                    color: root.fg
-                    font.pointSize: 10
-                    font.weight: Font.DemiBold
+                    scale: root.chargeBolt
                 }
             }
 
-            Row {
-                anchors.right: parent.right
-                anchors.rightMargin: 20
+            Column {
+                anchors.left: bigBatt.right
+                anchors.leftMargin: 16
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 8
+                spacing: 1
 
                 StyledText {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: `${Math.round(root.battery * 100)} %`
-                    color: root.green
-                    font.pointSize: 10
+                    text: chargeFace.plugged ? qsTr("En charge") : qsTr("Sur batterie")
+                    color: root.fg
+                    font.pointSize: chargeFace.plugged ? 11 : 10
                     font.weight: Font.DemiBold
                 }
-                BatteryGlyph {
-                    anchors.verticalCenter: parent.verticalCenter
+                StyledText {
+                    visible: text.length > 0
+                    text: {
+                        const d = UPower.displayDevice;
+                        const t = chargeFace.plugged ? d.timeToFull : d.timeToEmpty;
+                        if (!t || t <= 0)
+                            return chargeFace.plugged ? qsTr("Branché") : "";
+                        const h = Math.floor(t / 3600);
+                        const m = Math.round((t % 3600) / 60);
+                        const dur = h > 0 ? `${h} h ${m.toString().padStart(2, "0")}` : `${m} min`;
+                        return chargeFace.plugged ? qsTr("Pleine dans %1").arg(dur) : qsTr("%1 restantes").arg(dur);
+                    }
+                    color: root.fgDim
+                    font.pointSize: 9
+                }
+            }
+
+            StyledText {
+                anchors.right: parent.right
+                anchors.rightMargin: 24
+                anchors.verticalCenter: parent.verticalCenter
+                text: `${Math.round(root.battery * 100 * root.chargeFill)} %`
+                color: chargeFace.tone
+                font.pointSize: chargeFace.plugged ? 18 : 11
+                font.weight: Font.Bold
+                font.features: {
+                    "tnum": 1
                 }
             }
         }
