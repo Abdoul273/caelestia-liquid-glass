@@ -733,7 +733,7 @@ Item {
             return Qt.size(hasLyrics ? 400 : 290, 40);
         default:
             // Au repos : juste l'heure (ou rien si Island.clock est coupé)
-            return Island.clock ? Qt.size((hovered ? 256 : 240) + (micInUse || camInUse ? 24 : 0) + (shelf.length > 0 ? 34 : 0), 40) : Qt.size(150, 0);
+            return Island.clock ? Qt.size(240 + (micInUse || camInUse ? 24 : 0) + (shelf.length > 0 ? 34 : 0), 40) : Qt.size(150, 0);
         }
     }
 
@@ -799,15 +799,16 @@ Item {
     clip: true
 
     Behavior on w {
+        // Ressort plus souple : l'île s'ouvre en douceur au lieu de sauter à sa taille
         SpringAnimation {
-            spring: 4
+            spring: 2.4
             damping: 0.3
             epsilon: 0.25
         }
     }
     Behavior on h {
         SpringAnimation {
-            spring: 4
+            spring: 2.4
             damping: 0.34
             epsilon: 0.25
         }
@@ -852,7 +853,7 @@ Item {
     Timer {
         id: hoverTimer
 
-        interval: root.hovered ? 280 : 420
+        interval: root.hovered ? 320 : 480
         onTriggered: root.expanded = root.hovered && root.pulse === ""
     }
 
@@ -2953,26 +2954,39 @@ Item {
 
     // ════════════════════ Composants ════════════════════
 
+    // Une vue de l'île : l'ancienne s'efface vite, la nouvelle attend que l'île ait
+    // commencé à s'ouvrir puis apparaît en fondu avec un léger zoom (pas de saut brutal)
     component Face: Item {
+        id: face
+
         property bool active
 
         anchors.fill: parent
         opacity: active ? 1 : 0
-        scale: active ? 1 : 0.88
+        scale: active ? 1 : 0.95
         visible: opacity > 0.01
         enabled: active
 
         Behavior on opacity {
-            NumberAnimation {
-                duration: 220
-                easing.type: Easing.OutCubic
+            SequentialAnimation {
+                PauseAnimation {
+                    duration: face.active ? 70 : 0
+                }
+                NumberAnimation {
+                    duration: face.active ? 340 : 150
+                    easing.type: face.active ? Easing.OutCubic : Easing.InCubic
+                }
             }
         }
         Behavior on scale {
-            NumberAnimation {
-                duration: 400
-                easing.type: Easing.OutBack
-                easing.overshoot: 1.2
+            SequentialAnimation {
+                PauseAnimation {
+                    duration: face.active ? 70 : 0
+                }
+                NumberAnimation {
+                    duration: face.active ? 520 : 150
+                    easing.type: Easing.OutCubic
+                }
             }
         }
     }
