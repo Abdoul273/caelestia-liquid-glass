@@ -736,7 +736,7 @@ Item {
         if (expanded && Recorder.running)
             return "recordFull";
         if (expanded)
-            return clockKind !== "" && !hasMedia ? "clock" : hasMedia ? "player" : infoPage === 1 ? "perf" : "info";
+            return clockKind !== "" && !hasMedia ? "clock" : pages[Math.min(infoPage, pages.length - 1)];
         if (Recorder.running)
             return "record";
         if (clockKind !== "")
@@ -787,7 +787,7 @@ Item {
         case "charge":
             return chargePlugged ? Qt.size(420, 78) : Qt.size(330, 48);
         case "player":
-            return Qt.size(450, (hasLyrics ? 202 : 178) + shelfExtra);
+            return Qt.size(450, (hasLyrics ? 202 : 178) + (shelf.length > 0 ? shelfExtra : 10));
         case "info":
             return Qt.size(390, 118 + shelfExtra);
         case "perf":
@@ -1278,13 +1278,27 @@ Item {
     property real wheelX: 0
     property real wheelY: 0
 
-    // Pages de l'île ouverte sans musique : 0 = heure/météo, 1 = performances du PC
+    // Pages de l'île ouverte : heure/météo ↔ performances du PC ↔ musique (si un lecteur est actif)
+    readonly property list<string> pages: hasMedia ? ["info", "perf", "player"] : ["info", "perf"]
     property int infoPage: 0
-    readonly property bool paged: mode === "info" || mode === "perf"
+    readonly property int pageIndex: Math.min(infoPage, pages.length - 1)
+    readonly property bool paged: mode === "info" || mode === "perf" || mode === "player"
+
+    // Une musique qui démarre : l'île s'ouvre sur le lecteur ; elle s'arrête : retour à l'heure
+    onHasMediaChanged: infoPage = hasMedia ? 2 : Math.min(infoPage, 1)
+
+    // Sens de sortie d'une page : vers la gauche si elle est avant la page courante
+    function pageSlide(name: string): real {
+        const i = pages.indexOf(name);
+        const cur = pages.indexOf(mode);
+        if (i < 0 || cur < 0 || i === cur)
+            return 0;
+        return i < cur ? -90 : 90;
+    }
 
     function flipPage(dir: int): void {
-        const next = Math.max(0, Math.min(1, infoPage + dir));
-        if (next === infoPage) {
+        const next = Math.max(0, Math.min(pages.length - 1, pageIndex + dir));
+        if (next === pageIndex) {
             // Bord : petit rebond élastique
             swipeX = -dir * 14;
             swipeReset.restart();
@@ -3423,7 +3437,7 @@ Item {
         // ── survol sans musique : heure, date, météo, batterie ──
         Face {
             active: root.mode === "info"
-            slide: root.mode === "perf" ? -90 : 0
+            slide: root.pageSlide("info")
 
             Column {
                 anchors.left: parent.left
@@ -3500,7 +3514,7 @@ Item {
         // ── performances en direct : CPU, RAM, disque, réseau ──
         Face {
             active: root.mode === "perf"
-            slide: root.mode === "info" ? 90 : 0
+            slide: root.pageSlide("perf")
 
             Row {
                 anchors.left: parent.left
@@ -3525,7 +3539,7 @@ Item {
                     icon: "hard_drive"
                     label: "Disque"
                     value: Storage.primaryDisk?.perc ?? 0
-                    sub: Storage.primaryDisk ? root.kibText(Storage.primaryDisk.used, Storage.primaryDisk.total) : ""
+                    sub: Storage.primaryDisk ? root.freeText(Storage.primaryDisk.total - Storage.primaryDisk.used) : ""
                 }
             }
 
@@ -3631,11 +3645,11 @@ Item {
             }
 
             Repeater {
-                model: 2
+                model: root.pages.length
 
                 Rectangle {
                     required property int index
-                    readonly property bool current: root.infoPage === index
+                    readonly property bool current: root.pageIndex === index
 
                     anchors.verticalCenter: parent.verticalCenter
                     width: current ? 16 : 5
@@ -3658,7 +3672,7 @@ Item {
 
                     TapHandler {
                         margin: 6
-                        onTapped: root.flipPage(parent.index - root.infoPage)
+                        onTapped: root.flipPage(parent.index - root.pageIndex)
                     }
                 }
             }
@@ -3667,6 +3681,7 @@ Item {
         // ── lecteur complet ──
         Face {
             active: root.mode === "player"
+            slide: root.pageSlide("player")
 
             Cover {
                 id: bigCover
@@ -3845,6 +3860,15 @@ Item {
         const f = UsageFmt.formatKib(used, total);
         const unit = f.unit.replace("GiB", "Go").replace("MiB", "Mo").replace("TiB", "To");
         return `${+f.value.toFixed(1)}/${Math.round(f.total)} ${unit}`;
+    }
+
+    // Espace libre lisible : « 46,9 Go libres »
+    function freeText(kib: real): string {
+        if (!(kib > 0))
+            return "plein";
+        const gib = kib / 1048576;
+        const v = gib >= 1024 ? `${(gib / 1024).toFixed(1)} To` : gib >= 100 ? `${Math.round(gib)} Go` : `${gib.toFixed(1)} Go`;
+        return `${v.replace(".", ",")} libres`;
     }
 
     // Anneau de jauge animé (couleur qui chauffe avec la charge)
