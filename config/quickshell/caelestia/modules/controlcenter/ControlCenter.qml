@@ -134,6 +134,58 @@ Item {
         screenState.controlCenter = false;
     }
 
+    // ── Projection (outil caelestia-display-pro, piloté sans fenêtre) ──
+    readonly property string displayTool: `${Quickshell.env("HOME")}/.local/bin/caelestia-display-pro`
+    property string projMode: "internal"
+    property list<var> projExternals: []
+    property string projMessage: ""
+    property string projPending: ""
+
+    Process {
+        id: projStatus
+
+        command: [root.displayTool, "--status"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    const d = JSON.parse(text);
+                    root.projMode = d.mode ?? "internal";
+                    root.projExternals = d.externals ?? [];
+                } catch (e) {}
+            }
+        }
+    }
+    Process {
+        id: projApply
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    const d = JSON.parse(text);
+                    root.projMessage = d.ok ? "" : (d.message ?? "");
+                } catch (e) {}
+                root.projPending = "";
+                projStatus.running = true;
+            }
+        }
+    }
+    Timer {
+        running: root.shown && root.page === "display"
+        interval: 3000
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: if (!projStatus.running) projStatus.running = true
+    }
+
+    function setProjection(mode: string): void {
+        if (projApply.running)
+            return;
+        projPending = mode;
+        projMessage = "";
+        projApply.command = [displayTool, "--mode", mode];
+        projApply.running = true;
+    }
+
     // ── Fermeture quand la souris s'en va (comme le menu du Dock) ──
     // Le centre capture la souris : le survol n'est pas fiable, on lit la vraie position du curseur.
     property bool cursorAway
@@ -248,7 +300,7 @@ Item {
             x: 14
             y: 14
             width: parent.width - 28
-            height: root.page === "main" ? mainPage.implicitHeight : root.page === "record" ? recordPage.implicitHeight + 50 : root.page === "caffeine" ? caffPage.implicitHeight + 50 : 470
+            height: root.page === "main" ? mainPage.implicitHeight : root.page === "record" ? recordPage.implicitHeight + 50 : root.page === "caffeine" ? caffPage.implicitHeight + 50 : root.page === "display" ? displayPage.implicitHeight + 50 : 470
             clip: true
 
             Behavior on height {
@@ -441,6 +493,54 @@ Item {
                         font.weight: Font.DemiBold
                     }
 
+                    // Éclairage de nuit / projection → page Écran
+                    Rectangle {
+                        anchors.right: parent.right
+                        anchors.rightMargin: 10
+                        y: 6
+                        width: scrRow.implicitWidth + 16
+                        height: 24
+                        radius: 12
+                        color: scrArea.containsMouse ? root.fgFaint : "transparent"
+
+                        Row {
+                            id: scrRow
+
+                            anchors.centerIn: parent
+                            spacing: 4
+
+                            MaterialIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: NightLight.enabled
+                                text: "nightlight"
+                                color: "#ff9f0a"
+                                fontStyle: Tokens.font.icon.size(11).build()
+                                fill: 1
+                            }
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: NightLight.enabled ? qsTr("Nuit · %1 K").arg(NightLight.temperature) : root.projMode === "duplicate" ? qsTr("Dupliqué") : root.projMode === "extend" ? qsTr("Étendu") : root.projMode === "external" ? qsTr("Second écran") : qsTr("Nuit, projection")
+                                color: root.fgDim
+                                font.pointSize: 8
+                            }
+                            MaterialIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "chevron_right"
+                                color: root.fgDim
+                                fontStyle: Tokens.font.icon.size(11).build()
+                            }
+                        }
+
+                        MouseArea {
+                            id: scrArea
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.page = "display"
+                        }
+                    }
+
                     GlassSlider {
                         anchors.left: parent.left
                         anchors.right: parent.right
@@ -579,6 +679,12 @@ Item {
                                 root.close();
                                 root.run([`${Quickshell.env("HOME")}/.local/bin/caelestia-clock`]);
                             }
+                        }
+                        RoundToggle {
+                            icon: "nightlight"
+                            label: NightLight.enabled ? qsTr("%1 K").arg(NightLight.temperature) : qsTr("Nuit")
+                            on: NightLight.enabled
+                            onClicked: NightLight.toggle()
                         }
                         RoundToggle {
                             icon: "calculate"
@@ -893,7 +999,7 @@ Item {
                         anchors.left: parent.left
                         anchors.leftMargin: 44
                         anchors.verticalCenter: parent.verticalCenter
-                        text: root.page === "wifi" ? qsTr("Wi-Fi") : root.page === "bt" ? qsTr("Bluetooth") : root.page === "record" ? qsTr("Enregistrement de l'écran") : root.page === "caffeine" ? qsTr("Caféine") : qsTr("Sortie audio")
+                        text: root.page === "wifi" ? qsTr("Wi-Fi") : root.page === "bt" ? qsTr("Bluetooth") : root.page === "record" ? qsTr("Enregistrement de l'écran") : root.page === "caffeine" ? qsTr("Caféine") : root.page === "display" ? qsTr("Écran") : qsTr("Sortie audio")
                         color: root.fg
                         font.pointSize: 13
                         font.weight: Font.Bold
@@ -913,6 +1019,11 @@ Item {
                                 else if (root.adapter)
                                     root.adapter.discovering = !root.adapter.discovering;
                             }
+                        }
+                        Switch {
+                            visible: root.page === "display"
+                            on: NightLight.enabled
+                            onToggled: NightLight.toggle()
                         }
                         Switch {
                             visible: root.page === "caffeine"
@@ -1184,6 +1295,341 @@ Item {
                         text: root.adapter?.enabled ? qsTr("Aucun appareil — actualise pour chercher") : qsTr("Bluetooth désactivé")
                         color: root.fgDim
                         font.pointSize: 9.5
+                    }
+                }
+
+                // ── Écran : éclairage de nuit + projection ──
+                Column {
+                    id: displayPage
+
+                    anchors.top: subHead.bottom
+                    anchors.topMargin: 8
+                    width: parent.width
+                    visible: root.page === "display"
+                    spacing: 10
+
+                    readonly property color warm: Qt.rgba(1, 0.62 + 0.3 * (NightLight.temperature - 2500) / 3500, 0.2 + 0.55 * (NightLight.temperature - 2500) / 3500, 1)
+
+                    // État + chaleur
+                    Tile {
+                        width: parent.width
+                        height: nlCol.implicitHeight + 24
+
+                        Column {
+                            id: nlCol
+
+                            x: 14
+                            y: 12
+                            width: parent.width - 28
+                            spacing: 12
+
+                            Item {
+                                width: parent.width
+                                height: 52
+
+                                Rectangle {
+                                    id: moon
+
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 52
+                                    height: 52
+                                    radius: 26
+                                    color: NightLight.enabled ? displayPage.warm : root.fgFaint
+
+                                    Behavior on color {
+                                        ColorAnimation {
+                                            duration: 300
+                                        }
+                                    }
+
+                                    MaterialIcon {
+                                        anchors.centerIn: parent
+                                        text: "nightlight"
+                                        fill: NightLight.enabled ? 1 : 0
+                                        color: NightLight.enabled ? "#2a1605" : root.fg
+                                        fontStyle: Tokens.font.icon.size(22).build()
+                                    }
+                                }
+                                Column {
+                                    anchors.left: moon.right
+                                    anchors.leftMargin: 14
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    spacing: 2
+
+                                    StyledText {
+                                        text: qsTr("Éclairage de nuit")
+                                        color: root.fg
+                                        font.pointSize: 12
+                                        font.weight: Font.Bold
+                                    }
+                                    StyledText {
+                                        width: parent.width
+                                        elide: Text.ElideRight
+                                        text: (NightLight.enabled ? qsTr("Activé · %1 K").arg(NightLight.temperature) : qsTr("Désactivé")) + (NightLight.scheduled ? qsTr(" · auto %1 → %2").arg(NightLight.from).arg(NightLight.to) : "")
+                                        color: root.fgDim
+                                        font.pointSize: 9
+                                    }
+                                }
+                            }
+
+                            StyledText {
+                                text: qsTr("CHALEUR")
+                                color: root.fgDim
+                                font.pointSize: 7.5
+                                font.weight: Font.Bold
+                                font.letterSpacing: 0.8
+                            }
+                            GlassSlider {
+                                width: parent.width
+                                icon: "wb_sunny"
+                                tint: displayPage.warm
+                                value: (NightLight.maxTemp - NightLight.temperature) / (NightLight.maxTemp - NightLight.minTemp)
+                                onMoved: v => {
+                                    NightLight.setTemperature(NightLight.maxTemp - v * (NightLight.maxTemp - NightLight.minTemp));
+                                    if (!NightLight.enabled)
+                                        NightLight.toggle();
+                                }
+                            }
+                            Row {
+                                width: parent.width
+                                spacing: 6
+
+                                Repeater {
+                                    model: [[5200, qsTr("Léger")], [4200, qsTr("Doux")], [3400, qsTr("Chaud")], [2700, qsTr("Bougie")]]
+
+                                    Rectangle {
+                                        id: preset
+
+                                        required property var modelData
+                                        readonly property bool on: NightLight.enabled && Math.abs(NightLight.temperature - modelData[0]) < 100
+
+                                        width: (parent.width - 18) / 4
+                                        height: 32
+                                        radius: 16
+                                        color: on ? displayPage.warm : presetArea.containsMouse ? Qt.alpha(root.fg, 0.14) : root.fgFaint
+
+                                        Behavior on color {
+                                            ColorAnimation {
+                                                duration: 180
+                                            }
+                                        }
+
+                                        StyledText {
+                                            anchors.centerIn: parent
+                                            text: preset.modelData[1]
+                                            color: preset.on ? "#2a1605" : root.fg
+                                            font.pointSize: 9
+                                            font.weight: Font.DemiBold
+                                        }
+                                        MouseArea {
+                                            id: presetArea
+
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                NightLight.setTemperature(preset.modelData[0]);
+                                                if (!NightLight.enabled)
+                                                    NightLight.toggle();
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Programmation
+                    Tile {
+                        width: parent.width
+                        height: schedCol.implicitHeight + 16
+
+                        Column {
+                            id: schedCol
+
+                            x: 14
+                            y: 8
+                            width: parent.width - 28
+                            spacing: 8
+
+                            OptionRow {
+                                icon: "schedule"
+                                title: qsTr("Programmer")
+                                subtitle: NightLight.scheduled ? qsTr("S'allume à %1, s'éteint à %2").arg(NightLight.from).arg(NightLight.to) : qsTr("Allumer et éteindre tout seul")
+                                on: NightLight.scheduled
+                                onToggled: NightLight.setSchedule(!NightLight.scheduled)
+                            }
+
+                            Repeater {
+                                model: NightLight.scheduled ? [["from", qsTr("Allumer"), ["19:00", "20:00", "21:00", "22:00"]], ["to", qsTr("Éteindre"), ["06:00", "07:00", "08:00", "09:00"]]] : []
+
+                                Row {
+                                    id: schedRow
+
+                                    required property var modelData
+
+                                    width: parent.width
+                                    spacing: 6
+
+                                    StyledText {
+                                        width: 60
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: schedRow.modelData[1]
+                                        color: root.fgDim
+                                        font.pointSize: 8.5
+                                    }
+                                    Repeater {
+                                        model: schedRow.modelData[2]
+
+                                        Rectangle {
+                                            id: hourChip
+
+                                            required property string modelData
+                                            readonly property bool on: NightLight[schedRow.modelData[0]] === modelData
+
+                                            width: (schedRow.width - 60 - 24) / 4
+                                            height: 28
+                                            radius: 14
+                                            color: on ? root.accent : hourArea.containsMouse ? Qt.alpha(root.fg, 0.14) : root.fgFaint
+
+                                            StyledText {
+                                                anchors.centerIn: parent
+                                                text: hourChip.modelData.replace(":00", " h")
+                                                color: hourChip.on ? root.onAccent : root.fg
+                                                font.pointSize: 8.5
+                                                font.weight: Font.DemiBold
+                                            }
+                                            MouseArea {
+                                                id: hourArea
+
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    NightLight[schedRow.modelData[0]] = hourChip.modelData;
+                                                    NightLight.setSchedule(true);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Projection (façon Windows + P)
+                    Tile {
+                        width: parent.width
+                        height: projCol.implicitHeight + 24
+
+                        Column {
+                            id: projCol
+
+                            x: 12
+                            y: 12
+                            width: parent.width - 24
+                            spacing: 10
+
+                            Item {
+                                width: parent.width
+                                height: 16
+
+                                StyledText {
+                                    text: qsTr("PROJECTION")
+                                    color: root.fgDim
+                                    font.pointSize: 7.5
+                                    font.weight: Font.Bold
+                                    font.letterSpacing: 0.8
+                                }
+                                StyledText {
+                                    anchors.right: parent.right
+                                    width: Math.min(implicitWidth, parent.width - 90)
+                                    elide: Text.ElideRight
+                                    text: root.projMessage || (root.projExternals.length > 0 ? root.projExternals.map(e => e.title).join(", ") : qsTr("Aucun second écran branché"))
+                                    color: root.projMessage ? "#ff453a" : root.fgDim
+                                    font.pointSize: 8
+                                }
+                            }
+
+                            Row {
+                                width: parent.width
+                                spacing: 6
+
+                                Repeater {
+                                    model: [["internal", "laptop_chromebook", qsTr("PC seul")], ["duplicate", "content_copy", qsTr("Dupliquer")], ["extend", "width_full", qsTr("Étendre")], ["external", "tv", qsTr("2d écran")]]
+
+                                    Rectangle {
+                                        id: proj
+
+                                        required property var modelData
+                                        readonly property bool on: root.projMode === modelData[0]
+                                        readonly property bool usable: modelData[0] === "internal" || root.projExternals.length > 0
+
+                                        width: (parent.width - 18) / 4
+                                        height: 70
+                                        radius: 18
+                                        opacity: usable ? 1 : 0.4
+                                        color: on ? Qt.alpha(root.accent, 0.22) : projArea.containsMouse && usable ? Qt.alpha(root.fg, 0.12) : Qt.alpha(root.fg, 0.07)
+                                        border.width: on ? 2 : 1
+                                        border.color: on ? Qt.alpha(root.accent, 0.7) : Qt.alpha(root.fg, 0.08)
+                                        scale: projArea.pressed && usable ? 0.95 : 1
+
+                                        Behavior on scale {
+                                            NumberAnimation {
+                                                duration: 140
+                                                easing.type: Easing.OutBack
+                                            }
+                                        }
+
+                                        Column {
+                                            anchors.centerIn: parent
+                                            spacing: 5
+
+                                            MaterialIcon {
+                                                anchors.horizontalCenter: parent.horizontalCenter
+                                                text: proj.modelData[1]
+                                                color: proj.on ? root.accent : root.fg
+                                                fontStyle: Tokens.font.icon.size(20).build()
+                                                fill: proj.on ? 1 : 0
+
+                                                RotationAnimation on rotation {
+                                                    running: root.projPending === proj.modelData[0]
+                                                    from: 0
+                                                    to: 360
+                                                    duration: 900
+                                                    loops: Animation.Infinite
+                                                    onRunningChanged: if (!running) parent.rotation = 0
+                                                }
+                                            }
+                                            StyledText {
+                                                anchors.horizontalCenter: parent.horizontalCenter
+                                                text: proj.modelData[2]
+                                                color: root.fg
+                                                font.pointSize: 8.5
+                                                font.weight: Font.DemiBold
+                                            }
+                                        }
+                                        MouseArea {
+                                            id: projArea
+
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: proj.usable ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                            onClicked: if (proj.usable && !proj.on) root.setProjection(proj.modelData[0])
+                                        }
+                                    }
+                                }
+                            }
+
+                            BigPill {
+                                text: qsTr("Position, résolution, échelle…")
+                                onClicked: {
+                                    root.close();
+                                    root.run([root.displayTool]);
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -1973,6 +2419,7 @@ Item {
         property string icon
         property real value
         property bool dim
+        property color tint: Colours.palette.m3onSurface
         signal moved(real v)
         signal iconClicked
 
@@ -1990,7 +2437,7 @@ Item {
                 height: parent.height
                 radius: parent.radius
                 width: Math.max(parent.height, parent.width * Math.max(0, Math.min(1, gs.value)))
-                color: gs.dim ? Qt.alpha(Colours.palette.m3onSurface, 0.35) : Colours.palette.m3onSurface
+                color: gs.dim ? Qt.alpha(Colours.palette.m3onSurface, 0.35) : gs.tint
 
                 Behavior on width {
                     enabled: !gsArea.pressed

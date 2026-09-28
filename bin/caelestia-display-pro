@@ -903,9 +903,38 @@ class DisplayApp(Gtk.Application):
         return False
 
 
+def cli_status() -> int:
+    """État pour le Centre de contrôle : mode actuel et écrans externes branchés (JSON)."""
+    outputs = detect_outputs()
+    print(json.dumps({
+        "mode": detect_mode(outputs),
+        "externals": [{"name": o.name, "title": o.title, "subtitle": o.subtitle} for o in externals(outputs, True)],
+    }, ensure_ascii=False))
+    return 0
+
+
+def cli_mode(mode: str) -> int:
+    """Applique un mode de projection sans ouvrir la fenêtre (Centre de contrôle)."""
+    if mode not in MODES:
+        print(json.dumps({"ok": False, "message": f"mode inconnu : {mode}"}))
+        return 2
+    outputs = detect_outputs()
+    if mode != "internal" and not externals(outputs, connected_only=True):
+        print(json.dumps({"ok": False, "message": "Aucun second écran branché"}, ensure_ascii=False))
+        return 1
+    ok, msg = apply_layout(mode, outputs, load_state())
+    print(json.dumps({"ok": ok, "message": msg}, ensure_ascii=False))
+    return 0 if ok else 1
+
+
 def main() -> int:
     if "--apply-saved" in sys.argv:
         return apply_saved()
+    if "--status" in sys.argv:
+        return cli_status()
+    if "--mode" in sys.argv:
+        i = sys.argv.index("--mode")
+        return cli_mode(sys.argv[i + 1] if i + 1 < len(sys.argv) else "")
     GLib.set_prgname("caelestia-display-pro")
     return DisplayApp().run()
 

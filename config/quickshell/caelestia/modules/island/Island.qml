@@ -3549,7 +3549,7 @@ Item {
                 MaterialIcon {
                     required property string modelData
 
-                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.verticalCenter: parent?.verticalCenter
                     width: 14
                     horizontalAlignment: Text.AlignHCenter
                     text: root.actIcon(modelData)
