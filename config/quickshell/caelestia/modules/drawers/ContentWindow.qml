@@ -186,8 +186,9 @@ StyledWindow {
             radius: Math.min(panels.dashboard.fromH / 2, 32) + (Tokens.rounding.extraLarge - Math.min(panels.dashboard.fromH / 2, 32)) * panels.dashboard.morph
             x: panel.x + bar.implicitWidth + (panel.width - panels.dashboard.curW) / 2
             implicitWidth: panels.dashboard.curW
-            y: -radius
-            implicitHeight: Math.max(0, panel.y + root.borderThickness + panels.dashboard.visBottom) + radius
+            // Fermé : rangé bien au-dessus de l'écran (sinon il se fond dans l'île au repos et change ses bords)
+            y: panels.dashboard.visible ? -radius : -radius - 200
+            implicitHeight: panels.dashboard.visible ? Math.max(0, panel.y + root.borderThickness + panels.dashboard.visBottom) + radius : radius
         }
 
         // Épaules du dashboard (Notes, Tâches…) : il sort du bord de l'écran comme l'île
