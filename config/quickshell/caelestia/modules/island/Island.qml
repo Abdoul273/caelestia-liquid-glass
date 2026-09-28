@@ -33,11 +33,41 @@ Item {
     readonly property bool hasMedia: !!player && (player.trackTitle ?? "").length > 0
     readonly property var brightMon: Brightness.getMonitorForScreen(screen)
     readonly property real brightness: brightMon?.brightness ?? 0
-    readonly property real battery: UPower.displayDevice.percentage ?? 0
+    // Batterie lue directement dans le noyau (charge_now / charge_full), plus précise et réactive qu'UPower
+    property real sysBattery: -1
+    property string sysBattStatus
+    readonly property real battery: sysBattery >= 0 ? sysBattery : (UPower.displayDevice.percentage ?? 0)
     readonly property bool charging: !UPower.onBattery
     // Batterie au repos : icône toujours (sur portable), pourcentage seulement faible ou en charge
     readonly property bool showBattery: Island.battery && UPower.displayDevice.isLaptopBattery
-    readonly property bool battCharging: UPower.displayDevice.state === UPowerDeviceState.Charging || UPower.displayDevice.state === UPowerDeviceState.PendingCharge
+    readonly property bool battCharging: sysBattStatus ? sysBattStatus === "Charging" : UPower.displayDevice.state === UPowerDeviceState.Charging
+
+    Timer {
+        running: UPower.displayDevice.isLaptopBattery
+        repeat: true
+        triggeredOnStart: true
+        interval: 2000
+        onTriggered: {
+            if (!battProc.running)
+                battProc.running = true;
+        }
+    }
+
+    Process {
+        id: battProc
+
+        command: ["sh", "-c", "for b in /sys/class/power_supply/BAT*; do cat $b/status; if [ -e $b/charge_now ]; then cat $b/charge_now $b/charge_full; else cat $b/energy_now $b/energy_full; fi; break; done 2>/dev/null"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const l = text.trim().split("\n");
+                const now = parseFloat(l[1]), full = parseFloat(l[2]);
+                if (l.length >= 3 && full > 0) {
+                    root.sysBattStatus = l[0].trim();
+                    root.sysBattery = Math.max(0, Math.min(1, now / full));
+                }
+            }
+        }
+    }
     readonly property bool batteryPctShown: battCharging && battery < 0.995 || battery < 0.2
 
     // ── Couleurs du thème (le verre suit le thème clair/sombre) ──
@@ -1667,7 +1697,7 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     visible: root.showBattery && root.batteryPctShown
                     text: `${Math.round(root.battery * 100)} %`
-                    color: root.battCharging ? root.green : root.battery < 0.2 && !root.charging ? root.red : root.fgDim
+                    color: root.battCharging ? root.green : root.battery < 0.2 ? root.red : root.fgDim
                     font.pointSize: 9
                     font.weight: Font.DemiBold
                     font.features: {
@@ -1680,6 +1710,8 @@ Item {
                     id: idleBatt
 
                     anchors.verticalCenter: parent.verticalCenter
+                    pct: root.battery
+                    charging: root.battCharging
                     visible: root.showBattery
 
                     SequentialAnimation on opacity {
@@ -3515,12 +3547,14 @@ Item {
                     StyledText {
                         anchors.verticalCenter: parent.verticalCenter
                         text: `${Math.round(root.battery * 100)} %`
-                        color: root.battCharging ? root.green : root.battery < 0.2 && !root.charging ? root.red : root.fgDim
+                        color: root.battCharging ? root.green : root.battery < 0.2 ? root.red : root.fgDim
                         font.pointSize: 10
                         font.weight: Font.DemiBold
                     }
                     BatteryGlyph {
                         anchors.verticalCenter: parent.verticalCenter
+                        pct: root.battery
+                        charging: root.battCharging
                     }
                 }
             }
@@ -4170,11 +4204,12 @@ Item {
     component BatteryGlyph: Item {
         id: glyph
 
-        readonly property real pct: UPower.displayDevice.percentage ?? 0
-        readonly property bool plugged: !UPower.onBattery
-        readonly property bool charging: UPower.displayDevice.state === UPowerDeviceState.Charging || UPower.displayDevice.state === UPowerDeviceState.PendingCharge
+        // Niveau réel (0-1) et charge en cours, fournis par l'île
+        property real pct: UPower.displayDevice.percentage ?? 0
+        property bool charging: UPower.displayDevice.state === UPowerDeviceState.Charging
         readonly property color fg: Colours.palette.m3onSurface
-        readonly property color fillColour: charging ? (Colours.light ? "#1f9d3a" : "#32d74b") : pct < 0.2 && !plugged ? "#ff453a" : fg
+        // Blanc (pleine ou normale) · vert en charge · rouge quand elle est presque vide
+        readonly property color fillColour: charging ? (Colours.light ? "#1f9d3a" : "#32d74b") : pct < 0.2 ? "#ff453a" : fg
 
         width: 26
         height: 12
@@ -4189,17 +4224,19 @@ Item {
             border.width: 1.2
             border.color: Qt.alpha(glyph.fg, 0.5)
 
+            // Jauge au pixel près (largeur fractionnaire, lissée)
             Rectangle {
                 x: 2
                 y: 2
                 height: parent.height - 4
-                width: Math.max(2, (parent.width - 4) * glyph.pct)
+                width: Math.max(1.5, (parent.width - 4) * Math.max(0, Math.min(1, glyph.pct)))
                 radius: 2
+                antialiasing: true
                 color: glyph.fillColour
 
                 Behavior on width {
                     NumberAnimation {
-                        duration: 400
+                        duration: 600
                         easing.type: Easing.OutCubic
                     }
                 }
@@ -4212,11 +4249,11 @@ Item {
 
             MaterialIcon {
                 anchors.centerIn: parent
-                visible: glyph.plugged
+                visible: glyph.charging
                 text: "bolt"
-                color: glyph.charging ? "white" : Qt.alpha(Colours.palette.m3surface, 0.85)
+                color: "white"
                 style: Text.Outline
-                styleColor: glyph.charging ? Qt.alpha("black", 0.3) : "transparent"
+                styleColor: Qt.alpha("black", 0.3)
                 fontStyle: Tokens.font.icon.size(8).build()
                 fill: 1
             }
