@@ -25,7 +25,18 @@ Item {
     required property ScreenState screenState
 
     readonly property bool shown: screenState?.controlCenter ?? false
-    property real offsetScale: shown ? 0 : 1
+    // ── Ouverture façon Dynamic Island : le verre jaillit de l'île et file vers le coin haut droit ──
+    property Item island
+    property real morph: shown ? 1 : 0
+    readonly property real offsetScale: 1 - morph
+    property real fromX // position de l'île à l'ouverture (repère du parent)
+    property real fromW: 240
+    property real fromBottom: 40
+    // Pas de rebond sur l'horizontale (il sortirait de l'écran) : seulement vers le bas
+    readonly property real hMorph: Math.min(1, morph)
+    readonly property real curX: fromX + (x - fromX) * hMorph
+    readonly property real curW: fromW + (width - fromW) * hMorph
+    readonly property real curBottom: fromBottom + (y + height - fromBottom) * morph
     property string page: "main" // main, wifi, bt, audio, record
 
     // Choix d'enregistrement, retenus d'une fois sur l'autre
@@ -171,31 +182,58 @@ Item {
         Quickshell.execDetached(cmd);
     }
 
-    visible: offsetScale < 1
+    visible: morph > 0.001
     implicitWidth: 400
     implicitHeight: pages.height + 28
-    opacity: 1 - offsetScale * 0.6
 
     onShownChanged: {
         if (shown) {
+            if (island && island.h > 1) {
+                fromX = island.x;
+                fromW = island.w;
+                fromBottom = island.y + island.h;
+            } else {
+                fromX = island ? island.x + island.width / 2 - 120 : x;
+                fromW = 240;
+                fromBottom = island ? island.y + 40 : y + 40;
+            }
             page = "main";
             focusScope.forceActiveFocus();
         }
     }
 
-    Behavior on offsetScale {
+    Behavior on morph {
         NumberAnimation {
-            duration: root.shown ? 520 : 320
-            easing.type: root.shown ? Easing.OutBack : Easing.InCubic
-            easing.overshoot: 0.9
+            duration: root.shown ? 600 : 380
+            easing.type: root.shown ? Easing.OutBack : Easing.InOutCubic
+            easing.overshoot: 0.6
         }
     }
+
+    // Le contenu est découpé à la forme du verre qui grandit, puis se pose en fondu + léger zoom
+    readonly property real reveal: Math.max(0, Math.min(1, (morph - 0.45) / 0.55))
+
+    Item {
+        id: ccClipper
+
+        x: root.curX - root.x
+        y: -400
+        width: Math.max(0, root.curW)
+        height: Math.max(0, root.curBottom - root.y + 400)
+        clip: root.morph < 0.999
 
     FocusScope {
         id: focusScope
 
-        anchors.fill: parent
+        // Accroché au bord droit du verre : il voyage avec lui
+        x: ccClipper.width - root.width
+        y: -ccClipper.y
+        width: root.width
+        height: root.height
         focus: root.shown
+        opacity: root.reveal
+        scale: 0.92 + 0.08 * root.reveal
+        transformOrigin: Item.Top
         Keys.onEscapePressed: {
             if (root.page !== "main")
                 root.page = "main";
@@ -1668,6 +1706,7 @@ Item {
                 }
             }
         }
+    }
     }
 
     Timer {

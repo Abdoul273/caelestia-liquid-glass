@@ -223,18 +223,25 @@ StyledWindow {
         PanelBg {
             id: ccBg
 
+            readonly property var cc: panels.controlCenter
+            readonly property real fromR: Math.min((cc.fromBottom + root.borderThickness) / 2, 32)
+
             panel: panels.controlCenter
             deformAmount: 0.08
-            radius: 30
-            y: panel.y + root.borderThickness - radius
-            implicitHeight: panel.height + radius
-            visible: panels.controlCenter.visible
+            // Le verre part de l'île (même place, même taille) et file vers le coin haut droit
+            radius: fromR + (30 - fromR) * cc.morph
+            x: cc.curX + bar.implicitWidth
+            implicitWidth: cc.curW
+            // Fermé : rangé au-dessus de l'écran (sinon il se fondrait dans l'île au repos)
+            y: cc.visible ? -radius : -radius - 200
+            implicitHeight: cc.visible ? Math.max(0, cc.curBottom + root.borderThickness) + radius : radius
+            visible: cc.visible
         }
 
         Shoulders {
             lx: ccBg.x
             rx: ccBg.x + ccBg.width
-            s: 22 * Math.max(0, 1 - panels.controlCenter.offsetScale * 1.6)
+            s: panels.controlCenter.visible ? Math.min(18, (panels.controlCenter.fromBottom + root.borderThickness) * 0.55) + (22 - Math.min(18, (panels.controlCenter.fromBottom + root.borderThickness) * 0.55)) * panels.controlCenter.morph : 0
         }
 
         // Dock : même verre ; replié, le rectangle descend bien sous l'écran (aucune bosse)

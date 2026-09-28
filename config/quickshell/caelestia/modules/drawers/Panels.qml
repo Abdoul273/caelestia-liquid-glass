@@ -147,7 +147,8 @@ Item {
         anchors.right: parent.right
         anchors.rightMargin: 6
         anchors.top: parent.top
-        anchors.topMargin: -root.borderThickness - (height + 40) * offsetScale
+        anchors.topMargin: -root.borderThickness
+        island: island
     }
 
     // Dock : sort du bas de l'écran au survol
