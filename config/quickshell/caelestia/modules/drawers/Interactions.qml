@@ -20,6 +20,8 @@ CustomMouseArea {
     required property bool fullscreen
 
     property point dragStart
+    // Coin actif du Centre de contrôle (haut à droite)
+    readonly property real ccCornerSize: 46
     property bool dashboardShortcutActive
     property bool osdShortcutActive
     property bool utilitiesShortcutActive
@@ -64,9 +66,20 @@ CustomMouseArea {
     acceptedButtons: fullscreen ? Qt.NoButton : Qt.AllButtons
     hoverEnabled: true
 
+    // Temps d'arrêt dans le coin avant d'ouvrir le Centre de contrôle
+    Timer {
+        id: ccCornerTimer
+
+        interval: 280
+        onTriggered: if (Island.controlCenter && !root.fullscreen)
+            root.screenState.controlCenter = true
+    }
+
     onPressed: event => dragStart = Qt.point(event.x, event.y)
     onContainsMouseChanged: {
         if (!containsMouse) {
+            ccCornerTimer.stop();
+
             // Only hide if not activated by shortcut
             if (!osdShortcutActive) {
                 screenState.osd = false;
@@ -104,6 +117,16 @@ CustomMouseArea {
         if (fullscreen) {
             root.panels.osd.hovered = inRightPanel(panels.osdWrapper, x, y);
             return;
+        }
+
+        // Coin actif en haut à droite : le Centre de contrôle sort quand le curseur
+        // s'attarde un instant dans le coin (évite les ouvertures par accident).
+        const inCcCorner = Island.controlCenter && !screenState.controlCenter && !screenState.launcher && x >= width - root.ccCornerSize && y <= root.ccCornerSize;
+        if (inCcCorner) {
+            if (!ccCornerTimer.running)
+                ccCornerTimer.restart(); // armé une fois : bouger dans le coin ne remet pas à zéro
+        } else if (ccCornerTimer.running) {
+            ccCornerTimer.stop();
         }
 
         // Show bar in non-exclusive mode on hover
