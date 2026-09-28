@@ -26,6 +26,8 @@ PACKAGES=(
     libpulse pipewire-pulse           # bascule audio Bluetooth automatique
     kitty nautilus sushi              # terminal, fichiers, aperçu rapide (Espace)
     psmisc pipewire-audio swappy      # Dynamic Island : caméra utilisée, sonneries, annoter les captures
+    fd jq                             # Spotlight (fichiers), quitter l'app active (Super + Maj + Q)
+    hyprsunset                        # éclairage de nuit (sinon filtre d'écran de secours)
     ttf-jetbrains-mono-nerd noto-fonts-emoji
 )
 AUR_PACKAGES=(ttf-rubik-vf)
