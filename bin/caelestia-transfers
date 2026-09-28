@@ -1,0 +1,220 @@
+#!/usr/bin/env python3
+"""Suit les téléchargements (Chrome, Firefox…) et les copies de fichiers (Nautilus, cp, rsync…).
+
+Écrit une ligne JSON par seconde tant qu'il se passe quelque chose, lue par la Dynamic Island :
+  {"items": [{id, kind, name, done, total, speed, dir}], "finished": [{kind, name, path}]}
+kind = "download" ou "copy" ; total = 0 si inconnu.
+"""
+import glob
+import json
+import os
+import sqlite3
+import subprocess
+import sys
+import time
+
+HOME = os.path.expanduser("~")
+COPIERS = {"nautilus", "gio", "cp", "mv", "rsync", "dd", "nemo", "thunar", "pcmanfm", "dolphin", "install", "gvfsd-sftp"}
+PARTIAL = (".crdownload", ".part", ".download", ".opdownload")
+MIN_AGE = 1.2  # un transfert plus court ne s'affiche pas
+MIN_COPY = 4 * 1024 * 1024  # fichiers copiés : au moins 4 Mo
+
+
+def download_dirs():
+    dirs = set()
+    try:
+        d = subprocess.run(["xdg-user-dir", "DOWNLOAD"], capture_output=True, text=True, timeout=2).stdout.strip()
+        if d:
+            dirs.add(d)
+    except Exception:
+        pass
+    for name in ("Téléchargements", "Downloads"):
+        p = os.path.join(HOME, name)
+        if os.path.isdir(p):
+            dirs.add(p)
+    return [d for d in dirs if os.path.isdir(d)]
+
+
+def chrome_totals():
+    """Taille totale des téléchargements en cours, lue dans l'historique des navigateurs Chromium."""
+    totals = {}
+    for hist in glob.glob(f"{HOME}/.config/*/*/History") + glob.glob(f"{HOME}/.config/*/*/*/History"):
+        try:
+            con = sqlite3.connect(f"file:{hist}?immutable=1", uri=True, timeout=0.2)
+            for path, total, target in con.execute(
+                "select current_path, total_bytes, target_path from downloads where state = 0"
+            ):
+                if path:
+                    totals[path] = (int(total or 0), target or "")
+            con.close()
+        except Exception:
+            pass
+    return totals
+
+
+def fmt_name(path):
+    base = os.path.basename(path)
+    for suf in PARTIAL:
+        if base.endswith(suf):
+            base = base[: -len(suf)]
+    return base
+
+
+class Tracker:
+    def __init__(self):
+        self.seen = {}  # id -> {first, samples: [(t, done)], info}
+        self.dirs = download_dirs()
+        self.totals = {}
+        self.totals_at = 0
+
+    def scan_downloads(self, now):
+        out = {}
+        partials = []
+        for d in self.dirs:
+            try:
+                for e in os.scandir(d):
+                    if e.is_file() and e.name.endswith(PARTIAL):
+                        partials.append(e.path)
+            except OSError:
+                pass
+        if partials and now - self.totals_at > 2:
+            self.totals = chrome_totals()
+            self.totals_at = now
+        for p in partials:
+            try:
+                size = os.path.getsize(p)
+            except OSError:
+                continue
+            total, target = self.totals.get(p, (0, ""))
+            name = os.path.basename(target) if target else fmt_name(p)
+            out["dl:" + p] = {
+                "kind": "download",
+                "name": name,
+                "done": size,
+                "total": total if total >= size else 0,
+                "dir": os.path.dirname(p),
+                "final": target or os.path.join(os.path.dirname(p), fmt_name(p)),
+            }
+        return out
+
+    def scan_copies(self):
+        out = {}
+        for pid in os.listdir("/proc"):
+            if not pid.isdigit():
+                continue
+            try:
+                with open(f"/proc/{pid}/comm") as f:
+                    comm = f.read().strip()
+            except OSError:
+                continue
+            if comm not in COPIERS:
+                continue
+            reads, writes = [], []
+            try:
+                fds = os.listdir(f"/proc/{pid}/fd")
+            except OSError:
+                continue
+            for fd in fds:
+                if fd in ("0", "1", "2"):  # entrées / sorties standard : jamais la copie
+                    continue
+                try:
+                    path = os.readlink(f"/proc/{pid}/fd/{fd}")
+                    if not path.startswith("/") or path.startswith(("/dev", "/proc", "/sys")):
+                        continue
+                    st = os.stat(path)
+                    if not os.path.isfile(path):
+                        continue
+                    info = {}
+                    with open(f"/proc/{pid}/fdinfo/{fd}") as f:
+                        for line in f:
+                            k, _, v = line.partition(":")
+                            info[k.strip()] = v.strip()
+                    pos = int(info.get("pos", "0"))
+                    mode = int(info.get("flags", "0"), 8) & 3
+                except (OSError, ValueError):
+                    continue
+                if mode == 0 and st.st_size >= MIN_COPY and pos < st.st_size:
+                    reads.append((path, pos, st.st_size))
+                elif mode in (1, 2):
+                    writes.append((path, st.st_size))
+            # Avancement = position de lecture (cp, rsync) ou taille déjà écrite (GIO/Nautilus
+            # copie avec copy_file_range sans bouger la position)
+            best = None
+            for src, pos, size in reads:
+                base = os.path.basename(src)
+                w = next((w for w in writes if base in os.path.basename(w[0])), None)
+                done = max(pos, w[1] if w else 0)
+                if not w and (pos == 0 or comm not in ("rsync", "dd")):
+                    continue  # lecture seule (miniature, analyse…) : pas une copie
+                if 0 < done < size and (not best or size > best[2]):
+                    best = (src, done, size, w[0] if w else "")
+            if not best:
+                continue
+            src, pos, size, dest = best
+            base = os.path.basename(src)
+            dest = os.path.join(os.path.dirname(dest), base) if dest else ""  # rsync écrit dans « .nom.XXXX »
+            out[f"cp:{pid}:{src}"] = {
+                "kind": "copy",
+                "name": os.path.basename(src),
+                "done": pos,
+                "total": size,
+                "dir": os.path.dirname(dest) if dest else os.path.dirname(src),
+                "final": dest,
+                "app": comm,
+            }
+        return out
+
+    def tick(self):
+        now = time.time()
+        current = {**self.scan_downloads(now), **self.scan_copies()}
+        items, finished = [], []
+        for key, info in current.items():
+            s = self.seen.setdefault(key, {"first": now, "samples": []})
+            s["info"] = info
+            s["samples"] = [x for x in s["samples"] if now - x[0] <= 3] + [(now, info["done"])]
+        for key in list(self.seen):
+            if key not in current:
+                s = self.seen.pop(key)
+                info = s.get("info")
+                # Terminé (et pas annulé) : le fichier final existe
+                if info and info["final"] and now - s["first"] >= MIN_AGE and os.path.exists(info["final"]):
+                    finished.append({"kind": info["kind"], "name": os.path.basename(info["final"]), "path": info["final"]})
+        for key, s in self.seen.items():
+            if now - s["first"] < MIN_AGE:
+                continue
+            info = s["info"]
+            (t0, d0), (t1, d1) = s["samples"][0], s["samples"][-1]
+            speed = (d1 - d0) / (t1 - t0) if t1 > t0 else 0
+            items.append({
+                "id": key,
+                "kind": info["kind"],
+                "name": info["name"],
+                "done": info["done"],
+                "total": info["total"],
+                "speed": max(0, int(speed)),
+                "dir": info["dir"],
+            })
+        return items, finished
+
+
+def main():
+    tr = Tracker()
+    last = None
+    parent = os.getppid()
+    while True:
+        if os.getppid() != parent:  # le shell est parti : on s'arrête aussi
+            return
+        try:
+            items, finished = tr.tick()
+        except Exception as e:  # ne jamais tomber : l'île relancerait en boucle
+            print(json.dumps({"error": str(e)}), file=sys.stderr, flush=True)
+            items, finished = [], []
+        msg = {"items": items, "finished": finished}
+        if items or finished or last != "":
+            print(json.dumps(msg, ensure_ascii=False), flush=True)
+        last = "" if not items and not finished else "x"
+        time.sleep(1)
+
+
+if __name__ == "__main__":
+    main()

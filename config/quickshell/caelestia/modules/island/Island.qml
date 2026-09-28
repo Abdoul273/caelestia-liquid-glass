@@ -354,6 +354,14 @@ Item {
     }
 
     TextMetrics {
+        id: transferNameMetrics
+
+        text: root.transfer?.name ?? ""
+        font.pointSize: 9.5
+        font.weight: Font.Medium
+    }
+
+    TextMetrics {
         id: callTitleMetrics
 
         text: root.callTitle
@@ -364,6 +372,158 @@ Item {
     // ── Bluetooth connecté (icône verte au repos) ──
     readonly property var btConnected: Bluetooth.devices.values.filter(d => d?.connected)
     readonly property bool btAudio: btConnected.some(d => /audio|head|ear|phone/i.test(d?.icon ?? ""))
+
+    // ── Téléchargements et copies de fichiers (script caelestia-transfers) ──
+    property list<var> transfers: []
+    property var fileDone: null // dernier transfert terminé {kind, name, path}
+    // Celui qu'on montre : de taille connue d'abord, puis le plus gros
+    readonly property var transfer: transfers.length > 0 ? [...transfers].sort((a, b) => ((b.total > 0) - (a.total > 0)) || (b.total - a.total) || (b.done - a.done))[0] : null
+    readonly property real transferProgress: transfer && transfer.total > 0 ? Math.min(1, transfer.done / transfer.total) : -1
+
+    Process {
+        id: transfersProc
+
+        running: true
+        command: [`${Quickshell.env("HOME")}/.local/bin/caelestia-transfers`]
+        stdout: SplitParser {
+            onRead: line => {
+                try {
+                    const m = JSON.parse(line);
+                    root.transfers = m.items ?? [];
+                    const f = (m.finished ?? [])[0];
+                    if (f && root.ready) {
+                        root.fileDone = f;
+                        Quickshell.execDetached(["pw-play", "--volume", "0.5", "/usr/share/sounds/freedesktop/stereo/complete.oga"]);
+                        root.flash("fileDone", 6000);
+                    }
+                } catch (e) {}
+            }
+        }
+        // Relance s'il s'arrête (mise à jour du script, erreur…)
+        onRunningChanged: if (!running) transfersRestart.start()
+    }
+    Timer {
+        id: transfersRestart
+
+        interval: 5000
+        onTriggered: transfersProc.running = true
+    }
+
+    function fmtBytes(b: real): string {
+        if (b >= 1073741824)
+            return `${(b / 1073741824).toFixed(b >= 10737418240 ? 0 : 1).replace(".", ",")} Go`;
+        if (b >= 1048576)
+            return `${(b / 1048576).toFixed(b >= 104857600 ? 0 : 1).replace(".", ",")} Mo`;
+        return `${Math.max(1, Math.round(b / 1024))} Ko`;
+    }
+
+    function transferEta(t: var): string {
+        if (!t || t.total <= 0 || t.speed <= 0)
+            return "";
+        const s = (t.total - t.done) / t.speed;
+        return s < 60 ? qsTr("%1 s").arg(Math.ceil(s)) : s < 3600 ? qsTr("%1 min").arg(Math.ceil(s / 60)) : qsTr("%1 h %2").arg(Math.floor(s / 3600)).arg(Math.round(s % 3600 / 60).toString().padStart(2, "0"));
+    }
+
+    // ── Rappels AuraTask : 15 min avant l'échéance, à l'échéance, et rappels intelligents ──
+    property var taskAlert: null // {id, title, sub, key, late}
+    property var remindersSeen: ({})
+    property var snoozes: ({}) // id -> heure du rappel reporté
+
+    FileView {
+        id: remindersFile
+
+        path: `${Quickshell.env("HOME")}/.local/state/caelestia/task-reminders.json`
+        printErrors: false
+        onLoaded: {
+            try {
+                const d = JSON.parse(text());
+                root.remindersSeen = d.seen ?? {};
+                root.snoozes = d.snoozes ?? {};
+            } catch (e) {}
+        }
+    }
+
+    function saveReminders(): void {
+        // On oublie ce qui date de plus de 3 jours
+        const now = Date.now(), seen = {};
+        for (const k in remindersSeen)
+            if (now - remindersSeen[k] < 3 * 86400000)
+                seen[k] = remindersSeen[k];
+        remindersSeen = seen;
+        remindersFile.setText(JSON.stringify({ seen: seen, snoozes: snoozes }));
+    }
+
+    function checkReminders(): void {
+        if (!Tasks.loaded || taskAlert)
+            return;
+        const now = Date.now();
+        const fresh = 10 * 60000; // un rappel manqué de plus de 10 min n'est plus montré
+        for (const t of Tasks.tasks) {
+            if (t.done)
+                continue;
+            const moments = [];
+            if (t.due > 0) {
+                moments.push({ key: `${t.id}:soon:${t.due}`, at: t.due - 15 * 60000, sub: qsTr("Dans 15 min · à %1").arg(Qt.formatTime(new Date(t.due), "HH:mm")), late: false });
+                moments.push({ key: `${t.id}:due:${t.due}`, at: t.due, sub: qsTr("C'est l'heure · %1").arg(Qt.formatTime(new Date(t.due), "HH:mm")), late: true });
+            }
+            for (const r of t.full?.smartReminders ?? []) {
+                const at = Date.parse(r.time) || 0;
+                if (at > 0 && !r.triggered)
+                    moments.push({ key: `${t.id}:smart:${r.id}`, at: at, sub: r.label || qsTr("Rappel"), late: false });
+            }
+            if (snoozes[t.id])
+                moments.push({ key: `${t.id}:snooze:${snoozes[t.id]}`, at: snoozes[t.id], sub: qsTr("Rappel reporté"), late: true });
+            for (const m of moments) {
+                if (m.at > now || now - m.at > fresh || remindersSeen[m.key])
+                    continue;
+                const seen = Object.assign({}, remindersSeen);
+                seen[m.key] = now;
+                remindersSeen = seen;
+                saveReminders();
+                taskAlert = {
+                    id: t.id,
+                    title: t.text,
+                    sub: m.sub,
+                    priority: t.priority,
+                    late: m.late
+                };
+                Quickshell.execDetached(["pw-play", "/usr/share/sounds/freedesktop/stereo/message-new-instant.oga"]);
+                taskAlertTimeout.restart();
+                return;
+            }
+        }
+    }
+
+    function taskAlertDone(): void {
+        if (taskAlert)
+            Tasks.toggle(taskAlert.id);
+        taskAlert = null;
+    }
+
+    function taskAlertSnooze(min: int): void {
+        if (taskAlert) {
+            const s = Object.assign({}, snoozes);
+            s[taskAlert.id] = Date.now() + min * 60000;
+            snoozes = s;
+            saveReminders();
+        }
+        taskAlert = null;
+    }
+
+    Timer {
+        interval: 15000
+        running: true
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: root.checkReminders()
+    }
+    // Sans réponse, le rappel se range après 2 min
+    Timer {
+        id: taskAlertTimeout
+
+        interval: 120000
+        onTriggered: root.taskAlert = null
+    }
 
     // ── Compte à rebours avant un enregistrement ──
     property int countLeft: 0
@@ -854,6 +1014,10 @@ Item {
             return "drop";
         if (alarmRinging)
             return "alarm";
+        if (taskAlert)
+            return "taskDue";
+        if (pulse === "fileDone" && fileDone)
+            return "fileDone";
         if (pulse === "level")
             return "level";
         if (pulse === "shot")
@@ -880,22 +1044,22 @@ Item {
     }
 
     // Activités en cours affichables en compact ; celle qu'on a regardée en dernier passe devant
-    readonly property list<string> compactActs: [...(inCall ? ["call"] : []), ...(Recorder.running ? ["record"] : []), ...(clockKind !== "" ? ["clockMini"] : []), ...(hasMedia && playing ? ["media"] : [])]
+    readonly property list<string> compactActs: [...(inCall ? ["call"] : []), ...(transfer ? ["transfer"] : []), ...(Recorder.running ? ["record"] : []), ...(clockKind !== "" ? ["clockMini"] : []), ...(hasMedia && playing ? ["media"] : [])]
     readonly property string compactPick: {
-        const fromPage = ({ callFull: "call", recordFull: "record", clock: "clockMini", player: "media" })[pageName];
+        const fromPage = ({ callFull: "call", transferFull: "transfer", recordFull: "record", clock: "clockMini", player: "media" })[pageName];
         return fromPage && compactActs.includes(fromPage) ? fromPage : (compactActs[0] ?? "");
     }
     // Les autres activités, en petites icônes au bord de l'île compacte (+ caféine)
     readonly property list<string> otherActs: [...compactActs.filter(a => a !== mode), ...(IdleInhibitor.enabled ? ["caffeine"] : [])]
-    readonly property bool compactActive: mode === "call" || mode === "record" || mode === "clockMini" || mode === "media"
+    readonly property bool compactActive: mode === "call" || mode === "transfer" || mode === "record" || mode === "clockMini" || mode === "media"
     readonly property real actsInset: compactActive && otherActs.length > 0 ? otherActs.length * 18 + 12 : 0
 
     function actIcon(a: string): string {
-        return ({ call: callMuted ? "mic_off" : "call", record: "radio_button_checked", clockMini: "timer", media: "music_note", caffeine: "coffee" })[a] ?? "";
+        return ({ call: callMuted ? "mic_off" : "call", transfer: transfer?.kind === "copy" ? "content_copy" : "download", record: "radio_button_checked", clockMini: "timer", media: "music_note", caffeine: "coffee" })[a] ?? "";
     }
 
     function actColour(a: string): color {
-        return ({ call: callMuted ? "#ff453a" : root.green, record: "#ff453a", clockMini: "#ff9f0a", media: root.accent, caffeine: root.fg })[a] ?? root.fg;
+        return ({ call: callMuted ? "#ff453a" : root.green, transfer: "#0a84ff", record: "#ff453a", clockMini: "#ff9f0a", media: root.accent, caffeine: root.fg })[a] ?? root.fg;
     }
 
     readonly property bool notifHasActions: (notif?.actions?.length ?? 0) > 0
@@ -951,6 +1115,14 @@ Item {
             return Qt.size(pageWidth, 150);
         case "record":
             return Qt.size(210 + actsInset, 40);
+        case "transfer":
+            return Qt.size(Math.min(330, 170 + transferNameMetrics.advanceWidth) + actsInset, 40);
+        case "transferFull":
+            return Qt.size(pageWidth, 112);
+        case "taskDue":
+            return Qt.size(460, 104);
+        case "fileDone":
+            return Qt.size(440, 76);
         case "call":
             return Qt.size(Math.min(340, 150 + callTitleMetrics.advanceWidth) + actsInset, 40);
         case "callFull":
@@ -966,7 +1138,7 @@ Item {
 
     property real w: target.width
     property real h: target.height
-    readonly property real radius: Math.min(h / 2, mode === "player" || mode === "info" || mode === "perf" || mode === "notif" || mode === "bt" || mode === "shot" || mode === "clock" || mode === "drop" || mode === "toast" || mode === "done" || mode === "alarm" || mode === "count" || mode === "recordFull" || mode === "callFull" || mode === "caffeine" || mode === "center" || (mode === "charge" && chargePlugged) ? 32 : h / 2)
+    readonly property real radius: Math.min(h / 2, mode === "player" || mode === "info" || mode === "perf" || mode === "notif" || mode === "bt" || mode === "shot" || mode === "clock" || mode === "drop" || mode === "toast" || mode === "done" || mode === "alarm" || mode === "count" || mode === "recordFull" || mode === "callFull" || mode === "transferFull" || mode === "taskDue" || mode === "fileDone" || mode === "caffeine" || mode === "center" || (mode === "charge" && chargePlugged) ? 32 : h / 2)
 
     function flash(kind: string, ms: int): void {
         if (!ready)
@@ -1442,7 +1614,7 @@ Item {
 
     // Pages de l'île ouverte : enregistrement et minuteur en cours d'abord (s'il y en a),
     // puis heure/météo ↔ performances du PC ↔ musique (si un lecteur est actif)
-    readonly property list<string> pages: [...(inCall ? ["callFull"] : []), ...(Recorder.running ? ["recordFull"] : []), ...(clockKind !== "" ? ["clock"] : []), ...(IdleInhibitor.enabled ? ["caffeine"] : []), "info", "perf", ...(hasMedia ? ["player"] : [])]
+    readonly property list<string> pages: [...(inCall ? ["callFull"] : []), ...(transfer ? ["transferFull"] : []), ...(Recorder.running ? ["recordFull"] : []), ...(clockKind !== "" ? ["clock"] : []), ...(IdleInhibitor.enabled ? ["caffeine"] : []), "info", "perf", ...(hasMedia ? ["player"] : [])]
     // Page retenue par son nom : elle reste la même quand d'autres pages apparaissent ou disparaissent
     property string pageName: "info"
     readonly property int pageIndex: Math.max(0, pages.indexOf(pageName))
@@ -1470,6 +1642,13 @@ Item {
             else if (root.pageName === "caffeine")
                 root.pageName = "info";
         }
+    }
+    readonly property bool hasTransfer: transfer !== null
+    onHasTransferChanged: {
+        if (hasTransfer && pageName !== "callFull")
+            pageName = "transferFull";
+        else if (!hasTransfer && pageName === "transferFull")
+            pageName = "info";
     }
     onInCallChanged: {
         if (inCall)
@@ -2116,6 +2295,452 @@ Item {
                 count: 5
                 barWidth: 3
                 maxHeight: 16
+            }
+        }
+
+        // ── téléchargement / copie (compact) : anneau de progression, nom, pourcentage ──
+        Face {
+            active: root.mode === "transfer"
+            inset: root.actsInset
+
+            Item {
+                id: trMiniIcon
+
+                anchors.left: parent.left
+                anchors.leftMargin: 14
+                anchors.verticalCenter: parent.verticalCenter
+                width: 24
+                height: 24
+
+                Shape {
+                    anchors.fill: parent
+                    preferredRendererType: Shape.CurveRenderer
+
+                    ShapePath {
+                        strokeWidth: 2.5
+                        strokeColor: root.fgFaint
+                        fillColor: "transparent"
+
+                        PathAngleArc {
+                            centerX: 12
+                            centerY: 12
+                            radiusX: 10.5
+                            radiusY: 10.5
+                            startAngle: 0
+                            sweepAngle: 360
+                        }
+                    }
+                    ShapePath {
+                        strokeWidth: 2.5
+                        strokeColor: "#0a84ff"
+                        fillColor: "transparent"
+                        capStyle: ShapePath.RoundCap
+
+                        PathAngleArc {
+                            centerX: 12
+                            centerY: 12
+                            radiusX: 10.5
+                            radiusY: 10.5
+                            startAngle: -90
+                            sweepAngle: root.transferProgress >= 0 ? 360 * root.transferProgress : 70
+
+                            Behavior on sweepAngle {
+                                NumberAnimation {
+                                    duration: 700
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
+                        }
+                    }
+
+                    // Taille inconnue : l'arc tourne
+                    RotationAnimation on rotation {
+                        running: root.mode === "transfer" && root.transferProgress < 0
+                        from: 0
+                        to: 360
+                        duration: 1200
+                        loops: Animation.Infinite
+                    }
+                }
+
+                MaterialIcon {
+                    anchors.centerIn: parent
+                    text: root.transfer?.kind === "copy" ? "content_copy" : "arrow_downward"
+                    color: "#0a84ff"
+                    fontStyle: Tokens.font.icon.size(11).build()
+                    fill: 1
+                }
+            }
+
+            StyledText {
+                anchors.left: trMiniIcon.right
+                anchors.leftMargin: 9
+                anchors.right: trMiniPct.left
+                anchors.rightMargin: 10
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.transfer?.name ?? ""
+                elide: Text.ElideMiddle
+                color: root.fgDim
+                font.pointSize: 9.5
+                font.weight: Font.Medium
+            }
+
+            StyledText {
+                id: trMiniPct
+
+                anchors.right: parent.right
+                anchors.rightMargin: 18
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.transferProgress >= 0 ? `${Math.floor(root.transferProgress * 100)} %` : root.fmtBytes(root.transfer?.done ?? 0)
+                color: "#0a84ff"
+                font.pointSize: 10
+                font.weight: Font.DemiBold
+                font.features: {
+                    "tnum": 1
+                }
+            }
+        }
+
+        // ── téléchargement / copie (île ouverte) ──
+        Face {
+            active: root.mode === "transferFull"
+            slide: root.pageSlide("transferFull")
+
+            Rectangle {
+                id: trBadge
+
+                anchors.left: parent.left
+                anchors.leftMargin: 26
+                anchors.top: parent.top
+                anchors.topMargin: 20
+                width: 44
+                height: 44
+                radius: 22
+                color: Qt.alpha("#0a84ff", 0.2)
+
+                MaterialIcon {
+                    anchors.centerIn: parent
+                    text: root.transfer?.kind === "copy" ? "content_copy" : "download"
+                    color: "#0a84ff"
+                    fontStyle: Tokens.font.icon.size(19).build()
+                    fill: 1
+                }
+            }
+
+            Column {
+                anchors.left: trBadge.right
+                anchors.leftMargin: 14
+                anchors.right: trButtons.left
+                anchors.rightMargin: 12
+                anchors.verticalCenter: trBadge.verticalCenter
+                spacing: 1
+
+                StyledText {
+                    width: parent.width
+                    elide: Text.ElideMiddle
+                    text: root.transfer?.name ?? ""
+                    color: root.fg
+                    font.pointSize: 11.5
+                    font.weight: Font.Bold
+                }
+                StyledText {
+                    width: parent.width
+                    elide: Text.ElideRight
+                    text: {
+                        const t = root.transfer;
+                        if (!t)
+                            return "";
+                        const parts = [t.total > 0 ? qsTr("%1 sur %2").arg(root.fmtBytes(t.done)).arg(root.fmtBytes(t.total)) : root.fmtBytes(t.done)];
+                        if (t.speed > 0)
+                            parts.push(`${root.fmtBytes(t.speed)}/s`);
+                        const eta = root.transferEta(t);
+                        if (eta)
+                            parts.push(qsTr("encore %1").arg(eta));
+                        if (root.transfers.length > 1)
+                            parts.push(qsTr("+%1").arg(root.transfers.length - 1));
+                        return parts.join(" · ");
+                    }
+                    color: root.fgDim
+                    font.pointSize: 9
+                    font.features: {
+                        "tnum": 1
+                    }
+                }
+            }
+
+            Row {
+                id: trButtons
+
+                anchors.right: parent.right
+                anchors.rightMargin: 24
+                anchors.verticalCenter: trBadge.verticalCenter
+
+                ShotButton {
+                    icon: "folder_open"
+                    tip: qsTr("Ouvrir le dossier")
+                    onClicked: Quickshell.execDetached(["xdg-open", root.transfer?.dir ?? Quickshell.env("HOME")])
+                }
+            }
+
+            // Barre de progression (ou vague qui passe si la taille est inconnue)
+            Rectangle {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: 26
+                anchors.rightMargin: 26
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 22
+                height: 6
+                radius: 3
+                color: root.fgFaint
+                clip: true
+
+                Rectangle {
+                    visible: root.transferProgress >= 0
+                    width: parent.width * Math.max(0, root.transferProgress)
+                    height: parent.height
+                    radius: 3
+                    color: "#0a84ff"
+
+                    Behavior on width {
+                        NumberAnimation {
+                            duration: 700
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+                }
+                Rectangle {
+                    id: trWave
+
+                    visible: root.transferProgress < 0
+                    width: parent.width * 0.3
+                    height: parent.height
+                    radius: 3
+                    color: "#0a84ff"
+
+                    NumberAnimation on x {
+                        running: root.mode === "transferFull" && root.transferProgress < 0
+                        from: -trWave.width
+                        to: trWave.parent.width
+                        duration: 1300
+                        loops: Animation.Infinite
+                        easing.type: Easing.InOutQuad
+                    }
+                }
+            }
+        }
+
+        // ── transfert terminé ──
+        Face {
+            active: root.mode === "fileDone"
+
+            Rectangle {
+                id: fdIcon
+
+                anchors.left: parent.left
+                anchors.leftMargin: 20
+                anchors.verticalCenter: parent.verticalCenter
+                width: 38
+                height: 38
+                radius: 19
+                color: Qt.alpha(root.green, 0.2)
+
+                MaterialIcon {
+                    anchors.centerIn: parent
+                    text: "check"
+                    color: root.green
+                    fontStyle: Tokens.font.icon.size(19).build()
+                    fill: 1
+                }
+            }
+
+            Column {
+                anchors.left: fdIcon.right
+                anchors.leftMargin: 14
+                anchors.right: fdButtons.left
+                anchors.rightMargin: 12
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 1
+
+                StyledText {
+                    width: parent.width
+                    elide: Text.ElideMiddle
+                    text: root.fileDone?.name ?? ""
+                    color: root.fg
+                    font.pointSize: 11
+                    font.weight: Font.DemiBold
+                }
+                StyledText {
+                    text: root.fileDone?.kind === "copy" ? qsTr("Copie terminée") : qsTr("Téléchargement terminé")
+                    color: root.fgDim
+                    font.pointSize: 9
+                }
+            }
+
+            Row {
+                id: fdButtons
+
+                anchors.right: parent.right
+                anchors.rightMargin: 20
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 8
+
+                ShotButton {
+                    icon: "folder_open"
+                    tip: qsTr("Afficher dans le dossier")
+                    onClicked: {
+                        const p = root.fileDone?.path ?? "";
+                        Quickshell.execDetached(["dbus-send", "--session", "--dest=org.freedesktop.FileManager1", "--type=method_call", "/org/freedesktop/FileManager1", "org.freedesktop.FileManager1.ShowItems", `array:string:file://${p}`, "string:"]);
+                        root.pulse = "";
+                    }
+                }
+                ShotButton {
+                    icon: "open_in_new"
+                    tip: qsTr("Ouvrir")
+                    onClicked: {
+                        Quickshell.execDetached(["xdg-open", root.fileDone?.path ?? ""]);
+                        root.pulse = "";
+                    }
+                }
+            }
+        }
+
+        // ── rappel AuraTask : la tâche, l'échéance, « Fait » / « Plus tard » ──
+        Face {
+            active: root.mode === "taskDue"
+
+            readonly property color tint: root.taskAlert?.priority === "urgent" ? root.red : root.taskAlert?.priority === "high" ? "#ff9f0a" : root.accent
+
+            Rectangle {
+                id: tdIcon
+
+                anchors.left: parent.left
+                anchors.leftMargin: 24
+                anchors.verticalCenter: parent.verticalCenter
+                width: 46
+                height: 46
+                radius: 23
+                color: Qt.alpha(parent.tint, 0.2)
+
+                MaterialIcon {
+                    anchors.centerIn: parent
+                    text: root.taskAlert?.late ? "notifications_active" : "task_alt"
+                    color: tdIcon.parent.tint
+                    fontStyle: Tokens.font.icon.size(20).build()
+                    fill: 1
+
+                    SequentialAnimation on rotation {
+                        running: root.mode === "taskDue" && (root.taskAlert?.late ?? false)
+                        loops: 3
+                        NumberAnimation {
+                            to: 14
+                            duration: 90
+                        }
+                        NumberAnimation {
+                            to: -14
+                            duration: 180
+                        }
+                        NumberAnimation {
+                            to: 0
+                            duration: 90
+                        }
+                        PauseAnimation {
+                            duration: 500
+                        }
+                    }
+                }
+            }
+
+            Column {
+                anchors.left: tdIcon.right
+                anchors.leftMargin: 14
+                anchors.right: tdButtons.left
+                anchors.rightMargin: 12
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 2
+
+                StyledText {
+                    width: parent.width
+                    text: root.taskAlert?.title ?? ""
+                    elide: Text.ElideRight
+                    maximumLineCount: 2
+                    wrapMode: Text.Wrap
+                    color: root.fg
+                    font.pointSize: 11.5
+                    font.weight: Font.Bold
+                }
+                StyledText {
+                    width: parent.width
+                    elide: Text.ElideRight
+                    text: root.taskAlert?.sub ?? ""
+                    color: root.fgDim
+                    font.pointSize: 9
+                }
+            }
+
+            Row {
+                id: tdButtons
+
+                anchors.right: parent.right
+                anchors.rightMargin: 20
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 8
+
+                ShotButton {
+                    icon: "snooze"
+                    tip: qsTr("Dans 10 min")
+                    onClicked: root.taskAlertSnooze(10)
+                }
+                // « Fait » : pastille verte avec son libellé
+                Rectangle {
+                    width: tdDoneRow.implicitWidth + 26
+                    height: 40
+                    radius: 20
+                    color: tdDoneArea.containsMouse ? Qt.lighter(root.green, 1.1) : root.green
+                    scale: tdDoneArea.pressed ? 0.93 : 1
+
+                    Behavior on scale {
+                        NumberAnimation {
+                            duration: 120
+                        }
+                    }
+
+                    Row {
+                        id: tdDoneRow
+
+                        anchors.centerIn: parent
+                        spacing: 5
+
+                        MaterialIcon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "check"
+                            color: "white"
+                            fontStyle: Tokens.font.icon.size(15).build()
+                            fill: 1
+                        }
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: qsTr("Fait")
+                            color: "white"
+                            font.pointSize: 10
+                            font.weight: Font.Bold
+                        }
+                    }
+
+                    MouseArea {
+                        id: tdDoneArea
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.taskAlertDone()
+                    }
+                }
+                ShotButton {
+                    icon: "close"
+                    tip: qsTr("Ignorer")
+                    onClicked: root.taskAlert = null
+                }
             }
         }
 
