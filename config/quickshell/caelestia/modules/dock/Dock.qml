@@ -25,7 +25,7 @@ Item {
     readonly property bool emptyWorkspace: (monitor?.activeWorkspace?.toplevels?.values?.length ?? 1) === 0
     property bool hovered
     property bool stayOpen // survol + petite attente avant de se cacher
-    readonly property bool shown: Island.dock && !fullscreen && !(screenState?.launcher ?? false) && !(screenState?.controlCenter ?? false) && (stayOpen || emptyWorkspace || contextFor !== "" || dragging)
+    readonly property bool shown: Island.dock && !(FocusMode.active && FocusMode.hideDock) && !fullscreen && !(screenState?.launcher ?? false) && !(screenState?.controlCenter ?? false) && (stayOpen || emptyWorkspace || contextFor !== "" || dragging)
     property real reveal: shown ? 1 : 0
 
     readonly property real iconSize: 48

@@ -47,6 +47,7 @@ SHORTCUTS = [
         ("Super + Maj + N", "Notes rapides, synchronisées avec AetherNotes"),
         ("Super + Maj + T", "Tâches synchronisées avec AuraTask (! haute, !! urgente, demain)"),
         ("Super + Maj + Q", "Quitter complètement l'app active (même en arrière-plan)"),
+        ("Super + Maj + F", "Concentration : active / arrête le dernier mode"),
         ("Super + N | clic sur l'heure", "Centre de notifications dans la Dynamic Island (Tout effacer, Ne pas déranger)"),
         ("Super + K", "Afficher/masquer lanceur, tableau de bord et OSD ensemble"),
         ("Ctrl + Alt + C", "Effacer toutes les notifications"),

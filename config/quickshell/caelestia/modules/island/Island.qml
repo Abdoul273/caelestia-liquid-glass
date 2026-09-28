@@ -410,7 +410,9 @@ Item {
             out.push({ icon: "coffee", text: IdleInhibitor.until > 0 ? qsTr("Écran allumé · %1").arg(IdleInhibitor.remainingText()) : qsTr("Écran toujours allumé"), tint: root.accent });
         if (NightLight.enabled)
             out.push({ icon: "nightlight", text: qsTr("Nuit · %1 K").arg(NightLight.temperature), tint: "#ff9f0a" });
-        if (Notifs.dnd)
+        if (FocusMode.active)
+            out.push({ icon: FocusMode.info.icon, text: `${FocusMode.info.name} · ${FocusMode.untilText()}`, tint: FocusMode.info.tint });
+        else if (Notifs.dnd)
             out.push({ icon: "do_not_disturb_on", text: qsTr("Ne pas déranger"), tint: "#bf5af2" });
         const late = Tasks.overdueCount;
         if (late > 0)
@@ -1049,6 +1051,24 @@ Item {
         }
         now = Date.now();
         saveClock();
+    }
+
+    // Mode Concentration « Travail » : lance / arrête le Pomodoro
+    Connections {
+        target: FocusMode
+
+        function onStartPomodoro(): void {
+            if (root.screen === Quickshell.screens[0] && !root.pomoOn)
+                root.startPomodoro(25 * 60, 5 * 60);
+        }
+        function onStopPomodoro(): void {
+            if (root.screen !== Quickshell.screens[0])
+                return;
+            if (root.alarmRinging && root.ringKind.startsWith("pomo"))
+                root.stopAlarm();
+            if (root.pomoOn)
+                root.stopClock();
+        }
     }
 
     function stopClock(): void {
@@ -2216,6 +2236,11 @@ Item {
                             font.weight: Font.Bold
                         }
                     }
+                }
+                IdleIcon {
+                    shown: FocusMode.active
+                    icon: FocusMode.info.icon
+                    tint: FocusMode.info.tint
                 }
                 IdleIcon {
                     shown: root.btConnected.length > 0

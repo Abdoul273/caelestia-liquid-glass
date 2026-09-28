@@ -134,6 +134,39 @@ Item {
         screenState.controlCenter = false;
     }
 
+    // ── Concentration : choix préparés avant d'activer ──
+    property string focusSel: FocusMode.lastMode
+    property int focusMinutes: FocusMode.lastMinutes
+    property var focusOpts: Object.assign({}, FocusMode.modes[FocusMode.lastMode] ?? FocusMode.modes.dnd)
+
+    function focusPick(m: string): void {
+        focusSel = m;
+        focusOpts = Object.assign({}, FocusMode.modes[m]);
+        if (FocusMode.active && FocusMode.mode !== m)
+            FocusMode.start(m, focusMinutes, focusOpts);
+    }
+
+    function focusOpt(key: string): bool {
+        return FocusMode.active ? FocusMode[key] : !!focusOpts[key];
+    }
+
+    function focusSetOpt(key: string, value: bool): void {
+        if (FocusMode.active) {
+            FocusMode.setOption(key, value);
+        } else {
+            const o = Object.assign({}, focusOpts);
+            o[key] = value;
+            focusOpts = o;
+        }
+    }
+
+    function focusToggle(): void {
+        if (FocusMode.active)
+            FocusMode.stop(false);
+        else
+            FocusMode.start(focusSel, focusMinutes, focusOpts);
+    }
+
     // La page Batterie demande la liste des apps gourmandes seulement quand elle est affichée
     readonly property bool batteryShown: shown && page === "battery"
     onBatteryShownChanged: BatteryInfo.consumersRefs += batteryShown ? 1 : -1
@@ -322,7 +355,7 @@ Item {
             x: 14
             y: 14
             width: parent.width - 28
-            height: root.page === "main" ? mainPage.implicitHeight : root.page === "record" ? recordPage.implicitHeight + 50 : root.page === "caffeine" ? caffPage.implicitHeight + 50 : root.page === "display" ? displayPage.implicitHeight + 50 : root.page === "battery" ? batteryPage.implicitHeight + 50 : 470
+            height: root.page === "main" ? mainPage.implicitHeight : root.page === "record" ? recordPage.implicitHeight + 50 : root.page === "caffeine" ? caffPage.implicitHeight + 50 : root.page === "display" ? displayPage.implicitHeight + 50 : root.page === "battery" ? batteryPage.implicitHeight + 50 : root.page === "focus" ? focusPage.implicitHeight + 50 : 470
             clip: true
 
             Behavior on height {
@@ -408,11 +441,11 @@ Item {
 
                         WideToggle {
                             width: parent.width
-                            icon: Notifs.dnd ? "do_not_disturb_on" : "do_not_disturb_off"
+                            icon: FocusMode.active ? FocusMode.info.icon : Notifs.dnd ? "do_not_disturb_on" : "do_not_disturb_off"
                             title: qsTr("Concentration")
-                            subtitle: Notifs.dnd ? qsTr("Ne pas déranger") : qsTr("Désactivée")
-                            on: Notifs.dnd
-                            onClicked: Notifs.dnd = !Notifs.dnd
+                            subtitle: FocusMode.active ? FocusMode.info.name : Notifs.dnd ? qsTr("Ne pas déranger") : qsTr("Désactivée")
+                            on: FocusMode.active || Notifs.dnd
+                            onClicked: root.page = "focus"
                         }
                         WideToggle {
                             width: parent.width
@@ -1037,7 +1070,7 @@ Item {
                         anchors.left: parent.left
                         anchors.leftMargin: 44
                         anchors.verticalCenter: parent.verticalCenter
-                        text: root.page === "wifi" ? qsTr("Wi-Fi") : root.page === "bt" ? qsTr("Bluetooth") : root.page === "record" ? qsTr("Enregistrement de l'écran") : root.page === "caffeine" ? qsTr("Caféine") : root.page === "display" ? qsTr("Écran") : root.page === "battery" ? qsTr("Batterie") : qsTr("Sortie audio")
+                        text: root.page === "wifi" ? qsTr("Wi-Fi") : root.page === "bt" ? qsTr("Bluetooth") : root.page === "record" ? qsTr("Enregistrement de l'écran") : root.page === "caffeine" ? qsTr("Caféine") : root.page === "display" ? qsTr("Écran") : root.page === "battery" ? qsTr("Batterie") : root.page === "focus" ? qsTr("Concentration") : qsTr("Sortie audio")
                         color: root.fg
                         font.pointSize: 13
                         font.weight: Font.Bold
@@ -1057,6 +1090,11 @@ Item {
                                 else if (root.adapter)
                                     root.adapter.discovering = !root.adapter.discovering;
                             }
+                        }
+                        Switch {
+                            visible: root.page === "focus"
+                            on: FocusMode.active
+                            onToggled: root.focusToggle()
                         }
                         Switch {
                             visible: root.page === "display"
@@ -1333,6 +1371,288 @@ Item {
                         text: root.adapter?.enabled ? qsTr("Aucun appareil — actualise pour chercher") : qsTr("Bluetooth désactivé")
                         color: root.fgDim
                         font.pointSize: 9.5
+                    }
+                }
+
+                // ── Concentration : modes, durée, ce qui est coupé ──
+                Column {
+                    id: focusPage
+
+                    anchors.top: subHead.bottom
+                    anchors.topMargin: 8
+                    width: parent.width
+                    visible: root.page === "focus"
+                    spacing: 10
+
+                    readonly property string shownMode: FocusMode.active ? FocusMode.mode : root.focusSel
+                    readonly property color tint: FocusMode.modes[shownMode]?.tint ?? root.accent
+
+                    // Modes
+                    Row {
+                        width: parent.width
+                        spacing: 8
+
+                        Repeater {
+                            model: FocusMode.order
+
+                            Rectangle {
+                                id: fm
+
+                                required property string modelData
+                                readonly property var def: FocusMode.modes[modelData]
+                                readonly property bool sel: focusPage.shownMode === modelData
+                                readonly property bool live: FocusMode.active && FocusMode.mode === modelData
+
+                                width: (parent.width - 16) / 3
+                                height: 92
+                                radius: 22
+                                color: fm.sel ? Qt.alpha(fm.def.tint, fm.live ? 0.3 : 0.18) : Qt.alpha(root.fg, fmArea.containsMouse ? 0.1 : 0.07)
+                                border.width: fm.sel ? 2 : 1
+                                border.color: fm.sel ? Qt.alpha(fm.def.tint, 0.75) : Qt.alpha(root.fg, 0.08)
+                                scale: fmArea.pressed ? 0.96 : 1
+
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: 220
+                                    }
+                                }
+                                Behavior on scale {
+                                    NumberAnimation {
+                                        duration: 150
+                                        easing.type: Easing.OutBack
+                                    }
+                                }
+
+                                Column {
+                                    anchors.centerIn: parent
+                                    spacing: 6
+
+                                    Rectangle {
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        width: 38
+                                        height: 38
+                                        radius: 19
+                                        color: fm.live ? fm.def.tint : Qt.alpha(fm.def.tint, 0.2)
+
+                                        Behavior on color {
+                                            ColorAnimation {
+                                                duration: 220
+                                            }
+                                        }
+
+                                        MaterialIcon {
+                                            anchors.centerIn: parent
+                                            text: fm.def.icon
+                                            color: fm.live ? "white" : fm.def.tint
+                                            fontStyle: Tokens.font.icon.size(18).build()
+                                            fill: 1
+                                        }
+                                    }
+                                    StyledText {
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        text: fm.def.name
+                                        color: root.fg
+                                        font.pointSize: 9
+                                        font.weight: Font.DemiBold
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: fmArea
+
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.focusPick(fm.modelData)
+                                }
+                            }
+                        }
+                    }
+
+                    // Durée
+                    Tile {
+                        width: parent.width
+                        height: 82
+
+                        Column {
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 9
+
+                            StyledText {
+                                text: FocusMode.active ? qsTr("ACTIVÉ %1").arg(FocusMode.untilText().toUpperCase()) : qsTr("DURÉE")
+                                color: FocusMode.active ? focusPage.tint : root.fgDim
+                                font.pointSize: 7.5
+                                font.weight: Font.Bold
+                                font.letterSpacing: 0.8
+                            }
+                            Row {
+                                width: parent.width
+                                spacing: 6
+
+                                Repeater {
+                                    model: [[30, "30 min"], [60, "1 h"], [120, "2 h"], [-1, qsTr("Ce soir")], [0, "∞"]]
+
+                                    Rectangle {
+                                        id: fdur
+
+                                        required property var modelData
+                                        readonly property bool on: root.focusMinutes === modelData[0]
+
+                                        width: (parent.width - 24) / 5
+                                        height: 32
+                                        radius: 16
+                                        color: on ? focusPage.tint : fdurArea.containsMouse ? Qt.alpha(root.fg, 0.14) : root.fgFaint
+
+                                        Behavior on color {
+                                            ColorAnimation {
+                                                duration: 180
+                                            }
+                                        }
+
+                                        StyledText {
+                                            anchors.centerIn: parent
+                                            text: fdur.modelData[1]
+                                            color: fdur.on ? "white" : root.fg
+                                            font.pointSize: fdur.modelData[0] === 0 ? 13 : 9
+                                            font.weight: Font.DemiBold
+                                        }
+                                        MouseArea {
+                                            id: fdurArea
+
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                root.focusMinutes = fdur.modelData[0];
+                                                // Déjà actif : on prolonge / raccourcit avec la nouvelle durée
+                                                if (FocusMode.active)
+                                                    FocusMode.start(FocusMode.mode, root.focusMinutes, { hideDock: FocusMode.hideDock, muteApps: FocusMode.muteApps, pomodoro: FocusMode.pomodoro, night: FocusMode.night });
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Ce que la concentration fait
+                    Tile {
+                        width: parent.width
+                        height: focusOptCol.implicitHeight + 16
+
+                        Column {
+                            id: focusOptCol
+
+                            x: 14
+                            y: 8
+                            width: parent.width - 28
+
+                            Item {
+                                width: parent.width
+                                height: 40
+
+                                MaterialIcon {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "notifications_off"
+                                    color: focusPage.tint
+                                    fontStyle: Tokens.font.icon.size(14).build()
+                                    fill: 1
+                                }
+                                Column {
+                                    x: 30
+                                    anchors.verticalCenter: parent.verticalCenter
+
+                                    StyledText {
+                                        text: qsTr("Notifications coupées")
+                                        color: root.fg
+                                        font.pointSize: 9.5
+                                        font.weight: Font.DemiBold
+                                    }
+                                    StyledText {
+                                        text: qsTr("Toujours : elles t'attendent dans le centre de notifications")
+                                        color: root.fgDim
+                                        font.pointSize: 8
+                                    }
+                                }
+                            }
+                            OptionRow {
+                                icon: "volume_off"
+                                title: qsTr("Messageries en sourdine")
+                                subtitle: qsTr("Telegram, Discord, WhatsApp, Slack…")
+                                on: root.focusOpt("muteApps")
+                                onToggled: root.focusSetOpt("muteApps", !root.focusOpt("muteApps"))
+                            }
+                            OptionRow {
+                                icon: "dock_to_bottom"
+                                title: qsTr("Masquer le Dock")
+                                subtitle: qsTr("Plus rien ne dépasse en bas de l'écran")
+                                on: root.focusOpt("hideDock")
+                                onToggled: root.focusSetOpt("hideDock", !root.focusOpt("hideDock"))
+                            }
+                            OptionRow {
+                                icon: "timer"
+                                title: qsTr("Lancer un Pomodoro")
+                                subtitle: qsTr("25 min de travail, 5 min de pause, dans l'île")
+                                on: root.focusOpt("pomodoro")
+                                onToggled: root.focusSetOpt("pomodoro", !root.focusOpt("pomodoro"))
+                            }
+                            OptionRow {
+                                icon: "nightlight"
+                                title: qsTr("Éclairage de nuit")
+                                subtitle: qsTr("Écran plus chaud, pour le soir")
+                                on: root.focusOpt("night")
+                                onToggled: root.focusSetOpt("night", !root.focusOpt("night"))
+                            }
+                        }
+                    }
+
+                    // Grand bouton
+                    Rectangle {
+                        width: parent.width
+                        height: 46
+                        radius: 23
+                        color: FocusMode.active ? (fgoArea.containsMouse ? Qt.lighter("#ff453a", 1.08) : "#ff453a") : (fgoArea.containsMouse ? Qt.lighter(focusPage.tint, 1.1) : focusPage.tint)
+                        scale: fgoArea.pressed ? 0.97 : 1
+
+                        Behavior on color {
+                            ColorAnimation {
+                                duration: 220
+                            }
+                        }
+                        Behavior on scale {
+                            NumberAnimation {
+                                duration: 140
+                            }
+                        }
+
+                        Row {
+                            anchors.centerIn: parent
+                            spacing: 7
+
+                            MaterialIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: FocusMode.active ? "stop_circle" : (FocusMode.modes[focusPage.shownMode]?.icon ?? "do_not_disturb_on")
+                                color: "white"
+                                fontStyle: Tokens.font.icon.size(17).build()
+                                fill: 1
+                            }
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: FocusMode.active ? qsTr("Arrêter la concentration") : qsTr("Activer « %1 »").arg(FocusMode.modes[focusPage.shownMode]?.name ?? "")
+                                color: "white"
+                                font.pointSize: 10.5
+                                font.weight: Font.Bold
+                            }
+                        }
+                        MouseArea {
+                            id: fgoArea
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.focusToggle()
+                        }
                     }
                 }
 

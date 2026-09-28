@@ -180,6 +180,7 @@ rebind("SUPER + A", hl.dsp.global("caelestia:dashboard"))          -- tableau de
 rebind("SUPER + SHIFT + N", hl.dsp.global("caelestia:quicknotes"))  -- notes rapides
 rebind("SUPER + SHIFT + T", hl.dsp.global("caelestia:quicktasks"))  -- tâches AuraTask
 rebind("SUPER + SHIFT + Q", hl.dsp.exec_cmd(home .. "/.local/bin/caelestia-quit-app --active"))  -- quitter complètement l'app
+rebind("SUPER + SHIFT + F", hl.dsp.exec_cmd("qs -c caelestia ipc call focus toggle"))  -- concentration
 rebind("SUPER + Tab", hl.dsp.global("caelestia:missionControl"))   -- Mission Control
 rebind("SUPER + SHIFT + R", hl.dsp.exec_cmd(
     "hyprctl reload && (caelestia shell -k; sleep 0.2; caelestia shell -d) & "
