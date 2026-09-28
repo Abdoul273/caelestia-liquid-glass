@@ -16,10 +16,47 @@ Singleton {
     readonly property real remaining: enabled && until > 0 ? Math.max(0, until - now) : 0
 
     onEnabledChanged: {
-        if (enabled)
+        if (enabled && !restoring)
             props.enabledSince = new Date();
-        else
+        else if (!enabled)
             props.until = 0;
+        save();
+    }
+
+    // L'état survit aux redémarrages du shell (Super+Maj+R, nouvelle session…) :
+    // ~/.local/state/caelestia/caffeine.json, relu au démarrage (une durée écoulée entre-temps est terminée)
+    property bool restoring
+    property bool restored
+
+    function save(): void {
+        if (!restored)
+            return;
+        stateFile.setText(JSON.stringify({
+            enabled: props.enabled,
+            until: props.until,
+            since: props.enabledSince.getTime()
+        }));
+    }
+
+    FileView {
+        id: stateFile
+
+        path: `${Quickshell.env("XDG_STATE_HOME") || `${Quickshell.env("HOME")}/.local/state`}/caelestia/caffeine.json`
+        printErrors: false
+        onLoaded: {
+            try {
+                const st = JSON.parse(text());
+                if (st.enabled && !(st.until > 0 && st.until <= Date.now())) {
+                    root.restoring = true;
+                    props.until = st.until || 0;
+                    props.enabledSince = new Date(st.since || Date.now());
+                    props.enabled = true;
+                    root.restoring = false;
+                }
+            } catch (e) {}
+            root.restored = true;
+        }
+        onLoadFailed: root.restored = true
     }
 
     // Active pour une durée (minutes ; 0 = sans limite)
@@ -27,6 +64,7 @@ Singleton {
         props.until = minutes > 0 ? Date.now() + minutes * 60000 : 0;
         now = Date.now();
         props.enabled = true;
+        save();
     }
 
     // Prolonge la durée en cours (ou l'active pour cette durée)
@@ -37,6 +75,7 @@ Singleton {
         }
         props.until = Math.max(until, Date.now()) + minutes * 60000;
         now = Date.now();
+        save();
     }
 
     function remainingText(): string {
