@@ -773,10 +773,8 @@ Item {
             return "blip";
         if (pulse === "ws")
             return "ws";
-        if (expanded && Recorder.running)
-            return "recordFull";
         if (expanded)
-            return clockKind !== "" && !hasMedia ? "clock" : pages[Math.min(infoPage, pages.length - 1)];
+            return pages[pageIndex];
         if (Recorder.running)
             return "record";
         if (clockKind !== "")
@@ -789,7 +787,7 @@ Item {
     readonly property bool notifHasActions: (notif?.actions?.length ?? 0) > 0
     readonly property real shelfExtra: shelf.length > 0 ? 78 : 0
     // Même largeur pour les pages qu'on fait défiler : l'île ne rétrécit pas sous la souris
-    readonly property real pageWidth: 560
+    readonly property real pageWidth: clockKind !== "" ? Math.min(640, Math.max(560, clockTitleMetrics.advanceWidth + 250)) : 560
 
     // Taille visible (depuis le haut de l'écran) pour chaque mode
     readonly property size target: {
@@ -803,7 +801,7 @@ Item {
         case "center":
             return Qt.size(460, Math.min(600, Math.max(170, 86 + centerList.contentHeight)));
         case "recordFull":
-            return Qt.size(360, 76);
+            return Qt.size(pageWidth, 86);
         case "count":
             return Qt.size(200, 86);
         case "drop":
@@ -819,8 +817,8 @@ Item {
         case "ws":
             return Qt.size(Math.max(250, 150 + wsLast * 18), 44);
         case "clock":
-            // Assez large pour lire le libellé en entier (jusqu'à 620 px, au-delà « … »)
-            return Qt.size(Math.min(620, Math.max(360, clockTitleMetrics.advanceWidth + 250)), 118 + shelfExtra);
+            // Page de même largeur que les autres, élargie pour lire le libellé en entier (au-delà « … »)
+            return Qt.size(pageWidth, 118 + (clockTitleMetrics.advanceWidth > pageWidth - 250 ? 16 : 0) + shelfExtra);
         case "clockMini":
             return Qt.size(clockLabel ? 290 : 230, 40);
         case "shot":
@@ -1321,14 +1319,37 @@ Item {
     property real wheelX: 0
     property real wheelY: 0
 
-    // Pages de l'île ouverte : heure/météo ↔ performances du PC ↔ musique (si un lecteur est actif)
-    readonly property list<string> pages: hasMedia ? ["info", "perf", "player"] : ["info", "perf"]
-    property int infoPage: 0
-    readonly property int pageIndex: Math.min(infoPage, pages.length - 1)
-    readonly property bool paged: mode === "info" || mode === "perf" || mode === "player"
+    // Pages de l'île ouverte : enregistrement et minuteur en cours d'abord (s'il y en a),
+    // puis heure/météo ↔ performances du PC ↔ musique (si un lecteur est actif)
+    readonly property list<string> pages: [...(Recorder.running ? ["recordFull"] : []), ...(clockKind !== "" ? ["clock"] : []), "info", "perf", ...(hasMedia ? ["player"] : [])]
+    // Page retenue par son nom : elle reste la même quand d'autres pages apparaissent ou disparaissent
+    property string pageName: "info"
+    readonly property int pageIndex: Math.max(0, pages.indexOf(pageName))
+    readonly property bool paged: pages.includes(mode)
 
-    // Une musique qui démarre : l'île s'ouvre sur le lecteur ; elle s'arrête : retour à l'heure
-    onHasMediaChanged: infoPage = hasMedia ? 2 : Math.min(infoPage, 1)
+    // Ce qui démarre passe devant : musique, minuteur, enregistrement ; à l'arrêt, retour à l'heure
+    onHasMediaChanged: {
+        if (hasMedia)
+            pageName = "player";
+        else if (pageName === "player")
+            pageName = "info";
+    }
+    onClockKindChanged: {
+        if (clockKind !== "")
+            pageName = "clock";
+        else if (pageName === "clock")
+            pageName = "info";
+    }
+    Connections {
+        target: Recorder
+
+        function onRunningChanged(): void {
+            if (Recorder.running)
+                root.pageName = "recordFull";
+            else if (root.pageName === "recordFull")
+                root.pageName = "info";
+        }
+    }
 
     // Sens de sortie d'une page : vers la gauche si elle est avant la page courante
     function pageSlide(name: string): real {
@@ -1351,7 +1372,7 @@ Item {
             swipeReset.restart();
             return;
         }
-        infoPage = next;
+        pageName = pages[next];
         swipeX = -dir * 26;
         swipeReset.restart();
     }
@@ -2618,16 +2639,20 @@ Item {
         // ── minuteur / chronomètre au survol ──
         Face {
             active: root.mode === "clock"
+            slide: root.pageSlide("clock")
 
             Column {
                 x: 30
                 y: 22
                 width: clockButtons.x - x - 20
 
+                // Libellé entier : sur deux lignes s'il ne tient pas sur une (au-delà « … »)
                 StyledText {
                     id: clockTitle
 
                     width: parent.width
+                    wrapMode: Text.Wrap
+                    maximumLineCount: 2
                     elide: Text.ElideRight
                     text: {
                         if (root.pomoOn)
@@ -3182,6 +3207,7 @@ Item {
         // ── enregistrement, vue ouverte : chrono + pause / arrêter ──
         Face {
             active: root.mode === "recordFull"
+            slide: root.pageSlide("recordFull")
 
             Rectangle {
                 id: recFullDot
