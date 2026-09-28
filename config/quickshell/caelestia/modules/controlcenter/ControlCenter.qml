@@ -669,6 +669,37 @@ Item {
                                         }
                                     }
                                 }
+
+                                // Croix au survol : quitter complètement l'app (même sans fenêtre)
+                                Rectangle {
+                                    visible: trayArea.containsMouse || quitArea.containsMouse
+                                    anchors.right: parent.right
+                                    anchors.top: parent.top
+                                    anchors.margins: -3
+                                    width: 15
+                                    height: 15
+                                    radius: 7.5
+                                    color: quitArea.containsMouse ? Colours.palette.m3error : Qt.alpha(Colours.palette.m3surface, 0.95)
+                                    border.width: 1
+                                    border.color: Qt.alpha(Colours.palette.m3onSurface, 0.2)
+
+                                    MaterialIcon {
+                                        anchors.centerIn: parent
+                                        text: "close"
+                                        color: quitArea.containsMouse ? Colours.palette.m3onError : Colours.palette.m3onSurface
+                                        fontStyle: Tokens.font.icon.size(10).build()
+                                    }
+
+                                    MouseArea {
+                                        id: quitArea
+
+                                        anchors.fill: parent
+                                        anchors.margins: -2
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: Quickshell.execDetached([`${Quickshell.env("HOME")}/.local/bin/caelestia-quit-app`, "--tray", trayBtn.modelData.id, trayBtn.modelData.title])
+                                    }
+                                }
                             }
                         }
                     }

@@ -135,6 +135,7 @@ Appuie sur **`Super + H`** : une fenêtre en verre liste **tous** les raccourcis
 | `Super + A` | Centre de contrôle |
 | `Super + Maj + N` | Notes rapides (synchronisées avec AetherNotes) |
 | `Super + Maj + T` | Tâches synchronisées avec AuraTask |
+| `Super + Maj + Q` | Quitter complètement l'app active (Super + Q ferme juste la fenêtre) |
 | `Super + Retour arrière` | Éteindre / redémarrer / verrouiller |
 | `Super + Maj + R` | Recharger Hyprland et le shell |
 

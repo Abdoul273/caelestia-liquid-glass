@@ -163,6 +163,19 @@ Item {
         }
         const seen = new Set(list.map(i => i.id));
         let first = true;
+        // Apps qui tournent encore en arrière-plan (fenêtres fermées) : elles restent au Dock
+        for (const id of Object.keys(bgUnits)) {
+            if (seen.has(id) || windowsByApp[id])
+                continue;
+            seen.add(id);
+            list.push({
+                id: id,
+                entry: DesktopEntries.byId(id),
+                pinned: false,
+                separator: first
+            });
+            first = false;
+        }
         for (const id of Object.keys(windowsByApp)) {
             if (seen.has(id))
                 continue;
@@ -176,6 +189,58 @@ Item {
             first = false;
         }
         return list;
+    }
+
+    // ── Apps lancées dont le processus tourne encore (unités systemd app-*) ──
+    property var bgUnits: ({}) // id de l'app → unité systemd
+
+    function unitApp(unit: string): string {
+        const key = unit.replace(/^app-/, "").replace(/^[Hh]yprland-/, "").replace(/(@[^.]*)?\.(scope|service)$/, "").replace(/-\d+$/, "");
+        if (!key || /kitty|terminal|foot|quickshell|caelestia/i.test(key))
+            return "";
+        const e = DesktopEntries.byId(key) ?? DesktopEntries.heuristicLookup(key);
+        return e?.id ?? "";
+    }
+
+    Process {
+        id: unitsProc
+
+        command: ["systemctl", "--user", "list-units", "--type=scope,service", "--state=running", "--no-legend", "--plain", "app-*"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const map = {};
+                for (const line of text.split("\n")) {
+                    const unit = line.trim().split(/\s+/)[0];
+                    const id = unit ? root.unitApp(unit) : "";
+                    if (id)
+                        map[id] = unit;
+                }
+                if (JSON.stringify(map) !== JSON.stringify(root.bgUnits))
+                    root.bgUnits = map;
+            }
+        }
+    }
+
+    Timer {
+        running: root.shown || root.hovered
+        repeat: true
+        triggeredOnStart: true
+        interval: 2500
+        onTriggered: unitsProc.running = true
+    }
+
+    // Quitter vraiment l'app (fenêtres + processus en arrière-plan)
+    function quitApp(item: var): void {
+        const unit = bgUnits[item.id];
+        const pid = windowsByApp[item.id]?.[0]?.lastIpcObject?.pid;
+        const args = unit ? ["--unit", unit] : pid ? ["--pid", String(pid)] : [];
+        if (args.length)
+            Quickshell.execDetached([`${Quickshell.env("HOME")}/.local/bin/caelestia-quit-app`, ...args]);
+        else
+            closeApp(item);
+        const b = Object.assign({}, bgUnits);
+        delete b[item.id];
+        bgUnits = b;
     }
 
     // Apps en cours de lancement (l'icône rebondit jusqu'à l'arrivée de la fenêtre)
@@ -339,7 +404,7 @@ Item {
                         draggable: true
                         label: slot.modelData.entry?.name ?? slot.modelData.id
                         iconSource: Quickshell.iconPath(slot.modelData.entry?.icon ?? "", "application-x-executable")
-                        running: (root.windowsByApp[slot.modelData.id]?.length ?? 0) > 0
+                        running: (root.windowsByApp[slot.modelData.id]?.length ?? 0) > 0 || root.bgUnits[slot.modelData.id] !== undefined
                         windows: root.windowsByApp[slot.modelData.id]?.length ?? 0
                         bouncing: root.launching[slot.modelData.id] !== undefined
                         onPrimary: root.activate(slot.modelData)
@@ -399,6 +464,16 @@ Item {
                 onClicked: {
                     if (ctxMenu.item)
                         root.closeApp(ctxMenu.item);
+                    root.contextFor = "";
+                }
+            }
+            CtxEntry {
+                visible: (root.windowsByApp[root.contextFor]?.length ?? 0) > 0 || root.bgUnits[root.contextFor] !== undefined
+                text: qsTr("Quitter")
+                danger: true
+                onClicked: {
+                    if (ctxMenu.item)
+                        root.quitApp(ctxMenu.item);
                     root.contextFor = "";
                 }
             }
@@ -552,7 +627,7 @@ Item {
             spacing: 3
 
             Repeater {
-                model: di.running ? Math.min(2, di.windows) : 0
+                model: di.running ? Math.max(1, Math.min(2, di.windows)) : 0
 
                 Rectangle {
                     width: 4

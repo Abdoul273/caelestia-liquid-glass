@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+# Quitte complètement une application (toutes ses fenêtres + ses processus en arrière-plan).
+#   caelestia-quit-app --active          app de la fenêtre active
+#   caelestia-quit-app --pid PID         app qui contient ce processus
+#   caelestia-quit-app --unit UNITÉ      unité systemd app-…
+#   caelestia-quit-app --tray ID TITRE   app d'une icône de la zone système
+#   caelestia-quit-app --list            apps lancées (unités app-*) encore en vie
+set -u
+
+# Processus à ne jamais tuer (session, shell, terminal de l'utilisateur)
+PROTECTED='^(systemd|Hyprland|hyprland|quickshell|qs|kitty|foot|fish|bash|zsh|sh|dbus-daemon|pipewire|wireplumber|sddm)$'
+
+unit_of() { # unité systemd (app-….scope / app-….service) d'un processus
+    sed -n 's|^0::.*/\(app-[^/]*\.\(scope\|service\)\)$|\1|p' "/proc/$1/cgroup" 2>/dev/null
+}
+
+quit_unit() {
+    local unit=$1
+    [[ $unit == app-* ]] || { echo "unité refusée : $unit" >&2; return 1; }
+    systemctl --user kill --signal=TERM "$unit" 2>/dev/null
+    for _ in $(seq 25); do
+        systemctl --user is-active -q "$unit" || return 0
+        sleep 0.2
+    done
+    systemctl --user kill --signal=KILL "$unit" 2>/dev/null
+    systemctl --user stop "$unit" 2>/dev/null
+}
+
+quit_pid() {
+    local pid=$1 unit comm
+    [[ -d /proc/$pid ]] || { echo "processus $pid introuvable" >&2; return 1; }
+    unit=$(unit_of "$pid")
+    if [[ -n $unit && $unit != *kitty* && $unit != *terminal* ]]; then
+        # Toute l'app vit dans son unité : on l'arrête proprement (TERM puis KILL après 5 s)
+        quit_unit "$unit"
+        return
+    fi
+    # Sinon : remonter jusqu'au processus racine de l'app puis tuer son arbre
+    local root=$pid ppid pcomm
+    while :; do
+        ppid=$(awk '{print $4}' "/proc/$root/stat" 2>/dev/null) || break
+        [[ -z $ppid || $ppid -le 1 ]] && break
+        pcomm=$(cat "/proc/$ppid/comm" 2>/dev/null) || break
+        [[ $pcomm =~ $PROTECTED ]] && break
+        root=$ppid
+    done
+    comm=$(cat "/proc/$root/comm" 2>/dev/null)
+    [[ $comm =~ $PROTECTED ]] && { echo "refus : $comm est protégé" >&2; return 1; }
+    local tree
+    tree=$(pstree -p "$root" 2>/dev/null | grep -o '([0-9]\+)' | tr -d '()')
+    [[ -z $tree ]] && tree=$root
+    kill -TERM $tree 2>/dev/null
+    for _ in $(seq 25); do
+        kill -0 "$root" 2>/dev/null || return 0
+        sleep 0.2
+    done
+    kill -KILL $tree 2>/dev/null
+}
+
+tray_pid() { # pid d'une icône de la zone système (comparaison Id + Titre)
+    local want_id=$1 want_title=${2:-} item svc path id title first=""
+    for item in $(busctl --user get-property org.kde.StatusNotifierWatcher /StatusNotifierWatcher \
+        org.kde.StatusNotifierWatcher RegisteredStatusNotifierItems 2>/dev/null | grep -o '"[^"]*"' | tr -d '"'); do
+        svc=${item%%/*}
+        path=/${item#*/}
+        [[ $item != */* ]] && path=/StatusNotifierItem
+        id=$(busctl --user get-property "$svc" "$path" org.kde.StatusNotifierItem Id 2>/dev/null | sed 's/^s "\(.*\)"$/\1/')
+        title=$(busctl --user get-property "$svc" "$path" org.kde.StatusNotifierItem Title 2>/dev/null | sed 's/^s "\(.*\)"$/\1/')
+        [[ $id != "$want_id" ]] && continue
+        local pid
+        pid=$(busctl --user call org.freedesktop.DBus / org.freedesktop.DBus GetConnectionUnixProcessID s "$svc" 2>/dev/null | awk '{print $2}')
+        [[ -z $pid ]] && continue
+        if [[ -z $want_title || $title == "$want_title" ]]; then echo "$pid"; return 0; fi
+        [[ -z $first ]] && first=$pid
+    done
+    [[ -n $first ]] && echo "$first"
+}
+
+case "${1:-}" in
+    --active)
+        pid=$(hyprctl activewindow -j | jq -r '.pid // empty')
+        [[ -n $pid && $pid != -1 ]] && quit_pid "$pid"
+        ;;
+    --pid) quit_pid "$2" ;;
+    --unit) quit_unit "$2" ;;
+    --tray)
+        pid=$(tray_pid "$2" "${3:-}")
+        [[ -n $pid ]] && quit_pid "$pid" || { echo "icône introuvable" >&2; exit 1; }
+        ;;
+    --list)
+        systemctl --user list-units --type=scope,service --state=running --no-legend 'app-*' | awk '{print $1}'
+        ;;
+    *) sed -n '2,8p' "$0"; exit 1 ;;
+esac
