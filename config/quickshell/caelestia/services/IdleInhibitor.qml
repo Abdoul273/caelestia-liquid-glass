@@ -29,6 +29,16 @@ Singleton {
         props.enabled = true;
     }
 
+    // Prolonge la durée en cours (ou l'active pour cette durée)
+    function extend(minutes: int): void {
+        if (!enabled || until <= 0) {
+            enableFor(minutes);
+            return;
+        }
+        props.until = Math.max(until, Date.now()) + minutes * 60000;
+        now = Date.now();
+    }
+
     function remainingText(): string {
         if (!enabled)
             return "";

@@ -775,13 +775,28 @@ Item {
             return "ws";
         if (expanded)
             return pages[pageIndex];
-        if (Recorder.running)
-            return "record";
-        if (clockKind !== "")
-            return "clockMini";
-        if (hasMedia && playing)
-            return "media";
+        if (compactPick !== "")
+            return compactPick;
         return "idle";
+    }
+
+    // Activités en cours affichables en compact ; celle qu'on a regardée en dernier passe devant
+    readonly property list<string> compactActs: [...(Recorder.running ? ["record"] : []), ...(clockKind !== "" ? ["clockMini"] : []), ...(hasMedia && playing ? ["media"] : [])]
+    readonly property string compactPick: {
+        const fromPage = ({ recordFull: "record", clock: "clockMini", player: "media" })[pageName];
+        return fromPage && compactActs.includes(fromPage) ? fromPage : (compactActs[0] ?? "");
+    }
+    // Les autres activités, en petites icônes au bord de l'île compacte (+ caféine)
+    readonly property list<string> otherActs: [...compactActs.filter(a => a !== mode), ...(IdleInhibitor.enabled ? ["caffeine"] : [])]
+    readonly property bool compactActive: mode === "record" || mode === "clockMini" || mode === "media"
+    readonly property real actsInset: compactActive && otherActs.length > 0 ? otherActs.length * 18 + 12 : 0
+
+    function actIcon(a: string): string {
+        return ({ record: "radio_button_checked", clockMini: "timer", media: "music_note", caffeine: "coffee" })[a] ?? "";
+    }
+
+    function actColour(a: string): color {
+        return ({ record: "#ff453a", clockMini: "#ff9f0a", media: root.accent, caffeine: root.fg })[a] ?? root.fg;
     }
 
     readonly property bool notifHasActions: (notif?.actions?.length ?? 0) > 0
@@ -802,6 +817,8 @@ Item {
             return Qt.size(460, Math.min(600, Math.max(170, 86 + centerList.contentHeight)));
         case "recordFull":
             return Qt.size(pageWidth, 86);
+        case "caffeine":
+            return Qt.size(pageWidth, 96);
         case "count":
             return Qt.size(200, 86);
         case "drop":
@@ -820,7 +837,7 @@ Item {
             // Page de même largeur que les autres, élargie pour lire le libellé en entier (au-delà « … »)
             return Qt.size(pageWidth, 118 + (clockTitleMetrics.advanceWidth > pageWidth - 250 ? 16 : 0) + shelfExtra);
         case "clockMini":
-            return Qt.size(clockLabel ? 290 : 230, 40);
+            return Qt.size((clockLabel ? 290 : 230) + actsInset, 40);
         case "shot":
             return Qt.size(460, 100);
         case "bt":
@@ -834,18 +851,18 @@ Item {
         case "perf":
             return Qt.size(pageWidth, 150);
         case "record":
-            return Qt.size(210, 40);
+            return Qt.size(210 + actsInset, 40);
         case "media":
-            return Qt.size(hasLyrics ? 400 : 290, 40);
+            return Qt.size((hasLyrics ? 400 : 290) + actsInset, 40);
         default:
             // Au repos : juste l'heure (ou rien si Island.clock est coupé)
-            return Island.clock ? Qt.size(240 + (showBattery ? 34 : 0) + (showBattery && batteryPctShown ? 42 : 0) + (micInUse || camInUse ? 24 : 0) + (shelf.length > 0 ? 34 : 0), 40) : Qt.size(150, 0);
+            return Island.clock ? Qt.size(240 + (showBattery ? 34 : 0) + (showBattery && batteryPctShown ? 42 : 0) + (micInUse || camInUse ? 24 : 0) + (shelf.length > 0 ? 34 : 0) + (IdleInhibitor.enabled ? 22 : 0), 40) : Qt.size(150, 0);
         }
     }
 
     property real w: target.width
     property real h: target.height
-    readonly property real radius: Math.min(h / 2, mode === "player" || mode === "info" || mode === "perf" || mode === "notif" || mode === "bt" || mode === "shot" || mode === "clock" || mode === "drop" || mode === "toast" || mode === "done" || mode === "alarm" || mode === "count" || mode === "recordFull" || mode === "center" || (mode === "charge" && chargePlugged) ? 32 : h / 2)
+    readonly property real radius: Math.min(h / 2, mode === "player" || mode === "info" || mode === "perf" || mode === "notif" || mode === "bt" || mode === "shot" || mode === "clock" || mode === "drop" || mode === "toast" || mode === "done" || mode === "alarm" || mode === "count" || mode === "recordFull" || mode === "caffeine" || mode === "center" || (mode === "charge" && chargePlugged) ? 32 : h / 2)
 
     function flash(kind: string, ms: int): void {
         if (!ready)
@@ -1321,7 +1338,7 @@ Item {
 
     // Pages de l'île ouverte : enregistrement et minuteur en cours d'abord (s'il y en a),
     // puis heure/météo ↔ performances du PC ↔ musique (si un lecteur est actif)
-    readonly property list<string> pages: [...(Recorder.running ? ["recordFull"] : []), ...(clockKind !== "" ? ["clock"] : []), "info", "perf", ...(hasMedia ? ["player"] : [])]
+    readonly property list<string> pages: [...(Recorder.running ? ["recordFull"] : []), ...(clockKind !== "" ? ["clock"] : []), ...(IdleInhibitor.enabled ? ["caffeine"] : []), "info", "perf", ...(hasMedia ? ["player"] : [])]
     // Page retenue par son nom : elle reste la même quand d'autres pages apparaissent ou disparaissent
     property string pageName: "info"
     readonly property int pageIndex: Math.max(0, pages.indexOf(pageName))
@@ -1339,6 +1356,16 @@ Item {
             pageName = "clock";
         else if (pageName === "clock")
             pageName = "info";
+    }
+    Connections {
+        target: IdleInhibitor
+
+        function onEnabledChanged(): void {
+            if (IdleInhibitor.enabled)
+                root.pageName = "caffeine";
+            else if (root.pageName === "caffeine")
+                root.pageName = "info";
+        }
     }
     Connections {
         target: Recorder
@@ -1677,6 +1704,14 @@ Item {
                     color: root.accent
                     opacity: 0.9
                 }
+                MaterialIcon {
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: IdleInhibitor.enabled
+                    text: "coffee"
+                    color: root.fgDim
+                    fontStyle: Tokens.font.icon.size(11).build()
+                    fill: 1
+                }
                 PrivacyDot {
                     visible: root.micInUse
                     dotColor: "#ff9f0a"
@@ -1939,6 +1974,7 @@ Item {
         // ── musique compacte ──
         Face {
             active: root.mode === "media"
+            inset: root.actsInset
 
             Cover {
                 anchors.left: parent.left
@@ -1987,6 +2023,7 @@ Item {
         // ── enregistrement ──
         Face {
             active: root.mode === "record"
+            inset: root.actsInset
 
             Rectangle {
                 anchors.left: parent.left
@@ -2558,9 +2595,126 @@ Item {
             }
         }
 
+        // ── autres activités en cours : petites icônes au bord de l'île compacte ──
+        Row {
+            anchors.right: parent.right
+            anchors.rightMargin: 16
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 4
+            opacity: root.actsInset > 0 ? 1 : 0
+            visible: opacity > 0.01
+            layoutDirection: Qt.RightToLeft
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 250
+                }
+            }
+
+            Repeater {
+                model: root.compactActive ? root.otherActs : []
+
+                MaterialIcon {
+                    required property string modelData
+
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 14
+                    horizontalAlignment: Text.AlignHCenter
+                    text: root.actIcon(modelData)
+                    color: root.actColour(modelData)
+                    opacity: 0.8
+                    fontStyle: Tokens.font.icon.size(12).build()
+                    fill: 1
+                }
+            }
+        }
+
+        // ── caféine : page de l'île ouverte ──
+        Face {
+            active: root.mode === "caffeine"
+            slide: root.pageSlide("caffeine")
+
+            Rectangle {
+                id: caffBadge
+
+                anchors.left: parent.left
+                anchors.leftMargin: 26
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenterOffset: -4
+                width: 48
+                height: 48
+                radius: 24
+                color: Qt.alpha(root.accent, 0.22)
+
+                MaterialIcon {
+                    anchors.centerIn: parent
+                    text: "coffee"
+                    color: root.accent
+                    fontStyle: Tokens.font.icon.size(20).build()
+                    fill: 1
+                }
+            }
+
+            Column {
+                anchors.left: caffBadge.right
+                anchors.leftMargin: 14
+                anchors.right: caffButtons.left
+                anchors.rightMargin: 12
+                anchors.verticalCenter: caffBadge.verticalCenter
+                spacing: 1
+
+                StyledText {
+                    width: parent.width
+                    elide: Text.ElideRight
+                    text: qsTr("L'écran reste allumé")
+                    color: root.fg
+                    font.pointSize: 12
+                    font.weight: Font.Bold
+                }
+                StyledText {
+                    width: parent.width
+                    elide: Text.ElideRight
+                    text: IdleInhibitor.until > 0 ? qsTr("Encore %1 · jusqu'à %2").arg(IdleInhibitor.remainingText()).arg(Qt.formatTime(new Date(IdleInhibitor.until), "HH:mm")) : qsTr("Sans limite · depuis %1").arg(Qt.formatTime(IdleInhibitor.enabledSince, "HH:mm"))
+                    color: root.fgDim
+                    font.pointSize: 9
+                    font.features: {
+                        "tnum": 1
+                    }
+                }
+            }
+
+            Row {
+                id: caffButtons
+
+                anchors.right: parent.right
+                anchors.rightMargin: 26
+                anchors.verticalCenter: caffBadge.verticalCenter
+                spacing: 10
+
+                ShotButton {
+                    visible: IdleInhibitor.until > 0
+                    icon: "more_time"
+                    tip: qsTr("+15 min")
+                    onClicked: IdleInhibitor.extend(15)
+                }
+                ShotButton {
+                    visible: IdleInhibitor.until > 0
+                    icon: "all_inclusive"
+                    tip: qsTr("Sans limite")
+                    onClicked: IdleInhibitor.enableFor(0)
+                }
+                ShotButton {
+                    icon: "stop"
+                    tip: qsTr("Arrêter")
+                    onClicked: IdleInhibitor.enabled = false
+                }
+            }
+        }
+
         // ── minuteur / chronomètre compact ──
         Face {
             active: root.mode === "clockMini"
+            inset: root.actsInset
 
             MaterialIcon {
                 id: miniIcon
@@ -4162,6 +4316,7 @@ Item {
 
         property bool active
         property real slide // décalage de sortie (pages qu'on fait glisser)
+        property real inset // place laissée à droite (icônes des autres activités)
 
         transform: Translate {
             x: face.active ? 0 : face.slide
@@ -4175,6 +4330,7 @@ Item {
         }
 
         anchors.fill: parent
+        anchors.rightMargin: inset
         opacity: active ? 1 : 0
         scale: active ? 1 : 0.95
         visible: opacity > 0.01
