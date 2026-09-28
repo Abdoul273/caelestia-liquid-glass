@@ -14,9 +14,22 @@ Scope {
 
         signal unlock
 
-        LockSurface {
+        // Filet de sécurité : si l'animation de l'écran ne libère pas la session, on la libère quand même
+        onUnlock: unlockSafety.restart()
+
+        MacLockSurface {
             lock: lock
             pam: pam
+        }
+    }
+
+    Timer {
+        id: unlockSafety
+
+        interval: 1500
+        onTriggered: {
+            if (lock.locked)
+                lock.locked = false;
         }
     }
 
