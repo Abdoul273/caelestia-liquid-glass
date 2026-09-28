@@ -365,5 +365,15 @@ json.dump(new, open(man, "w"))
         }
     }
 
+    // Spotlight : ouvrir une note précise (puis le panneau Notes rapides)
+    IpcHandler {
+        target: "notes"
+
+        function select(id: string): void {
+            if (root.notes.some(n => n.id === id))
+                root.currentId = id;
+        }
+    }
+
     Component.onDestruction: saveNow()
 }

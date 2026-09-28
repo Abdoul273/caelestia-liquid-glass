@@ -344,3 +344,12 @@ button.key-eq.pressed { background: mix(@t_primary, black, 0.12); }
 }
 .top-app-title { font-size: 18px; font-weight: 700; color: @t_on_surface; }
 .top-app-hint { font-size: 11px; color: alpha(@t_on_surface_variant, 0.55); }
+
+/* ---------- Notes et tâches dans les résultats ---------- */
+.note-icon { color: #ffd60a; }
+.task-urgent { color: #ff453a; }
+.task-high { color: #ff9f0a; }
+.task-medium { color: #0a84ff; }
+.task-low { color: alpha(currentColor, 0.55); }
+.task-done { text-decoration: line-through; opacity: 0.55; }
+.task-late { color: #ff453a; }

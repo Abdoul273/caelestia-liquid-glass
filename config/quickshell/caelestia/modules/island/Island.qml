@@ -369,6 +369,69 @@ Item {
         font.weight: Font.Medium
     }
 
+    // ── Page Infos : pastilles d'état (seulement ce qui est actif, rien de la page Performances) ──
+    function nextAlarm(): var {
+        const now = new Date();
+        let best = null;
+        for (const a of alarms) {
+            if (!a.enabled || !a.time)
+                continue;
+            const [h, m] = a.time.split(":").map(Number);
+            const days = a.days ?? [];
+            for (let off = 0; off < 8; off++) {
+                const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + off, h, m);
+                if (d <= now || (days.length > 0 && !days.includes(d.getDay())))
+                    continue;
+                if (!best || d < best.at)
+                    best = { at: d, label: a.label || qsTr("Alarme") };
+                break;
+            }
+        }
+        return best;
+    }
+
+    function dayWord(d: var): string {
+        const today = new Date();
+        const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+        const diff = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() - t0) / 86400000);
+        return diff === 0 ? "" : diff === 1 ? qsTr("demain ") : Qt.locale("fr_FR").toString(d, "ddd ");
+    }
+
+    readonly property list<var> infoChips: {
+        void (now);
+        void (Time.date);
+        const out = [];
+        const al = nextAlarm();
+        if (al)
+            out.push({ icon: "alarm", text: `${al.label} · ${dayWord(al.at)}${Qt.formatTime(al.at, "HH:mm")}`, tint: "#ff9f0a" });
+        for (const d of btConnected)
+            out.push({ icon: /audio|head|ear|phone/i.test(d?.icon ?? "") ? "headphones" : "bluetooth", text: (d.name || qsTr("Bluetooth")) + (d.batteryAvailable ? ` · ${Math.round(d.battery * 100)} %` : ""), tint: root.green });
+        if (IdleInhibitor.enabled)
+            out.push({ icon: "coffee", text: IdleInhibitor.until > 0 ? qsTr("Écran allumé · %1").arg(IdleInhibitor.remainingText()) : qsTr("Écran toujours allumé"), tint: root.accent });
+        if (NightLight.enabled)
+            out.push({ icon: "nightlight", text: qsTr("Nuit · %1 K").arg(NightLight.temperature), tint: "#ff9f0a" });
+        if (Notifs.dnd)
+            out.push({ icon: "do_not_disturb_on", text: qsTr("Ne pas déranger"), tint: "#bf5af2" });
+        const late = Tasks.overdueCount;
+        if (late > 0)
+            out.push({ icon: "assignment_late", text: late > 1 ? qsTr("%1 tâches en retard").arg(late) : qsTr("1 tâche en retard"), tint: root.red });
+        const next = Tasks.sorted.find(t => !t.done && t.due > Date.now() && Tasks.isToday(t));
+        if (next)
+            out.push({ icon: "task_alt", text: `${next.text} · ${Qt.formatTime(new Date(next.due), "HH:mm")}`, tint: "#0a84ff" });
+        else if (Tasks.todayCount > 0)
+            out.push({ icon: "task_alt", text: Tasks.todayCount > 1 ? qsTr("%1 tâches aujourd'hui").arg(Tasks.todayCount) : qsTr("1 tâche aujourd'hui"), tint: "#0a84ff" });
+        const unread = Notifs.notClosed.length;
+        if (unread > 0)
+            out.push({ icon: "notifications", text: unread > 1 ? qsTr("%1 notifications").arg(unread) : qsTr("1 notification"), tint: root.fg });
+        if (Audio.sourceMuted)
+            out.push({ icon: "mic_off", text: qsTr("Micro coupé"), tint: root.red });
+        if (Audio.muted)
+            out.push({ icon: "volume_off", text: qsTr("Son coupé"), tint: root.red });
+        if (VPN.connected)
+            out.push({ icon: "vpn_key", text: qsTr("VPN"), tint: root.green });
+        return out;
+    }
+
     // ── Bluetooth connecté (icône verte au repos) ──
     readonly property var btConnected: Bluetooth.devices.values.filter(d => d?.connected)
     readonly property bool btAudio: btConnected.some(d => /audio|head|ear|phone/i.test(d?.icon ?? ""))
@@ -1212,7 +1275,7 @@ Item {
         case "player":
             return Qt.size(pageWidth, (hasLyrics ? 202 : 178) + (shelf.length > 0 ? shelfExtra : 10));
         case "info":
-            return Qt.size(pageWidth, 118 + shelfExtra);
+            return Qt.size(pageWidth, 112 + (infoChips.length > 0 ? infoFlow.implicitHeight + 10 : 0) + shelfExtra);
         case "perf":
             return Qt.size(pageWidth, 150);
         case "record":
@@ -2153,11 +2216,6 @@ Item {
                             font.weight: Font.Bold
                         }
                     }
-                }
-                IdleIcon {
-                    shown: IdleInhibitor.enabled
-                    icon: "coffee"
-                    tint: root.fgDim
                 }
                 IdleIcon {
                     shown: root.btConnected.length > 0
@@ -4920,7 +4978,7 @@ Item {
             }
         }
 
-        // ── survol sans musique : heure, date, météo, batterie ──
+        // ── page Infos : heure, date, météo détaillée, batterie + pastilles d'état ──
         Face {
             active: root.mode === "info"
             slide: root.pageSlide("info")
@@ -4928,8 +4986,7 @@ Item {
             Column {
                 anchors.left: parent.left
                 anchors.leftMargin: 30
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.verticalCenterOffset: 4
+                y: 24
 
                 StyledText {
                     text: Time.format("HH:mm")
@@ -4951,49 +5008,143 @@ Item {
                 }
             }
 
+            // Météo détaillée + batterie
             Column {
                 anchors.right: parent.right
                 anchors.rightMargin: 30
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.verticalCenterOffset: 4
-                spacing: 8
+                y: 22
+                spacing: 3
 
                 Row {
                     anchors.right: parent.right
-                    spacing: 6
+                    spacing: 7
 
                     MaterialIcon {
                         anchors.verticalCenter: parent.verticalCenter
                         text: Weather.icon
                         color: root.accent
-                        fontStyle: Tokens.font.icon.size(14).build()
+                        fontStyle: Tokens.font.icon.size(18).build()
                         fill: 1
                     }
                     StyledText {
                         anchors.verticalCenter: parent.verticalCenter
                         text: Weather.cc ? Weather.temp : "—"
                         color: root.fg
-                        font.pointSize: 12
-                        font.weight: Font.DemiBold
+                        font.pointSize: 17
+                        font.weight: Font.Bold
                     }
                 }
-
+                StyledText {
+                    anchors.right: parent.right
+                    visible: !!Weather.cc
+                    text: Weather.description
+                    color: root.fgDim
+                    font.pointSize: 8.5
+                    font.weight: Font.Medium
+                }
                 Row {
                     anchors.right: parent.right
-                    spacing: 8
-                    visible: UPower.displayDevice.isLaptopBattery
+                    spacing: 10
 
                     StyledText {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: `${Math.round(root.battery * 100)} %`
-                        color: root.battCharging ? root.green : root.battery < 0.2 ? root.red : root.fgDim
-                        font.pointSize: 10
-                        font.weight: Font.DemiBold
+                        visible: !!Weather.cc
+                        text: qsTr("Ressenti %1 · %2 %").arg(Weather.feelsLike).arg(Weather.humidity)
+                        color: root.fgDim
+                        font.pointSize: 8
                     }
-                    BatteryGlyph {
+                    Row {
                         anchors.verticalCenter: parent.verticalCenter
-                        pct: root.battery
-                        charging: root.battCharging
+                        spacing: 5
+                        visible: UPower.displayDevice.isLaptopBattery
+
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: `${Math.round(root.battery * 100)} %`
+                            color: root.battCharging ? root.green : root.battery < 0.2 ? root.red : root.fgDim
+                            font.pointSize: 8.5
+                            font.weight: Font.DemiBold
+                        }
+                        BatteryGlyph {
+                            anchors.verticalCenter: parent.verticalCenter
+                            pct: root.battery
+                            charging: root.battCharging
+                        }
+                    }
+                }
+            }
+
+            // Pastilles d'état : alarme, Bluetooth, caféine, nuit, tâches…
+            Flow {
+                id: infoFlow
+
+                x: 26
+                y: 92
+                width: parent.width - 52
+                spacing: 6
+
+                add: Transition {
+                    NumberAnimation {
+                        property: "scale"
+                        from: 0.6
+                        to: 1
+                        duration: 320
+                        easing.type: Easing.OutBack
+                    }
+                    NumberAnimation {
+                        property: "opacity"
+                        from: 0
+                        to: 1
+                        duration: 220
+                    }
+                }
+                move: Transition {
+                    NumberAnimation {
+                        properties: "x,y"
+                        duration: 280
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
+                Repeater {
+                    model: root.infoChips
+
+                    Rectangle {
+                        id: chip
+
+                        required property var modelData
+
+                        width: Math.min(chipRow.implicitWidth + 20, infoFlow.width)
+                        height: 26
+                        radius: 13
+                        color: Qt.alpha(chip.modelData.tint, 0.14)
+                        border.width: 1
+                        border.color: Qt.alpha(chip.modelData.tint, 0.22)
+
+                        Row {
+                            id: chipRow
+
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: 9
+                            spacing: 5
+
+                            MaterialIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: chip.modelData.icon
+                                color: chip.modelData.tint
+                                fontStyle: Tokens.font.icon.size(12).build()
+                                fill: 1
+                            }
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: Math.min(implicitWidth, infoFlow.width - 50)
+                                elide: Text.ElideRight
+                                text: chip.modelData.text
+                                color: root.fg
+                                font.pointSize: 8.5
+                                font.weight: Font.DemiBold
+                            }
+                        }
                     }
                 }
             }

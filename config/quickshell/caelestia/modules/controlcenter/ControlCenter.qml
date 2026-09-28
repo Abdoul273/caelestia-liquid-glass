@@ -134,6 +134,28 @@ Item {
         screenState.controlCenter = false;
     }
 
+    // La page Batterie demande la liste des apps gourmandes seulement quand elle est affichée
+    readonly property bool batteryShown: shown && page === "battery"
+    onBatteryShownChanged: BatteryInfo.consumersRefs += batteryShown ? 1 : -1
+
+    function appName(key: string): string {
+        const special = ({ quickshell: "Caelestia", qs: "Caelestia", Hyprland: "Hyprland", kitty: "Terminal (kitty)", claude: "Claude Code", node: "Node.js", pipewire: "Son (PipeWire)", wireplumber: "Son (PipeWire)" })[key];
+        if (special)
+            return special;
+        const e = DesktopEntries.byId(key) ?? DesktopEntries.heuristicLookup(key);
+        return e?.name || (key.charAt(0).toUpperCase() + key.slice(1));
+    }
+
+    function appIcon(key: string): string {
+        if (key === "quickshell" || key === "qs")
+            return Quickshell.iconPath("preferences-desktop", "application-x-executable");
+        if (key === "claude")
+            return Quickshell.iconPath("claude-desktop", "utilities-terminal");
+        const e = DesktopEntries.byId(key) ?? DesktopEntries.heuristicLookup(key);
+        const icon = e?.icon ?? key;
+        return icon.startsWith("/") ? `file://${icon}` : Quickshell.iconPath(icon, "application-x-executable");
+    }
+
     // ── Projection (outil caelestia-display-pro, piloté sans fenêtre) ──
     readonly property string displayTool: `${Quickshell.env("HOME")}/.local/bin/caelestia-display-pro`
     property string projMode: "internal"
@@ -300,7 +322,7 @@ Item {
             x: 14
             y: 14
             width: parent.width - 28
-            height: root.page === "main" ? mainPage.implicitHeight : root.page === "record" ? recordPage.implicitHeight + 50 : root.page === "caffeine" ? caffPage.implicitHeight + 50 : root.page === "display" ? displayPage.implicitHeight + 50 : 470
+            height: root.page === "main" ? mainPage.implicitHeight : root.page === "record" ? recordPage.implicitHeight + 50 : root.page === "caffeine" ? caffPage.implicitHeight + 50 : root.page === "display" ? displayPage.implicitHeight + 50 : root.page === "battery" ? batteryPage.implicitHeight + 50 : 470
             clip: true
 
             Behavior on height {
@@ -723,6 +745,22 @@ Item {
                             font.pointSize: 10
                             font.weight: Font.DemiBold
                         }
+                        MaterialIcon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "chevron_right"
+                            color: root.fgDim
+                            fontStyle: Tokens.font.icon.size(12).build()
+                        }
+                    }
+
+                    // Clic sur l'état de la batterie → page détaillée
+                    MouseArea {
+                        x: 4
+                        width: 110
+                        height: parent.height
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.page = "battery"
                     }
 
                     // Profils d'énergie : contrôle segmenté
@@ -999,7 +1037,7 @@ Item {
                         anchors.left: parent.left
                         anchors.leftMargin: 44
                         anchors.verticalCenter: parent.verticalCenter
-                        text: root.page === "wifi" ? qsTr("Wi-Fi") : root.page === "bt" ? qsTr("Bluetooth") : root.page === "record" ? qsTr("Enregistrement de l'écran") : root.page === "caffeine" ? qsTr("Caféine") : root.page === "display" ? qsTr("Écran") : qsTr("Sortie audio")
+                        text: root.page === "wifi" ? qsTr("Wi-Fi") : root.page === "bt" ? qsTr("Bluetooth") : root.page === "record" ? qsTr("Enregistrement de l'écran") : root.page === "caffeine" ? qsTr("Caféine") : root.page === "display" ? qsTr("Écran") : root.page === "battery" ? qsTr("Batterie") : qsTr("Sortie audio")
                         color: root.fg
                         font.pointSize: 13
                         font.weight: Font.Bold
@@ -1295,6 +1333,380 @@ Item {
                         text: root.adapter?.enabled ? qsTr("Aucun appareil — actualise pour chercher") : qsTr("Bluetooth désactivé")
                         color: root.fgDim
                         font.pointSize: 9.5
+                    }
+                }
+
+                // ── Batterie détaillée ──
+                Column {
+                    id: batteryPage
+
+                    anchors.top: subHead.bottom
+                    anchors.topMargin: 8
+                    width: parent.width
+                    visible: root.page === "battery"
+                    spacing: 10
+
+                    readonly property color level: BatteryInfo.charging || BatteryInfo.full ? "#32d74b" : BatteryInfo.pct < 0.2 ? "#ff453a" : BatteryInfo.pct < 0.4 ? "#ff9f0a" : root.fg
+
+                    // État
+                    Tile {
+                        width: parent.width
+                        height: 96
+
+                        // Grande pile dessinée
+                        Item {
+                            id: bigBatt
+
+                            x: 18
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 74
+                            height: 38
+
+                            Rectangle {
+                                id: battBody
+
+                                width: 68
+                                height: 38
+                                radius: 10
+                                color: "transparent"
+                                border.width: 2
+                                border.color: Qt.alpha(root.fg, 0.45)
+
+                                Rectangle {
+                                    x: 4
+                                    y: 4
+                                    height: parent.height - 8
+                                    width: Math.max(6, (parent.width - 8) * BatteryInfo.pct)
+                                    radius: 6
+                                    color: batteryPage.level
+
+                                    Behavior on width {
+                                        NumberAnimation {
+                                            duration: 600
+                                            easing.type: Easing.OutCubic
+                                        }
+                                    }
+                                }
+                                MaterialIcon {
+                                    anchors.centerIn: parent
+                                    visible: BatteryInfo.charging
+                                    text: "bolt"
+                                    color: "white"
+                                    fontStyle: Tokens.font.icon.size(20).build()
+                                    fill: 1
+                                    style: Text.Outline
+                                    styleColor: Qt.alpha("black", 0.35)
+                                }
+                            }
+                            Rectangle {
+                                anchors.left: battBody.right
+                                anchors.leftMargin: 2
+                                anchors.verticalCenter: battBody.verticalCenter
+                                width: 4
+                                height: 14
+                                radius: 2
+                                color: Qt.alpha(root.fg, 0.45)
+                            }
+                        }
+
+                        Column {
+                            anchors.left: bigBatt.right
+                            anchors.leftMargin: 16
+                            anchors.right: parent.right
+                            anchors.rightMargin: 14
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 1
+
+                            StyledText {
+                                text: `${Math.round(BatteryInfo.pct * 100)} %`
+                                color: root.fg
+                                font.pointSize: 20
+                                font.weight: Font.Bold
+                                font.features: {
+                                    "tnum": 1
+                                }
+                            }
+                            StyledText {
+                                width: parent.width
+                                elide: Text.ElideRight
+                                text: BatteryInfo.statusText
+                                color: BatteryInfo.charging ? "#32d74b" : root.fgDim
+                                font.pointSize: 9.5
+                                font.weight: Font.DemiBold
+                            }
+                            StyledText {
+                                width: parent.width
+                                elide: Text.ElideRight
+                                visible: BatteryInfo.watts > 0.2
+                                text: (BatteryInfo.charging ? qsTr("Charge à %1 W") : qsTr("Consomme %1 W")).arg(BatteryInfo.watts.toFixed(1).replace(".", ","))
+                                color: root.fgDim
+                                font.pointSize: 8.5
+                            }
+                        }
+                    }
+
+                    // Historique 24 h
+                    Tile {
+                        width: parent.width
+                        height: 128
+
+                        StyledText {
+                            x: 14
+                            y: 10
+                            text: qsTr("DERNIÈRES 24 H")
+                            color: root.fgDim
+                            font.pointSize: 7.5
+                            font.weight: Font.Bold
+                            font.letterSpacing: 0.8
+                        }
+
+                        Canvas {
+                            id: histCanvas
+
+                            x: 14
+                            y: 30
+                            width: parent.width - 28
+                            height: 74
+
+                            readonly property var pts: BatteryInfo.history
+                            onPtsChanged: requestPaint()
+                            onWidthChanged: requestPaint()
+                            Connections {
+                                target: root
+
+                                function onBatteryShownChanged(): void {
+                                    histCanvas.requestPaint();
+                                }
+                            }
+
+                            onPaint: {
+                                const ctx = getContext("2d");
+                                ctx.reset();
+                                const w = width, h = height, now = Date.now(), span = 24 * 3600 * 1000;
+                                // Lignes 0 / 50 / 100 %
+                                ctx.strokeStyle = Qt.alpha(root.fg, 0.1);
+                                ctx.lineWidth = 1;
+                                for (const f of [0, 0.5, 1]) {
+                                    ctx.beginPath();
+                                    ctx.moveTo(0, 2 + (h - 4) * f);
+                                    ctx.lineTo(w, 2 + (h - 4) * f);
+                                    ctx.stroke();
+                                }
+                                const p = pts.filter(q => now - q.t <= span);
+                                if (p.length === 0)
+                                    return;
+                                const X = t => w * (1 - (now - t) / span);
+                                const Y = v => 2 + (h - 4) * (1 - v / 100);
+                                const all = [...p, { t: now, p: Math.round(BatteryInfo.pct * 100), c: BatteryInfo.charging }];
+                                // Aire sous la courbe
+                                const grad = ctx.createLinearGradient(0, 0, 0, h);
+                                grad.addColorStop(0, Qt.alpha(root.accent, 0.45));
+                                grad.addColorStop(1, Qt.alpha(root.accent, 0.02));
+                                ctx.beginPath();
+                                ctx.moveTo(X(all[0].t), h);
+                                for (const q of all)
+                                    ctx.lineTo(X(q.t), Y(q.p));
+                                ctx.lineTo(X(now), h);
+                                ctx.closePath();
+                                ctx.fillStyle = grad;
+                                ctx.fill();
+                                // Courbe : verte quand ça charge
+                                ctx.lineWidth = 2.2;
+                                ctx.lineJoin = "round";
+                                for (let i = 1; i < all.length; i++) {
+                                    ctx.beginPath();
+                                    ctx.strokeStyle = all[i - 1].c ? "#32d74b" : root.accent;
+                                    ctx.moveTo(X(all[i - 1].t), Y(all[i - 1].p));
+                                    ctx.lineTo(X(all[i].t), Y(all[i].p));
+                                    ctx.stroke();
+                                }
+                                ctx.beginPath();
+                                ctx.fillStyle = root.fg;
+                                ctx.arc(X(now), Y(all[all.length - 1].p), 3, 0, Math.PI * 2);
+                                ctx.fill();
+                            }
+                        }
+
+                        // Les premières heures, l'historique se remplit
+                        StyledText {
+                            anchors.horizontalCenter: histCanvas.horizontalCenter
+                            y: histCanvas.y + histCanvas.height / 2 - height / 2
+                            visible: BatteryInfo.history.length < 6
+                            text: qsTr("L'historique se remplit (un point toutes les 5 min)")
+                            color: root.fgDim
+                            font.pointSize: 8.5
+                        }
+
+                        Item {
+                            x: 14
+                            y: 106
+                            width: parent.width - 28
+                            height: 14
+
+                            StyledText {
+                                text: qsTr("il y a 24 h")
+                                color: root.fgDim
+                                font.pointSize: 7.5
+                            }
+                            StyledText {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: qsTr("12 h")
+                                color: root.fgDim
+                                font.pointSize: 7.5
+                            }
+                            StyledText {
+                                anchors.right: parent.right
+                                text: qsTr("maintenant")
+                                color: root.fgDim
+                                font.pointSize: 7.5
+                            }
+                        }
+                    }
+
+                    // Apps qui consomment le plus
+                    Tile {
+                        width: parent.width
+                        height: appsCol.implicitHeight + 24
+
+                        Column {
+                            id: appsCol
+
+                            x: 14
+                            y: 12
+                            width: parent.width - 28
+                            spacing: 8
+
+                            StyledText {
+                                text: qsTr("APPS QUI CONSOMMENT LE PLUS")
+                                color: root.fgDim
+                                font.pointSize: 7.5
+                                font.weight: Font.Bold
+                                font.letterSpacing: 0.8
+                            }
+                            StyledText {
+                                visible: BatteryInfo.consumers.length === 0
+                                text: qsTr("Rien de gourmand en ce moment")
+                                color: root.fgDim
+                                font.pointSize: 9
+                            }
+
+                            Repeater {
+                                model: BatteryInfo.consumers.slice(0, 5)
+
+                                Item {
+                                    id: consumer
+
+                                    required property var modelData
+                                    readonly property real maxCpu: Math.max(1, BatteryInfo.consumers[0]?.cpu ?? 1)
+
+                                    width: appsCol.width
+                                    height: 30
+
+                                    IconImage {
+                                        id: consIcon
+
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        implicitSize: 22
+                                        source: root.appIcon(consumer.modelData.key)
+                                    }
+                                    StyledText {
+                                        anchors.left: consIcon.right
+                                        anchors.leftMargin: 10
+                                        anchors.top: parent.top
+                                        width: parent.width - 110
+                                        elide: Text.ElideRight
+                                        text: root.appName(consumer.modelData.key)
+                                        color: root.fg
+                                        font.pointSize: 9.5
+                                        font.weight: Font.DemiBold
+                                    }
+                                    // Barre relative à la plus gourmande
+                                    Rectangle {
+                                        anchors.left: consIcon.right
+                                        anchors.leftMargin: 10
+                                        anchors.bottom: parent.bottom
+                                        anchors.bottomMargin: 2
+                                        width: parent.width - 110
+                                        height: 4
+                                        radius: 2
+                                        color: root.fgFaint
+
+                                        Rectangle {
+                                            width: parent.width * Math.min(1, consumer.modelData.cpu / consumer.maxCpu)
+                                            height: parent.height
+                                            radius: 2
+                                            color: consumer.modelData.cpu >= 15 ? "#ff9f0a" : root.accent
+
+                                            Behavior on width {
+                                                NumberAnimation {
+                                                    duration: 500
+                                                    easing.type: Easing.OutCubic
+                                                }
+                                            }
+                                        }
+                                    }
+                                    StyledText {
+                                        anchors.right: parent.right
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: consumer.modelData.cpu >= 15 ? qsTr("Élevé") : consumer.modelData.cpu >= 4 ? qsTr("Moyen") : qsTr("Faible")
+                                        color: consumer.modelData.cpu >= 15 ? "#ff9f0a" : root.fgDim
+                                        font.pointSize: 8.5
+                                        font.weight: Font.DemiBold
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Santé et économie d'énergie
+                    Tile {
+                        width: parent.width
+                        height: careCol.implicitHeight + 16
+
+                        Column {
+                            id: careCol
+
+                            x: 14
+                            y: 8
+                            width: parent.width - 28
+
+                            OptionRow {
+                                icon: "energy_savings_leaf"
+                                title: qsTr("Économie auto sous 20 %")
+                                subtitle: BatteryInfo.saverOn ? qsTr("Active en ce moment") : qsTr("Passe en économie d'énergie, revient en charge")
+                                on: BatteryInfo.autoSaver
+                                onToggled: BatteryInfo.setAutoSaver(!BatteryInfo.autoSaver)
+                            }
+                            Item {
+                                width: parent.width
+                                height: 40
+                                visible: BatteryInfo.health > 0
+
+                                MaterialIcon {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "health_and_safety"
+                                    color: BatteryInfo.health < 0.8 ? "#ff9f0a" : root.fg
+                                    fontStyle: Tokens.font.icon.size(14).build()
+                                    fill: 1
+                                }
+                                Column {
+                                    x: 30
+                                    anchors.verticalCenter: parent.verticalCenter
+
+                                    StyledText {
+                                        text: qsTr("Santé de la batterie : %1 %").arg(Math.round(BatteryInfo.health * 100))
+                                        color: root.fg
+                                        font.pointSize: 9.5
+                                        font.weight: Font.DemiBold
+                                    }
+                                    StyledText {
+                                        text: (BatteryInfo.health < 0.8 ? qsTr("Capacité réduite par rapport à l'origine") : qsTr("Capacité proche de l'origine")) + (BatteryInfo.cycles > 0 ? qsTr(" · %1 cycles").arg(BatteryInfo.cycles) : "")
+                                        color: root.fgDim
+                                        font.pointSize: 8
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 

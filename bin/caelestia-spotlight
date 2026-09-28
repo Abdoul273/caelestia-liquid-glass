@@ -612,6 +612,142 @@ def search_files(query: str, limit: int = 6) -> list[str]:
     return out[:limit]
 
 
+NOTES_FILE = Path(os.environ.get("XDG_DATA_HOME") or f"{HOME}/.local/share") / "aethernotes/notes.json"
+TASKS_FILE = Path(os.environ.get("XDG_DATA_HOME") or f"{HOME}/.local/share") / "auratask/tasks.json"
+RECENT_FILE = Path(os.environ.get("XDG_DATA_HOME") or f"{HOME}/.local/share") / "recently-used.xbel"
+PRIORITY_FR = {"urgent": "Urgente", "high": "Haute", "medium": "Moyenne", "low": "Basse"}
+
+
+def _load(path: Path):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def _snippet(text: str, q: str, width: int = 70) -> str:
+    """Extrait autour du mot cherché, sur une ligne."""
+    flat = re.sub(r"\s+", " ", re.sub(r"[#*_>`~\[\]]", "", text)).strip()
+    i = fold(flat).find(q)
+    if i < 0:
+        return flat[:width]
+    start = max(0, i - width // 3)
+    part = flat[start:start + width]
+    return ("…" if start > 0 else "") + part + ("…" if start + width < len(flat) else "")
+
+
+def search_notes(query: str, limit: int = 4) -> list[dict]:
+    """Notes AetherNotes (fichier partagé avec l'app et les Notes rapides)."""
+    q = fold(query.strip())
+    data = _load(NOTES_FILE)
+    if len(q) < 2 or not data:
+        return []
+    found = []
+    for n in data.get("notes", []):
+        if n.get("isArchived") or n.get("archived") or n.get("isEncrypted") or n.get("encrypted"):
+            continue
+        title = (n.get("title") or "").strip()
+        body = n.get("content") or ""
+        if not title:
+            title = next((l.strip("# ").strip() for l in body.splitlines() if l.strip()), "Note sans titre")
+        ft, fb = fold(title), fold(body)
+        if q in ft:
+            score = 100 if ft.startswith(q) else 80
+        elif q in fb:
+            score = 50
+        else:
+            continue
+        found.append((score, n.get("updatedAt") or "", {"id": n.get("id"), "title": title, "snippet": _snippet(body, q) if q in fb else _snippet(body, "")}))
+    found.sort(key=lambda x: x[1], reverse=True)  # plus récentes d'abord…
+    found.sort(key=lambda x: -x[0])  # …à pertinence égale
+    return [f for _, _, f in found[:limit]]
+
+
+def _due_text(iso: str | None) -> str:
+    if not iso:
+        return ""
+    try:
+        import datetime as dt
+        d = dt.datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone()
+        today = dt.date.today()
+        delta = (d.date() - today).days
+        day = "aujourd'hui" if delta == 0 else "demain" if delta == 1 else "hier" if delta == -1 else f"le {d:%d/%m}"
+        late = d < dt.datetime.now().astimezone()
+        return ("En retard · " if late else "") + f"{day} à {d:%H:%M}"
+    except ValueError:
+        return ""
+
+
+def search_tasks(query: str, limit: int = 4) -> list[dict]:
+    """Tâches AuraTask (non terminées d'abord)."""
+    q = fold(query.strip())
+    data = _load(TASKS_FILE)
+    if len(q) < 2 or not data:
+        return []
+    found = []
+    for t in data.get("tasks", []):
+        title = t.get("title") or ""
+        hay = fold(title + " " + (t.get("description") or "") + " " + (t.get("category") or "") + " " + " ".join(t.get("tags") or []))
+        if q not in hay:
+            continue
+        score = (0 if t.get("completed") else 100) + (20 if fold(title).startswith(q) else 10 if q in fold(title) else 0)
+        found.append((score, {"id": t.get("id"), "title": title, "done": bool(t.get("completed")),
+                              "priority": t.get("priority") or "medium", "due": _due_text(t.get("dueDate"))}))
+    found.sort(key=lambda x: -x[0])
+    return [f for _, f in found[:limit]]
+
+
+def today_tasks(limit: int = 4) -> list[dict]:
+    """Tâches à faire aujourd'hui ou en retard (Spotlight sans recherche)."""
+    import datetime as dt
+    data = _load(TASKS_FILE)
+    if not data:
+        return []
+    end = dt.datetime.combine(dt.date.today(), dt.time.max).astimezone()
+    out = []
+    for t in data.get("tasks", []):
+        if t.get("completed") or not t.get("dueDate"):
+            continue
+        try:
+            d = dt.datetime.fromisoformat(t["dueDate"].replace("Z", "+00:00")).astimezone()
+        except ValueError:
+            continue
+        if d <= end:
+            out.append((d, {"id": t.get("id"), "title": t.get("title") or "", "done": False,
+                            "priority": t.get("priority") or "medium", "due": _due_text(t.get("dueDate"))}))
+    out.sort(key=lambda x: x[0])
+    return [f for _, f in out[:limit]]
+
+
+def recent_files(query: str = "", limit: int = 6) -> list[str]:
+    """Fichiers ouverts récemment (recently-used.xbel), les plus récents d'abord."""
+    try:
+        import xml.etree.ElementTree as ET
+        root = ET.parse(RECENT_FILE).getroot()
+    except (OSError, ET.ParseError):
+        return []
+    q = fold(query.strip())
+    items = []
+    for b in root.findall("bookmark"):
+        href = b.get("href") or ""
+        if not href.startswith("file://"):
+            continue
+        path = urllib.parse.unquote(href[7:])
+        if q and q not in fold(os.path.basename(path)):
+            continue
+        items.append((b.get("modified") or b.get("visited") or "", path))
+    items.sort(key=lambda x: x[0], reverse=True)
+    out, seen = [], set()
+    for _, path in items:
+        if path in seen or not os.path.exists(path):
+            continue
+        seen.add(path)
+        out.append(path)
+        if len(out) >= limit:
+            break
+    return out
+
+
 def open_url(url: str) -> None:
     subprocess.Popen(["xdg-open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
@@ -637,7 +773,7 @@ class Spotlight(Gtk.Application):
         self.suggest_seq = 0
         # Contenu affiché pour la recherche, reconstruit à chaque mise à jour
         self.view = {"query": "", "calc": None, "suggest": [], "hit": None, "results": [], "loading": False, "error": False,
-                     "apps": [], "actions": [], "files": []}
+                     "apps": [], "actions": [], "files": [], "notes": [], "tasks": [], "recent": []}
         self.file_seq = 0
         self.icon_cache: dict[str, Gdk.Texture | None] = {}
         self.rows: list[tuple[Gtk.ListBoxRow, str]] = []
@@ -691,7 +827,7 @@ class Spotlight(Gtk.Application):
         icon = Gtk.Label(label="󰃬" if calc else "󰍉")
         icon.add_css_class("spot-icon")
         bar.append(icon)
-        self.entry = Gtk.Entry(placeholder_text="Tape un calcul…  (ex. 12,5 × 4 + 20 %)" if calc else "Apps, fichiers, calculs, web…")
+        self.entry = Gtk.Entry(placeholder_text="Tape un calcul…  (ex. 12,5 × 4 + 20 %)" if calc else "Apps, fichiers, notes, tâches, calculs, web…")
         self.entry.add_css_class("spot-entry")
         self.entry.set_hexpand(True)
         self.entry.connect("changed", self.on_changed)
@@ -733,7 +869,9 @@ class Spotlight(Gtk.Application):
             self.status.add_css_class("spot-hint")
             self.status.add_css_class("spot-footer")
             root.append(self.status)
-            self.show_placeholder("Tape ta recherche : les résultats s'affichent ici.")
+            # Sans recherche : tâches du jour et fichiers récents
+            self.view.update(tasks=today_tasks(), recent=recent_files("", 6))
+            self.render()
         else:
             self.render_history()
 
@@ -786,7 +924,10 @@ class Spotlight(Gtk.Application):
             return
         query = self.entry.get_text().strip()
         self.view.update(query=query, calc=None, hit=None, results=[], error=False,
-                         apps=search_apps(query) if query else [], actions=search_actions(query) if query else [], files=[])
+                         apps=search_apps(query) if query else [], actions=search_actions(query) if query else [], files=[],
+                         notes=search_notes(query) if query else [],
+                         tasks=search_tasks(query) if query else today_tasks(),
+                         recent=recent_files(query, 3 if query else 6))
         self.file_seq += 1
         if query and len(query) >= 3:
             seq = self.file_seq
@@ -863,6 +1004,13 @@ class Spotlight(Gtk.Application):
                 elif action.startswith("cmd:"):
                     subprocess.Popen(json.loads(action[4:]), start_new_session=True,
                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                elif action.startswith("note:"):
+                    # La note s'ouvre dans les Notes rapides (Super + Maj + N)
+                    subprocess.Popen(["sh", "-c", 'qs -c caelestia ipc call notes select "$1"; hyprctl dispatch \'hl.dsp.global("caelestia:quicknotes")\'', "sh", action[5:]],
+                                     start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                elif action.startswith("task:"):
+                    subprocess.Popen(["hyprctl", "dispatch", 'hl.dsp.global("caelestia:quicktasks")'],
+                                     start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 elif action.startswith("file:"):
                     subprocess.Popen(["xdg-open", action[5:]], start_new_session=True,
                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -1031,7 +1179,19 @@ class Spotlight(Gtk.Application):
         else:
             self.spinner.stop()
         if not v["query"]:
-            self.show_placeholder("Tape ta recherche : les résultats s'affichent ici.")
+            # Sans recherche : tâches du jour et fichiers récents, prêts à ouvrir
+            if not v["tasks"] and not v["recent"]:
+                self.show_placeholder("Tape ta recherche : applis, fichiers, notes, tâches, calculs et web.")
+                return
+            if v["tasks"]:
+                self.add_section("AUJOURD'HUI")
+                for t in v["tasks"]:
+                    self.add_task(t)
+            if v["recent"]:
+                self.add_section("RÉCENTS")
+                for path in v["recent"]:
+                    self.add_file(path, recent=True)
+            self.list.select_row(self.rows[0][0])
             return
         apps = v["apps"]
         if apps:
@@ -1042,10 +1202,19 @@ class Spotlight(Gtk.Application):
             self.add_card(icon, title, "Action", "cmd:" + json.dumps(cmd))
         if v["calc"]:
             self.add_card("󰃬", f"= {v['calc']}", "Calcul  •  Entrée pour copier", f"copy:{v['calc'].replace(chr(0x202f), '')}", big=True)
-        if v["files"]:
+        if v["notes"]:
+            self.add_section("NOTES")
+            for n in v["notes"]:
+                self.add_note(n)
+        if v["tasks"]:
+            self.add_section("TÂCHES")
+            for t in v["tasks"]:
+                self.add_task(t)
+        files = v["recent"] + [f for f in v["files"] if f not in v["recent"]]
+        if files:
             self.add_section("FICHIERS")
-            for path in v["files"]:
-                self.add_file(path)
+            for path in files[:6]:
+                self.add_file(path, recent=path in v["recent"])
         if v["hit"] is not None:
             self.add_top_hit(v["hit"])
         # Quand les résultats sont là, on garde seulement 3 suggestions pour leur laisser la place
@@ -1139,7 +1308,56 @@ class Spotlight(Gtk.Application):
         box.append(sub)
         self._append(box, "app:" + app.get_id(), "card")
 
-    def add_file(self, path: str) -> None:
+    def add_note(self, note: dict) -> None:
+        box = Gtk.Box(spacing=12)
+        box.add_css_class("card-row")
+        ic = Gtk.Label(label="󰎞")
+        ic.add_css_class("row-icon")
+        ic.add_css_class("note-icon")
+        box.append(ic)
+        texts = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1, hexpand=True)
+        t = Gtk.Label(label=note["title"], xalign=0)
+        t.add_css_class("row-title")
+        t.set_ellipsize(Pango.EllipsizeMode.END)
+        texts.append(t)
+        if note["snippet"]:
+            sub = Gtk.Label(label=note["snippet"], xalign=0)
+            sub.add_css_class("row-domain")
+            sub.set_ellipsize(Pango.EllipsizeMode.END)
+            texts.append(sub)
+        box.append(texts)
+        tag = Gtk.Label(label="Note")
+        tag.add_css_class("row-domain")
+        box.append(tag)
+        self._append(box, "note:" + str(note["id"]), "card")
+
+    def add_task(self, task: dict) -> None:
+        box = Gtk.Box(spacing=12)
+        box.add_css_class("card-row")
+        ic = Gtk.Label(label="󰄲" if task["done"] else "󰄱")
+        ic.add_css_class("row-icon")
+        ic.add_css_class(f"task-{task['priority']}")
+        box.append(ic)
+        texts = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1, hexpand=True)
+        t = Gtk.Label(label=task["title"], xalign=0)
+        t.add_css_class("row-title")
+        if task["done"]:
+            t.add_css_class("task-done")
+        t.set_ellipsize(Pango.EllipsizeMode.END)
+        texts.append(t)
+        bits = [PRIORITY_FR.get(task["priority"], "")] + ([task["due"]] if task["due"] else [])
+        sub = Gtk.Label(label="  ·  ".join(b for b in bits if b), xalign=0)
+        sub.add_css_class("row-domain")
+        if task["due"].startswith("En retard"):
+            sub.add_css_class("task-late")
+        texts.append(sub)
+        box.append(texts)
+        tag = Gtk.Label(label="Tâche")
+        tag.add_css_class("row-domain")
+        box.append(tag)
+        self._append(box, "task:" + str(task["id"]), "card")
+
+    def add_file(self, path: str, recent: bool = False) -> None:
         box = Gtk.Box(spacing=12)
         box.add_css_class("card-row")
         is_dir = os.path.isdir(path)
@@ -1157,6 +1375,10 @@ class Spotlight(Gtk.Application):
         where.set_ellipsize(Pango.EllipsizeMode.START)
         texts.append(where)
         box.append(texts)
+        if recent:
+            tag = Gtk.Label(label="Récent", hexpand=True, xalign=1)
+            tag.add_css_class("row-domain")
+            box.append(tag)
         self._append(box, "file:" + path, "card")
 
     def add_suggestion(self, text: str) -> None:
