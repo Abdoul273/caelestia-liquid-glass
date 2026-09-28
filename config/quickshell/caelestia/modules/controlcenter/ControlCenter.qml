@@ -91,6 +91,33 @@ Item {
     readonly property BluetoothAdapter adapter: Bluetooth.defaultAdapter
     readonly property list<BluetoothDevice> btConnected: Bluetooth.devices.values.filter(d => d.connected)
 
+    // Caféine : dernière durée choisie (minutes, 0 = sans limite)
+    property int caffMinutes: 0
+
+    function idleName(action: var): string {
+        const a = Array.isArray(action) ? action.join(" ") : String(action ?? "");
+        if (a === "lock")
+            return qsTr("Verrouiller");
+        if (a.includes("dpms"))
+            return qsTr("Éteindre l'écran");
+        if (a.includes("hibernate") && !a.includes("suspend"))
+            return qsTr("Hiberner");
+        if (a.includes("suspend") || a.includes("sleep"))
+            return qsTr("Mettre en veille");
+        return a;
+    }
+
+    function idleIcon(action: var): string {
+        const a = Array.isArray(action) ? action.join(" ") : String(action ?? "");
+        return a === "lock" ? "lock" : a.includes("dpms") ? "desktop_access_disabled" : "bedtime";
+    }
+
+    function setIdle(index: int, key: string, value: var): void {
+        const list = GlobalConfig.general.idle.timeouts.map(t => Object.assign({}, t));
+        list[index][key] = value;
+        GlobalConfig.general.idle.timeouts = list;
+    }
+
     function close(): void {
         screenState.controlCenter = false;
     }
@@ -138,7 +165,7 @@ Item {
             x: 14
             y: 14
             width: parent.width - 28
-            height: root.page === "main" ? mainPage.implicitHeight : root.page === "record" ? recordPage.implicitHeight + 50 : 470
+            height: root.page === "main" ? mainPage.implicitHeight : root.page === "record" ? recordPage.implicitHeight + 50 : root.page === "caffeine" ? caffPage.implicitHeight + 50 : 470
             clip: true
 
             Behavior on height {
@@ -429,9 +456,9 @@ Item {
 
                         RoundToggle {
                             icon: "coffee"
-                            label: qsTr("Caféine")
+                            label: IdleInhibitor.enabled ? IdleInhibitor.remainingText() : qsTr("Caféine")
                             on: IdleInhibitor.enabled
-                            onClicked: IdleInhibitor.enabled = !IdleInhibitor.enabled
+                            onClicked: root.page = "caffeine"
                         }
                         RoundToggle {
                             icon: "sports_esports"
@@ -476,16 +503,6 @@ Item {
                             onClicked: {
                                 root.close();
                                 root.run([`${Quickshell.env("HOME")}/.local/bin/caelestia-spotlight`, "calc"]);
-                            }
-                        }
-                        RoundToggle {
-                            icon: "space_dashboard"
-                            label: qsTr("Tableau")
-                            onClicked: {
-                                root.close();
-                                root.screenState.quickNotes = false;
-                                root.screenState.quickTasks = false;
-                                root.screenState.dashboard = true;
                             }
                         }
                     }
@@ -761,7 +778,7 @@ Item {
                         anchors.left: parent.left
                         anchors.leftMargin: 44
                         anchors.verticalCenter: parent.verticalCenter
-                        text: root.page === "wifi" ? qsTr("Wi-Fi") : root.page === "bt" ? qsTr("Bluetooth") : root.page === "record" ? qsTr("Enregistrement de l'écran") : qsTr("Sortie audio")
+                        text: root.page === "wifi" ? qsTr("Wi-Fi") : root.page === "bt" ? qsTr("Bluetooth") : root.page === "record" ? qsTr("Enregistrement de l'écran") : root.page === "caffeine" ? qsTr("Caféine") : qsTr("Sortie audio")
                         color: root.fg
                         font.pointSize: 13
                         font.weight: Font.Bold
@@ -780,6 +797,16 @@ Item {
                                     Nmcli.rescanWifi();
                                 else if (root.adapter)
                                     root.adapter.discovering = !root.adapter.discovering;
+                            }
+                        }
+                        Switch {
+                            visible: root.page === "caffeine"
+                            on: IdleInhibitor.enabled
+                            onToggled: {
+                                if (IdleInhibitor.enabled)
+                                    IdleInhibitor.enabled = false;
+                                else
+                                    IdleInhibitor.enableFor(root.caffMinutes);
                             }
                         }
                         Switch {
@@ -1042,6 +1069,233 @@ Item {
                         text: root.adapter?.enabled ? qsTr("Aucun appareil — actualise pour chercher") : qsTr("Bluetooth désactivé")
                         color: root.fgDim
                         font.pointSize: 9.5
+                    }
+                }
+
+                // ── Caféine : garder l'écran allumé ──
+                Column {
+                    id: caffPage
+
+                    anchors.top: subHead.bottom
+                    anchors.topMargin: 8
+                    width: parent.width
+                    visible: root.page === "caffeine"
+                    spacing: 10
+
+                    // État
+                    Tile {
+                        width: parent.width
+                        height: 86
+
+                        Rectangle {
+                            id: cup
+
+                            x: 16
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 52
+                            height: 52
+                            radius: 26
+                            color: IdleInhibitor.enabled ? root.accent : root.fgFaint
+
+                            Behavior on color {
+                                ColorAnimation {
+                                    duration: 220
+                                }
+                            }
+
+                            MaterialIcon {
+                                anchors.centerIn: parent
+                                text: "coffee"
+                                fill: IdleInhibitor.enabled ? 1 : 0
+                                color: IdleInhibitor.enabled ? root.onAccent : root.fg
+                                fontStyle: Tokens.font.icon.size(22).build()
+                            }
+                        }
+                        Column {
+                            anchors.left: cup.right
+                            anchors.leftMargin: 14
+                            anchors.right: parent.right
+                            anchors.rightMargin: 14
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 2
+
+                            StyledText {
+                                text: IdleInhibitor.enabled ? qsTr("L'écran reste allumé") : qsTr("Veille normale")
+                                color: root.fg
+                                font.pointSize: 12
+                                font.weight: Font.Bold
+                            }
+                            StyledText {
+                                width: parent.width
+                                elide: Text.ElideRight
+                                text: !IdleInhibitor.enabled ? qsTr("Choisis une durée pour l'activer") : IdleInhibitor.until > 0 ? qsTr("Encore %1 · jusqu'à %2").arg(IdleInhibitor.remainingText()).arg(Qt.formatTime(new Date(IdleInhibitor.until), "HH:mm")) : qsTr("Sans limite · depuis %1").arg(Qt.formatTime(IdleInhibitor.enabledSince, "HH:mm"))
+                                color: root.fgDim
+                                font.pointSize: 9
+                            }
+                        }
+                    }
+
+                    // Durée : un clic active pour ce temps-là
+                    Tile {
+                        width: parent.width
+                        height: 88
+
+                        Column {
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 10
+
+                            StyledText {
+                                text: qsTr("DURÉE")
+                                color: root.fgDim
+                                font.pointSize: 7.5
+                                font.weight: Font.Bold
+                                font.letterSpacing: 0.8
+                            }
+                            Row {
+                                width: parent.width
+                                spacing: 6
+
+                                Repeater {
+                                    model: [[15, "15 min"], [30, "30 min"], [60, "1 h"], [120, "2 h"], [0, "∞"]]
+
+                                    Rectangle {
+                                        id: dur
+
+                                        required property var modelData
+                                        readonly property bool on: IdleInhibitor.enabled && root.caffMinutes === modelData[0]
+
+                                        width: (parent.width - 24) / 5
+                                        height: 34
+                                        radius: 17
+                                        color: on ? root.accent : durMouse.containsMouse ? Qt.alpha(root.fg, 0.14) : root.fgFaint
+
+                                        Behavior on color {
+                                            ColorAnimation {
+                                                duration: 180
+                                            }
+                                        }
+
+                                        StyledText {
+                                            anchors.centerIn: parent
+                                            text: dur.modelData[1]
+                                            color: dur.on ? root.onAccent : root.fg
+                                            font.pointSize: dur.modelData[0] === 0 ? 13 : 9.5
+                                            font.weight: Font.DemiBold
+                                        }
+                                        MouseArea {
+                                            id: durMouse
+
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                root.caffMinutes = dur.modelData[0];
+                                                IdleInhibitor.enableFor(dur.modelData[0]);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Veille automatique quand la caféine est coupée
+                    Tile {
+                        width: parent.width
+                        height: idleCol.implicitHeight + 24
+
+                        Column {
+                            id: idleCol
+
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.margins: 12
+                            spacing: 6
+
+                            StyledText {
+                                text: qsTr("SANS CAFÉINE")
+                                color: root.fgDim
+                                font.pointSize: 7.5
+                                font.weight: Font.Bold
+                                font.letterSpacing: 0.8
+                            }
+
+                            Repeater {
+                                model: GlobalConfig.general.idle.timeouts
+
+                                Item {
+                                    id: idleRow
+
+                                    required property var modelData
+                                    required property int index
+                                    readonly property bool active: modelData.enabled ?? true
+                                    readonly property int minutes: Math.max(1, Math.round(modelData.timeout / 60))
+
+                                    width: parent.width
+                                    height: 40
+                                    opacity: IdleInhibitor.enabled ? 0.45 : 1
+
+                                    MaterialIcon {
+                                        id: idleIcon
+
+                                        anchors.left: parent.left
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: root.idleIcon(idleRow.modelData.idleAction)
+                                        color: idleRow.active ? root.fg : root.fgDim
+                                        fontStyle: Tokens.font.icon.size(15).build()
+                                    }
+                                    StyledText {
+                                        anchors.left: idleIcon.right
+                                        anchors.leftMargin: 10
+                                        anchors.right: idleCtl.left
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        elide: Text.ElideRight
+                                        text: root.idleName(idleRow.modelData.idleAction)
+                                        color: idleRow.active ? root.fg : root.fgDim
+                                        font.pointSize: 10
+                                    }
+                                    Row {
+                                        id: idleCtl
+
+                                        anchors.right: parent.right
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        spacing: 6
+
+                                        IconBtn {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            visible: idleRow.active
+                                            icon: "remove"
+                                            onClicked: root.setIdle(idleRow.index, "timeout", Math.max(1, idleRow.minutes - (idleRow.minutes > 10 ? 5 : 1)) * 60)
+                                        }
+                                        StyledText {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: 48
+                                            horizontalAlignment: Text.AlignHCenter
+                                            text: idleRow.active ? (idleRow.minutes >= 60 && idleRow.minutes % 60 === 0 ? qsTr("%1 h").arg(idleRow.minutes / 60) : qsTr("%1 min").arg(idleRow.minutes)) : qsTr("Jamais")
+                                            color: idleRow.active ? root.fg : root.fgDim
+                                            font.pointSize: 9.5
+                                            font.weight: Font.DemiBold
+                                            font.features: {
+                                                "tnum": 1
+                                            }
+                                        }
+                                        IconBtn {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            visible: idleRow.active
+                                            icon: "add"
+                                            onClicked: root.setIdle(idleRow.index, "timeout", Math.min(240, idleRow.minutes + (idleRow.minutes >= 10 ? 5 : 1)) * 60)
+                                        }
+                                        Switch {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            on: idleRow.active
+                                            onToggled: root.setIdle(idleRow.index, "enabled", !idleRow.active)
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 

@@ -1325,6 +1325,44 @@ Item {
     ServiceRef {
         service: root.paged ? Storage : null
     }
+    // Fréquence moyenne du processeur (GHz) et ventilateur (tr/min), relevés pendant la page Performances
+    property real cpuGhz
+    property int fanRpm: -1
+    property real tempPeak
+
+    Timer {
+        running: root.mode === "perf"
+        repeat: true
+        triggeredOnStart: true
+        interval: 1500
+        onTriggered: {
+            if (!sensorProc.running)
+                sensorProc.running = true;
+        }
+    }
+
+    Process {
+        id: sensorProc
+
+        command: ["sh", "-c", "f=0; n=0; for x in /sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_cur_freq; do f=$((f + $(cat $x))); n=$((n + 1)); done; [ $n -gt 0 ] && echo $((f / n)) || echo 0; cat /sys/class/hwmon/*/fan1_input 2>/dev/null | head -1 || true"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const l = text.trim().split("\n");
+                root.cpuGhz = (parseInt(l[0]) || 0) / 1e6;
+                root.fanRpm = l.length > 1 && l[1] !== "" ? parseInt(l[1]) : -1;
+            }
+        }
+    }
+
+    Connections {
+        target: Cpu
+
+        function onTemperatureChanged(): void {
+            if (root.mode === "perf")
+                root.tempPeak = Math.max(root.tempPeak, Cpu.temperature);
+        }
+    }
+
     // NetworkUsage est un singleton QML (compteur de références simple)
     onPagedChanged: NetworkUsage.refCount += paged ? 1 : -1
     Component.onDestruction: {
@@ -3544,16 +3582,24 @@ Item {
 
             Row {
                 anchors.left: parent.left
-                anchors.leftMargin: 22
+                anchors.leftMargin: 16
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.verticalCenterOffset: -2
-                spacing: 4
+                spacing: 1
 
                 PerfRing {
                     icon: "memory"
                     label: "CPU"
                     value: Cpu.percentage
-                    sub: Cpu.temperature > 0 ? `${Math.round(Cpu.temperature)}°C` : ""
+                    sub: root.cpuGhz > 0 ? `${root.cpuGhz.toFixed(1).replace(".", ",")} GHz` : ""
+                }
+                // Température en direct : bleu au calme, orange vers 71 °C, rouge vers 86 °C
+                PerfRing {
+                    icon: Cpu.temperature >= 86 ? "local_fire_department" : "device_thermostat"
+                    label: qsTr("Temp.")
+                    value: Math.max(0, Math.min(1, (Cpu.temperature - 35) / 60))
+                    centerText: Cpu.temperature > 0 ? `${Math.round(Cpu.temperature)}°` : "—"
+                    sub: root.fanRpm > 0 ? qsTr("Ventilo %1").arg(root.fanRpm) : root.fanRpm === 0 ? qsTr("Ventilo arrêté") : root.tempPeak > 0 ? qsTr("Max %1°").arg(Math.round(root.tempPeak)) : ""
                 }
                 PerfRing {
                     icon: "memory_alt"
@@ -3572,10 +3618,10 @@ Item {
             // Réseau : débit descendant / montant + courbe
             Item {
                 anchors.right: parent.right
-                anchors.rightMargin: 22
+                anchors.rightMargin: 16
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.verticalCenterOffset: -2
-                width: 138
+                width: 122
                 height: 86
 
                 Rectangle {
@@ -3904,12 +3950,13 @@ Item {
         property string icon
         property string label
         property string sub
+        property string centerText
         property real value
         property real shown: value
         readonly property color tint: shown > 0.85 ? root.red : shown > 0.6 ? (Colours.light ? "#c77700" : "#ff9f0a") : root.accent
 
         spacing: 2
-        width: 86
+        width: 76
 
         Behavior on shown {
             NumberAnimation {
@@ -3978,7 +4025,7 @@ Item {
                 }
                 StyledText {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: Math.round(ring.shown * 100) + "%"
+                    text: ring.centerText || Math.round(ring.shown * 100) + "%"
                     color: root.fg
                     font.pointSize: 10.5
                     font.weight: Font.Bold

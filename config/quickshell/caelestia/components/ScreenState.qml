@@ -20,4 +20,10 @@ PersistentProperties {
     property int dashboardTab
     property bool notesActive
     property date dashboardDate: new Date()
+
+    // Le tableau de bord complet est retiré : il ne s'ouvre plus qu'en Notes (Super+Maj+N) ou Tâches (Super+Maj+T)
+    onDashboardChanged: {
+        if (dashboard && !quick)
+            dashboard = false;
+    }
 }

@@ -1,5 +1,6 @@
 pragma Singleton
 
+import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -9,10 +10,44 @@ Singleton {
 
     property alias enabled: props.enabled
     readonly property alias enabledSince: props.enabledSince
+    // Fin prévue en ms (0 = sans limite)
+    readonly property alias until: props.until
+    property real now: Date.now()
+    readonly property real remaining: enabled && until > 0 ? Math.max(0, until - now) : 0
 
     onEnabledChanged: {
         if (enabled)
             props.enabledSince = new Date();
+        else
+            props.until = 0;
+    }
+
+    // Active pour une durée (minutes ; 0 = sans limite)
+    function enableFor(minutes: int): void {
+        props.until = minutes > 0 ? Date.now() + minutes * 60000 : 0;
+        now = Date.now();
+        props.enabled = true;
+    }
+
+    function remainingText(): string {
+        if (!enabled)
+            return "";
+        if (until <= 0)
+            return qsTr("Sans limite");
+        const min = Math.ceil(remaining / 60000);
+        return min >= 60 ? qsTr("%1 h %2").arg(Math.floor(min / 60)).arg((min % 60).toString().padStart(2, "0")) : qsTr("%1 min").arg(min);
+    }
+
+    Timer {
+        running: props.enabled && props.until > 0
+        repeat: true
+        interval: 1000
+        triggeredOnStart: true
+        onTriggered: {
+            root.now = Date.now();
+            if (root.now >= props.until)
+                props.enabled = false;
+        }
     }
 
     PersistentProperties {
@@ -20,6 +55,7 @@ Singleton {
 
         property bool enabled
         property date enabledSince
+        property real until
 
         reloadableId: "idleInhibitor"
     }
