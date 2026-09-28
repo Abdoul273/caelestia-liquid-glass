@@ -959,7 +959,8 @@ Item {
             return Qt.size((hasLyrics ? 400 : 290) + actsInset, 40);
         default:
             // Au repos : juste l'heure (ou rien si Island.clock est coupé)
-            return Island.clock ? Qt.size(240 + (showBattery ? 34 : 0) + (showBattery && batteryPctShown ? 42 : 0) + (micInUse || camInUse ? 24 : 0) + (shelf.length > 0 ? 34 : 0) + (IdleInhibitor.enabled ? 22 : 0) + (btConnected.length > 0 ? 24 : 0), 40) : Qt.size(150, 0);
+            // Heure au centre exact : les deux côtés prennent la largeur du plus large
+            return Island.clock ? Qt.size(Math.max(250, idleTime.implicitWidth + 2 * (Math.max(idleDate.implicitWidth, idleIcons.implicitWidth) + 20 + 18)), 40) : Qt.size(150, 0);
         }
     }
 
@@ -1778,7 +1779,7 @@ Item {
         height: root.target.height
         transformOrigin: Item.Top
 
-        // ── repos : date à gauche, heure à droite, comme de part et d'autre d'une encoche ──
+        // ── repos : date à gauche, heure bien au centre, état du système à droite ──
         Face {
             active: root.mode === "idle"
 
@@ -1786,7 +1787,7 @@ Item {
                 id: idleDate
 
                 anchors.left: parent.left
-                anchors.leftMargin: 22
+                anchors.leftMargin: 20
                 anchors.verticalCenter: parent.verticalCenter
                 text: {
                     const s = Qt.locale("fr_FR").toString(Time.date, "ddd d");
@@ -1797,30 +1798,29 @@ Item {
                 font.weight: Font.Medium
             }
 
-            // Après la date : notifications non lues (accent), micro (orange), caméra (vert), étagère
-            Row {
-                anchors.left: idleDate.right
-                anchors.leftMargin: 10
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 7
+            StyledText {
+                id: idleTime
 
-                Rectangle {
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: Notifs.notClosed.length > 0 && !root.micInUse && !root.camInUse
-                    width: 6
-                    height: 6
-                    radius: 3
-                    color: root.accent
-                    opacity: 0.9
+                anchors.centerIn: parent
+                text: Time.format("HH:mm")
+                color: root.fg
+                font.pointSize: 14
+                font.weight: Font.Bold
+                font.letterSpacing: 0.3
+                font.features: {
+                    "tnum": 1
                 }
-                MaterialIcon {
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: IdleInhibitor.enabled
-                    text: "coffee"
-                    color: root.fgDim
-                    fontStyle: Tokens.font.icon.size(11).build()
-                    fill: 1
-                }
+            }
+
+            // À droite : micro / caméra, étagère, caféine, Bluetooth, batterie (et ce qui viendra)
+            Row {
+                id: idleIcons
+
+                anchors.right: parent.right
+                anchors.rightMargin: 20
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 8
+
                 PrivacyDot {
                     visible: root.micInUse
                     dotColor: "#ff9f0a"
@@ -1832,7 +1832,7 @@ Item {
                 Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                     visible: root.shelf.length > 0
-                    width: shelfCount.implicitWidth + 16
+                    width: shelfCount.implicitWidth + 14
                     height: 20
                     radius: 10
                     color: root.fgFaint
@@ -1859,42 +1859,15 @@ Item {
                         }
                     }
                 }
-            }
-
-            // À droite : batterie (façon barre de menus macOS) puis l'heure
-            Row {
-                anchors.right: parent.right
-                anchors.rightMargin: 22
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 9
-
-                // Bluetooth connecté : icône verte (casque si c'est un appareil audio), apparaît en douceur
-                Item {
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: root.btConnected.length > 0 ? 15 : 0
-                    height: 16
-                    opacity: root.btConnected.length > 0 ? 1 : 0
-                    visible: opacity > 0.01
-
-                    Behavior on width {
-                        NumberAnimation {
-                            duration: 300
-                            easing.type: Easing.OutCubic
-                        }
-                    }
-                    Behavior on opacity {
-                        NumberAnimation {
-                            duration: 300
-                        }
-                    }
-
-                    MaterialIcon {
-                        anchors.centerIn: parent
-                        text: root.btAudio ? "headphones" : "bluetooth"
-                        color: root.green
-                        fontStyle: Tokens.font.icon.size(13).build()
-                        fill: 1
-                    }
+                IdleIcon {
+                    shown: IdleInhibitor.enabled
+                    icon: "coffee"
+                    tint: root.fgDim
+                }
+                IdleIcon {
+                    shown: root.btConnected.length > 0
+                    icon: root.btAudio ? "headphones" : "bluetooth"
+                    tint: root.green
                 }
 
                 StyledText {
@@ -1932,18 +1905,6 @@ Item {
                             duration: 800
                             easing.type: Easing.InOutQuad
                         }
-                    }
-                }
-
-                StyledText {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: Time.format("HH:mm")
-                    color: root.fg
-                    font.pointSize: 14
-                    font.weight: Font.Bold
-                    font.letterSpacing: 0.3
-                    font.features: {
-                        "tnum": 1
                     }
                 }
             }
@@ -4835,6 +4796,48 @@ Item {
             height: 4
             radius: 1
             color: Qt.alpha(glyph.fg, 0.5)
+        }
+    }
+
+    // Icône d'état de l'île au repos : entre et sort en douceur (largeur + fondu + petit zoom)
+    component IdleIcon: Item {
+        id: ii
+
+        property bool shown
+        property string icon
+        property color tint
+
+        anchors.verticalCenter: parent?.verticalCenter
+        width: shown ? 15 : 0
+        height: 16
+        opacity: shown ? 1 : 0
+        scale: shown ? 1 : 0.6
+        visible: opacity > 0.01
+
+        Behavior on width {
+            NumberAnimation {
+                duration: 320
+                easing.type: Easing.OutCubic
+            }
+        }
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 260
+            }
+        }
+        Behavior on scale {
+            NumberAnimation {
+                duration: 320
+                easing.type: Easing.OutBack
+            }
+        }
+
+        MaterialIcon {
+            anchors.centerIn: parent
+            text: ii.icon
+            color: ii.tint
+            fontStyle: Tokens.font.icon.size(13).build()
+            fill: 1
         }
     }
 
