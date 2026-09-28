@@ -33,6 +33,8 @@ Item {
     readonly property real pad: 10
     readonly property real bodyHeight: iconSize + pad * 2 + 8
     property real mouseX: -1000
+    property real mouseY: -1000
+    // Souris sur le verre du Dock ou sur le menu (la zone transparente au-dessus ne compte pas)
     property string contextFor: "" // app dont le menu (clic droit) est ouvert
     property real contextX: 0
 
@@ -323,9 +325,24 @@ Item {
             } else {
                 hideTimer.restart();
                 root.mouseX = -1000;
+                root.mouseY = -1000;
             }
         }
-        onPointChanged: root.mouseX = point.position.x
+        onPointChanged: {
+            root.mouseX = point.position.x;
+            root.mouseY = point.position.y;
+        }
+    }
+
+    // Le menu fermé (ou le glisser fini), le Dock se cache normalement si la souris est partie
+    onContextForChanged: if (contextFor === "" && !hovered) hideTimer.restart()
+    onDraggingChanged: if (!dragging && !hovered) hideTimer.restart()
+
+    // Clic en dehors du Dock (autre fenêtre, bureau) : le menu se ferme
+    HyprlandFocusGrab {
+        active: root.contextFor !== ""
+        windows: [QsWindow.window]
+        onCleared: root.contextFor = ""
     }
 
     Timer {
@@ -481,10 +498,43 @@ Item {
     }
 
     // Le menu se ferme si la souris quitte le Dock un moment
+    // Pendant la capture (menu ouvert) le survol n'est plus fiable : on lit la vraie position du curseur
+    property bool cursorAway
+    Process {
+        id: cursorProc
+
+        command: ["hyprctl", "cursorpos", "-j"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    const c = JSON.parse(text);
+                    const win = QsWindow.window;
+                    const o = root.mapToItem(win.contentItem, 0, 0);
+                    const x = c.x - (root.monitor?.x ?? 0) - o.x;
+                    const y = c.y - (root.monitor?.y ?? 0) - o.y;
+                    const onBody = x >= 0 && x <= root.width && y >= root.height - root.blobHeight - 6 && y <= root.height + 4;
+                    const m = ctxMenu.mapToItem(root, 0, 0);
+                    const onMenu = x >= m.x - 8 && x <= m.x + ctxMenu.width + 8 && y >= m.y - 8 && y <= m.y + ctxMenu.height + 40;
+                    root.cursorAway = !onBody && !onMenu;
+                } catch (e) {}
+            }
+        }
+    }
     Timer {
-        running: root.contextFor !== "" && !root.hovered
-        interval: 1500
-        onTriggered: root.contextFor = ""
+        running: root.contextFor !== ""
+        repeat: true
+        interval: 250
+        onTriggered: cursorProc.running = true
+        onRunningChanged: root.cursorAway = false
+    }
+    Timer {
+        running: root.contextFor !== "" && root.cursorAway
+        interval: 600
+        onTriggered: {
+            root.contextFor = "";
+            root.hovered = false;
+            root.stayOpen = false;
+        }
     }
 
     // ════════════════════ Composants ════════════════════
