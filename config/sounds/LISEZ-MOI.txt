@@ -1,0 +1,22 @@
+Sons de la Dynamic Island (Caelestia) — NE PAS SUPPRIMER
+=========================================================
+
+Ce dossier est utilisé directement par le shell (lien : ~/.local/share/caelestia/sounds).
+Ce ne sont pas des musiques : ils ne sont rangés ni dans Musique ni dans Téléchargements.
+
+Sons joués en boucle jusqu'à ce que tu arrêtes depuis l'île :
+  minuteur.ogg    fin d'un minuteur
+  alarme.ogg      alarme / réveil
+  fin-focus.ogg   fin d'une session de travail (Pomodoro)
+  fin-pause.ogg   fin d'une pause (Pomodoro)
+  (les fichiers *-intro.ogg sont la même chose avec un volume qui monte en 20 s :
+   c'est le premier passage, pour réveiller en douceur)
+
+Sons courts (joués une fois) :
+  rappel.ogg      rappel d'une tâche AuraTask
+  transfert.ogg   téléchargement ou copie terminé
+
+originaux/        (si présent) les fichiers d'origine, générés avec Gemini
+
+Changer un son : remplacer le fichier .ogg du même nom (ou demander à Claude de
+le préparer : découpe, volume égalisé, version intro). Un son absent = son système.

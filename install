@@ -265,6 +265,26 @@ install_files() {
     done
     ok "Outils : presse-papiers, emojis, projection, recherche, calculatrice, horloge, raccourcis"
 
+    # Sonneries de l'île (minuteur, alarme, pomodoro, rappels, transferts) :
+    # dossier visible « Sons Caelestia » dans Documents, relié à ~/.local/share/caelestia/sounds.
+    # Fichier par fichier : un dossier déjà là (et ses originaux) n'est jamais effacé.
+    local sounds_link="$HOME/.local/share/caelestia/sounds" sounds_dir
+    if [[ -e $sounds_link ]]; then
+        sounds_dir=$(readlink -f "$sounds_link")
+    else
+        local docs
+        docs=$(xdg-user-dir DOCUMENTS 2>/dev/null || true)
+        [[ -n $docs && $docs != "$HOME" ]] || docs="$HOME/Documents"
+        sounds_dir="$docs/Sons Caelestia"
+        run mkdir -p "$sounds_dir" "$(dirname "$sounds_link")"
+        run ln -s "$sounds_dir" "$sounds_link"
+        record "$sounds_link"
+    fi
+    for f in "$REPO_DIR"/config/sounds/*; do
+        install_item "config/sounds/$(basename "$f")" "$sounds_dir/$(basename "$f")"
+    done
+    ok "Sonneries de l'île dans ${sounds_dir/#$HOME/~}"
+
     install_item config/kitty/kitty.conf "$HOME/.config/kitty/kitty.conf"
     install_item config/kitty/liquid-glass.conf "$HOME/.config/kitty/liquid-glass.conf"
     ok "kitty en verre"

@@ -163,6 +163,7 @@ Appuie sur **`Super + H`** : une fenêtre en verre liste **tous** les raccourcis
 | Changer le style de tous les outils d'un coup | `~/.config/caelestia/tools-base.css` |
 | Rendre kitty plus ou moins transparent | `~/.config/kitty/liquid-glass.conf` → `background_opacity` |
 | Changer ta photo (écran de connexion, tableau de bord) | remplace l'image `~/.face` |
+| Changer les sonneries (minuteur, alarme, Pomodoro, rappels, transferts) | remplace les `.ogg` du dossier `~/Documents/Sons Caelestia` (voir son `LISEZ-MOI.txt`) |
 
 Après une modification : `Super + Maj + R` pour tout recharger.
 
