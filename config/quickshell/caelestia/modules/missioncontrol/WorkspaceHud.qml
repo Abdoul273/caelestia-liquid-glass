@@ -25,9 +25,13 @@ Scope {
             readonly property int activeId: monitor?.activeWorkspace?.id ?? 1
             readonly property int lastId: {
                 let max = activeId;
-                for (const w of Hypr.workspaces.values)
-                    if (w.id > max && w.monitor?.name === monitor?.name)
-                        max = w.id;
+                // Bureaux dynamiques : jusqu'au dernier bureau occupé (fenêtres réelles),
+                // les bureaux vides déjà quittés ne comptent plus
+                for (const t of Hypr.toplevels.values) {
+                    const id = t.workspace?.id ?? 0;
+                    if (id > max && t.workspace?.monitor?.name === monitor?.name)
+                        max = id;
+                }
                 return Math.max(max, 3);
             }
             property bool showing
