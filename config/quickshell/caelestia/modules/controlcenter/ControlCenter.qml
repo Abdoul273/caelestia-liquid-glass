@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Bluetooth
 import Quickshell.Services.Mpris
@@ -120,6 +121,50 @@ Item {
 
     function close(): void {
         screenState.controlCenter = false;
+    }
+
+    // ── Fermeture quand la souris s'en va (comme le menu du Dock) ──
+    // Le centre capture la souris : le survol n'est pas fiable, on lit la vraie position du curseur.
+    property bool cursorAway
+    property real trayMenuUntil: 0 // menu d'une icône système ouvert (il déborde du panneau)
+
+    Process {
+        id: cursorProc
+
+        command: ["hyprctl", "cursorpos", "-j"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    const c = JSON.parse(text);
+                    const mon = Hyprland.monitorFor(root.screen);
+                    const o = root.mapToItem(QsWindow.window.contentItem, 0, 0);
+                    const x = c.x - (mon?.x ?? 0) - o.x;
+                    const y = c.y - (mon?.y ?? 0) - o.y;
+                    const m = 24; // marge tolérée autour du panneau
+                    const inside = x >= -m && x <= root.width + m && y <= root.height + m;
+                    if (inside)
+                        root.trayMenuUntil = 0;
+                    root.cursorAway = !inside && Date.now() > root.trayMenuUntil;
+                } catch (e) {}
+            }
+        }
+    }
+    Timer {
+        running: root.shown
+        repeat: true
+        interval: 250
+        onTriggered: cursorProc.running = true
+        onRunningChanged: root.cursorAway = false
+    }
+    Timer {
+        running: root.shown && root.cursorAway
+        interval: 700
+        onTriggered: {
+            // On n'interrompt pas une saisie (mot de passe Wi-Fi)
+            const f = root.Window.activeFocusItem;
+            if (!(f && f.cursorPosition !== undefined && f.text?.length > 0))
+                root.close();
+        }
     }
 
     function run(cmd: list<string>): void {
@@ -665,6 +710,7 @@ Item {
                                         } else if (item.hasMenu) {
                                             const win = QsWindow.window;
                                             const p = trayBtn.mapToItem(win.contentItem, 0, trayBtn.height);
+                                            root.trayMenuUntil = Date.now() + 15000;
                                             item.display(win, p.x, p.y);
                                         }
                                     }
