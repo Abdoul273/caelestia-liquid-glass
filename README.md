@@ -49,7 +49,7 @@ Verre translucide partout, Mission Control, Spotlight, animations fluides façon
 - **Horloge** (`Super + Maj + O`) : minuteur avec anneau, chronomètre à cadran et tours, pomodoro automatique et alarmes. Tout tourne dans la Dynamic Island : le minuteur continue et l'alarme sonne même app fermée.
 - **Aperçu rapide** : dans Nautilus, sélectionne un fichier et appuie sur **Espace**.
 - **Indicateur de bureau** en verre pendant les changements de bureau.
-- **Bureaux dynamiques** : 3 bureaux de base ; `Super + Page ↑/↓` (ou `Super + molette`) ne crée qu'un seul bureau vide après le dernier occupé, et les points de l'île reviennent à 3 dès que tu quittes les bureaux vides.
+- **Bureaux dynamiques** : `Super + Page ↑/↓` va aussi loin que tu veux, et les points de l'île s'effacent dès que tu reviens en arrière (seuls les bureaux occupés et les 3 de base restent).
 - **Animations façon macOS** : ressorts courts et nets, léger rebond, glissade visible entre les bureaux. Consommation identique au Caelestia d'origine.
 
 ### ⌨️ Outils intégrés
