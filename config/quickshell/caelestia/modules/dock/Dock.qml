@@ -25,7 +25,7 @@ Item {
     readonly property bool emptyWorkspace: (monitor?.activeWorkspace?.toplevels?.values?.length ?? 1) === 0
     property bool hovered
     property bool stayOpen // survol + petite attente avant de se cacher
-    readonly property bool shown: Island.dock && !fullscreen && !(screenState?.launcher ?? false) && !(screenState?.controlCenter ?? false) && (stayOpen || emptyWorkspace || contextFor !== "")
+    readonly property bool shown: Island.dock && !fullscreen && !(screenState?.launcher ?? false) && !(screenState?.controlCenter ?? false) && (stayOpen || emptyWorkspace || contextFor !== "" || dragging)
     property real reveal: shown ? 1 : 0
 
     readonly property real iconSize: 48
@@ -36,6 +36,71 @@ Item {
     property string contextFor: "" // app dont le menu (clic droit) est ouvert
     property real contextX: 0
 
+    // ── Glisser-déposer façon macOS : ranger, épingler une app ouverte, retirer en la sortant ──
+    property string dragId: ""
+    property int dragFrom: -1
+    property real dragDX: 0
+    property real dragDY: 0
+    readonly property bool dragging: dragId !== ""
+    readonly property real step: iconSize + 6
+    readonly property int pinnedCount: items.filter(i => i.pinned).length
+    readonly property bool dragIsPinned: dragging && (items[dragFrom]?.pinned ?? false)
+    // Sortie vers le haut : l'app est retirée du Dock au relâchement
+    readonly property bool dragRemove: dragIsPinned && dragDY < -80
+    // Place visée : parmi les apps épinglées (une app ouverte non épinglée peut y entrer)
+    readonly property int dragTo: {
+        if (!dragging || dragRemove)
+            return dragFrom;
+        const maxT = dragIsPinned ? pinnedCount - 1 : dragFrom;
+        let t = Math.round(dragFrom + dragDX / step);
+        t = Math.max(0, Math.min(maxT, t));
+        // App non épinglée laissée parmi les apps ouvertes : elle ne bouge pas
+        if (!dragIsPinned && t >= pinnedCount)
+            return dragFrom;
+        return t;
+    }
+
+    // Décalage des autres icônes pour faire de la place à celle qu'on déplace
+    function shiftFor(index: int): real {
+        if (!dragging || index === dragFrom || dragTo === dragFrom)
+            return 0;
+        if (dragTo > dragFrom && index > dragFrom && index <= dragTo)
+            return -step;
+        if (dragTo < dragFrom && index >= dragTo && index < dragFrom)
+            return step;
+        return 0;
+    }
+
+    function startDrag(index: int): void {
+        contextFor = "";
+        dragFrom = index;
+        dragDX = 0;
+        dragDY = 0;
+        dragId = items[index]?.id ?? "";
+    }
+
+    function endDrag(): void {
+        if (!dragging)
+            return;
+        const id = dragId;
+        if (dragRemove) {
+            pinned = pinned.filter(p => p !== id && (DesktopEntries.byId(p) ?? DesktopEntries.heuristicLookup(p))?.id !== id);
+            savePins();
+        } else if (dragTo !== dragFrom) {
+            // Ordre affiché (apps trouvées), puis les épinglées introuvables pour ne rien perdre
+            const shown = items.filter(i => i.pinned).map(i => i.id);
+            const next = shown.filter(p => p !== id);
+            next.splice(dragTo, 0, id);
+            const known = new Set(items.map(i => i.id));
+            pinned = [...next, ...pinned.filter(p => !known.has(p) && !next.includes(p) && !items.some(i => i.pinned && (DesktopEntries.byId(p) ?? DesktopEntries.heuristicLookup(p))?.id === i.id))];
+            savePins();
+        }
+        dragId = "";
+        dragFrom = -1;
+        dragDX = 0;
+        dragDY = 0;
+    }
+
     // ── Apps épinglées (~/.local/state/caelestia/dock.json) ──
     property list<string> pinned: ["org.gnome.Nautilus", "kitty", "google-chrome", "aura", "antigravity", "org.telegram.desktop", "com.anthropic.Claude"]
 
@@ -44,6 +109,9 @@ Item {
 
         path: `${Quickshell.env("HOME")}/.local/state/caelestia/dock.json`
         printErrors: false
+        // Fichier modifié ailleurs (à la main, sauvegarde restaurée…) : le Dock suit
+        watchChanges: true
+        onFileChanged: reload()
         onLoaded: {
             try {
                 const d = JSON.parse(text());
@@ -168,7 +236,7 @@ Item {
     // ── Taille : une bande invisible de 3 px garde le survol quand il est caché ──
     // Hauteur du verre (le reste, au-dessus, sert aux icônes agrandies et au menu)
     readonly property real blobHeight: bodyHeight * reveal
-    readonly property real headroom: reveal > 0.01 ? (contextFor !== "" ? 190 : 40) : 0
+    readonly property real headroom: reveal > 0.01 ? (contextFor !== "" ? 190 : dragging ? 130 : 40) : 0
 
     implicitWidth: row.width + pad * 2
     implicitHeight: Math.max(3, blobHeight + headroom)
@@ -200,7 +268,7 @@ Item {
 
         interval: 450
         onTriggered: {
-            if (!root.hovered && root.contextFor === "")
+            if (!root.hovered && root.contextFor === "" && !root.dragging)
                 root.stayOpen = false;
         }
     }
@@ -247,9 +315,11 @@ Item {
                     id: slot
 
                     required property var modelData
+                    required property int index
 
                     anchors.bottom: parent?.bottom
                     spacing: 6
+                    z: root.dragFrom === index ? 10 : 0
 
                     Rectangle {
                         anchors.bottom: parent.bottom
@@ -265,6 +335,8 @@ Item {
 
                         dock: root
                         appId: slot.modelData.id
+                        index: slot.index
+                        draggable: true
                         label: slot.modelData.entry?.name ?? slot.modelData.id
                         iconSource: Quickshell.iconPath(slot.modelData.entry?.icon ?? "", "application-x-executable")
                         running: (root.windowsByApp[slot.modelData.id]?.length ?? 0) > 0
@@ -353,6 +425,21 @@ Item {
         property bool running
         property int windows
         property bool bouncing
+        property int index: -1
+        property bool draggable
+        readonly property bool dragged: di.dock.dragging && di.dock.dragFrom === index
+        property real shift: di.dock.shiftFor(index)
+        property bool pressedForDrag
+        property real pressX
+        property real pressY
+        property bool wasDrag
+
+        Behavior on shift {
+            NumberAnimation {
+                duration: 220
+                easing.type: Easing.OutCubic
+            }
+        }
         signal primary
         signal middle
         signal secondary
@@ -366,7 +453,7 @@ Item {
             return mapToItem(di.dock, 0, 0).x + di.dock.iconSize / 2;
         }
         readonly property real dist: Math.abs(di.dock.mouseX - centreX)
-        readonly property real zoom: di.dock.hovered ? Math.max(0, 1 - dist / 150) : 0
+        readonly property real zoom: di.dock.hovered && !di.dock.dragging ? Math.max(0, 1 - dist / 150) : 0
         readonly property real size: di.dock.iconSize + (di.dock.maxIcon - di.dock.iconSize) * zoom * zoom
 
         width: size
@@ -390,7 +477,23 @@ Item {
             property real hop: 0
 
             transform: Translate {
-                y: -iconBox.hop
+                x: di.dragged ? di.dock.dragDX : di.shift
+                y: -iconBox.hop + (di.dragged ? Math.min(0, di.dock.dragDY) : 0)
+            }
+
+            scale: di.dragged ? 1.12 : 1
+            opacity: di.dragged && di.dock.dragRemove ? 0.55 : 1
+
+            Behavior on scale {
+                NumberAnimation {
+                    duration: 160
+                    easing.type: Easing.OutBack
+                }
+            }
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 160
+                }
             }
 
             SequentialAnimation on hop {
@@ -461,9 +564,30 @@ Item {
             }
         }
 
+        // Sortie vers le haut : « Retirer »
+        Rectangle {
+            visible: di.dragged && di.dock.dragRemove
+            x: (parent.width - width) / 2 + di.dock.dragDX
+            y: -height - 12 + Math.min(0, di.dock.dragDY)
+            width: rmTip.implicitWidth + 20
+            height: 26
+            radius: 13
+            color: Qt.alpha(Colours.palette.m3error, 0.9)
+
+            StyledText {
+                id: rmTip
+
+                anchors.centerIn: parent
+                text: qsTr("Retirer")
+                color: Colours.palette.m3onError
+                font.pointSize: 9
+                font.weight: Font.DemiBold
+            }
+        }
+
         // Nom de l'app au survol
         Rectangle {
-            visible: diArea.containsMouse && di.dock.contextFor === ""
+            visible: diArea.containsMouse && di.dock.contextFor === "" && !di.dock.dragging
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: iconBox.top
             anchors.bottomMargin: 10
@@ -491,8 +615,40 @@ Item {
             anchors.fill: iconBox
             hoverEnabled: true
             acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
-            cursorShape: Qt.PointingHandCursor
+            cursorShape: di.dragged ? Qt.ClosedHandCursor : Qt.PointingHandCursor
+            preventStealing: true
+            onPressed: e => {
+                di.wasDrag = false;
+                di.pressedForDrag = di.draggable && e.button === Qt.LeftButton;
+                di.pressX = e.x;
+                di.pressY = e.y;
+            }
+            onPositionChanged: e => {
+                if (!di.pressedForDrag)
+                    return;
+                const dx = e.x - di.pressX, dy = e.y - di.pressY;
+                if (!di.dock.dragging && Math.hypot(dx, dy) > 8) {
+                    di.wasDrag = true;
+                    di.dock.startDrag(di.index);
+                }
+                if (di.dragged) {
+                    di.dock.dragDX = dx;
+                    di.dock.dragDY = dy;
+                }
+            }
+            onReleased: {
+                di.pressedForDrag = false;
+                if (di.dragged)
+                    di.dock.endDrag();
+            }
+            onCanceled: {
+                di.pressedForDrag = false;
+                if (di.dragged)
+                    di.dock.endDrag();
+            }
             onClicked: e => {
+                if (di.wasDrag)
+                    return;
                 if (e.button === Qt.MiddleButton)
                     di.middle();
                 else if (e.button === Qt.RightButton)
