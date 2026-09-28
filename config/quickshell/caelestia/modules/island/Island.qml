@@ -374,6 +374,15 @@ Item {
     property real clockPaused: 0 // ms figées pendant une pause (0 = en marche)
     property real clockTotal: 0
     property string clockLabel: ""
+
+    TextMetrics {
+        id: clockTitleMetrics
+
+        font.family: Tokens.font.body.medium.family
+        font.pointSize: 9
+        font.weight: Font.Medium
+        text: root.pomoOn ? qsTr("Pomodoro · %1 · session %2").arg(root.clockLabel).arg(root.pomoRound) : root.clockLabel ? qsTr("Minuteur · %1").arg(root.clockLabel) : ""
+    }
     property list<real> laps: [] // chronomètre : temps écoulé à chaque tour (s)
     // Pomodoro : enchaîne travail / pause tout seul
     property bool pomoOn
@@ -810,7 +819,8 @@ Item {
         case "ws":
             return Qt.size(Math.max(250, 150 + wsLast * 18), 44);
         case "clock":
-            return Qt.size(360, 118 + shelfExtra);
+            // Assez large pour lire le libellé en entier (jusqu'à 620 px, au-delà « … »)
+            return Qt.size(Math.min(620, Math.max(360, clockTitleMetrics.advanceWidth + 250)), 118 + shelfExtra);
         case "clockMini":
             return Qt.size(clockLabel ? 290 : 230, 40);
         case "shot":
@@ -2518,6 +2528,8 @@ Item {
                 anchors.right: parent.right
                 anchors.rightMargin: 20
                 anchors.verticalCenter: parent.verticalCenter
+                width: Math.min(implicitWidth, 140)
+                elide: Text.ElideRight
                 text: root.blipSub
                 color: root.blipOn ? root.green : root.fgDim
                 font.pointSize: 9
@@ -2530,6 +2542,8 @@ Item {
             active: root.mode === "clockMini"
 
             MaterialIcon {
+                id: miniIcon
+
                 anchors.left: parent.left
                 anchors.leftMargin: 18
                 anchors.verticalCenter: parent.verticalCenter
@@ -2540,10 +2554,13 @@ Item {
                 opacity: root.clockPaused > 0 ? 0.45 : 1
             }
 
-            // Mini anneau de progression du minuteur
+            // Mini anneau de progression du minuteur, juste avant le temps restant
             Shape {
-                anchors.centerIn: parent
-                anchors.horizontalCenterOffset: root.clockLabel ? 30 : 0
+                id: miniRing
+
+                anchors.right: miniTime.left
+                anchors.rightMargin: 10
+                anchors.verticalCenter: parent.verticalCenter
                 width: 20
                 height: 20
                 visible: root.clockKind === "timer"
@@ -2566,18 +2583,24 @@ Item {
                 }
             }
 
+            // Libellé coupé avec « … » ; il s'affiche en entier au survol
             StyledText {
-                anchors.left: parent.left
-                anchors.leftMargin: 44
+                anchors.left: miniIcon.right
+                anchors.leftMargin: 10
+                anchors.right: miniRing.visible ? miniRing.left : miniTime.left
+                anchors.rightMargin: 12
                 anchors.verticalCenter: parent.verticalCenter
                 visible: root.clockLabel !== ""
                 text: root.clockLabel
+                elide: Text.ElideRight
                 color: root.fgDim
                 font.pointSize: 9.5
                 font.weight: Font.Medium
             }
 
             StyledText {
+                id: miniTime
+
                 anchors.right: parent.right
                 anchors.rightMargin: 20
                 anchors.verticalCenter: parent.verticalCenter
@@ -2599,8 +2622,13 @@ Item {
             Column {
                 x: 30
                 y: 22
+                width: clockButtons.x - x - 20
 
                 StyledText {
+                    id: clockTitle
+
+                    width: parent.width
+                    elide: Text.ElideRight
                     text: {
                         if (root.pomoOn)
                             return qsTr("Pomodoro · %1 · session %2").arg(root.clockLabel).arg(root.pomoRound);
@@ -2624,6 +2652,8 @@ Item {
             }
 
             Row {
+                id: clockButtons
+
                 anchors.right: parent.right
                 anchors.rightMargin: 26
                 y: 38
@@ -2681,7 +2711,10 @@ Item {
             StyledText {
                 anchors.left: doneIcon.right
                 anchors.leftMargin: 14
+                anchors.right: doneSubText.left
+                anchors.rightMargin: 12
                 anchors.verticalCenter: parent.verticalCenter
+                elide: Text.ElideRight
                 text: root.doneTitle
                 color: root.fg
                 font.pointSize: 11
@@ -2689,9 +2722,13 @@ Item {
             }
 
             StyledText {
+                id: doneSubText
+
                 anchors.right: parent.right
                 anchors.rightMargin: 24
                 anchors.verticalCenter: parent.verticalCenter
+                width: Math.min(implicitWidth, 120)
+                elide: Text.ElideRight
                 text: root.doneSub
                 color: root.fgDim
                 font.pointSize: 10
@@ -2743,6 +2780,8 @@ Item {
             Column {
                 anchors.left: alarmIcon.right
                 anchors.leftMargin: 14
+                anchors.right: alarmButtons.left
+                anchors.rightMargin: 12
                 anchors.verticalCenter: parent.verticalCenter
 
                 StyledText {
@@ -2755,6 +2794,8 @@ Item {
                     }
                 }
                 StyledText {
+                    width: parent.width
+                    elide: Text.ElideRight
                     text: root.alarmLabel
                     color: root.fgDim
                     font.pointSize: 9.5
@@ -2762,6 +2803,8 @@ Item {
             }
 
             Row {
+                id: alarmButtons
+
                 anchors.right: parent.right
                 anchors.rightMargin: 22
                 anchors.verticalCenter: parent.verticalCenter
@@ -3448,7 +3491,7 @@ Item {
 
                         required property var modelData
 
-                        width: Math.max(90, actLbl.implicitWidth + 28)
+                        width: Math.min(150, Math.max(90, actLbl.implicitWidth + 28))
                         height: 30
                         radius: 15
                         color: actArea.containsMouse ? Qt.alpha(root.fg, 0.2) : Qt.alpha(root.fg, 0.1)
@@ -3457,6 +3500,8 @@ Item {
                             id: actLbl
 
                             anchors.centerIn: parent
+                            width: Math.min(implicitWidth, act.width - 24)
+                            elide: Text.ElideRight
                             text: act.modelData.text
                             color: root.fg
                             font.pointSize: 9

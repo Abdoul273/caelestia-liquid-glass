@@ -145,11 +145,13 @@ Item {
 
         // ───────────── Liste des notes ─────────────
         StyledRect {
-            Layout.preferredWidth: 270
+            Layout.preferredWidth: 280
+            Layout.maximumWidth: 280
             Layout.fillHeight: true
 
             radius: Tokens.rounding.extraLarge
             color: Glass.tile(Colours.tPalette.m3surfaceContainer)
+            clip: true
 
             ColumnLayout {
                 anchors.fill: parent
@@ -182,18 +184,66 @@ Item {
 
                     ColumnLayout {
                         Layout.fillWidth: true
+                        Layout.minimumWidth: 0
                         spacing: 0
 
                         StyledText {
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
                             text: root.shownMode === "tasks" ? qsTr("Tâches") : qsTr("Notes")
+                            elide: Text.ElideRight
                             font: Tokens.font.body.builders.large.size(15).weight(Font.DemiBold).build()
                             color: Colours.palette.m3onSurface
                         }
 
+                        // Point d'état de la synchro + nom de l'app liée
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            spacing: 5
+
+                            Rectangle {
+                                readonly property color state: root.shownMode === "tasks" ? Colours.palette.m3primary : Notes.syncFailed ? Colours.palette.m3error : Notes.dirty ? Colours.palette.m3tertiary : Colours.palette.m3primary
+
+                                implicitWidth: 6
+                                implicitHeight: 6
+                                radius: 3
+                                color: state
+
+                                Behavior on color {
+                                    CAnim {}
+                                }
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 0
+                                text: root.shownMode === "tasks" ? "AuraTask" : "AetherNotes"
+                                elide: Text.ElideRight
+                                font: Tokens.font.label.small
+                                color: Colours.palette.m3outline
+                            }
+                        }
+                    }
+
+                    // Nombre de notes / de tâches à faire
+                    StyledRect {
+                        readonly property int count: root.shownMode === "tasks" ? Tasks.todoCount : Notes.notes.filter(n => n.locked || n.body.trim()).length
+
+                        visible: count > 0
+                        Layout.rightMargin: Tokens.padding.extraSmall
+                        implicitWidth: Math.max(implicitHeight, countText.implicitWidth + Tokens.padding.medium * 2)
+                        implicitHeight: 24
+                        radius: Tokens.rounding.full
+                        color: Qt.alpha(Colours.palette.m3primary, 0.16)
+
                         StyledText {
-                            text: root.shownMode === "tasks" ? qsTr("Synchronisé avec AuraTask") : qsTr("Synchronisé avec AetherNotes")
-                            font: Tokens.font.label.small
-                            color: Colours.palette.m3outline
+                            id: countText
+
+                            anchors.centerIn: parent
+                            text: parent.count
+                            font: Tokens.font.label.medium
+                            color: Colours.palette.m3primary
                         }
                     }
                 }
@@ -247,6 +297,7 @@ Item {
                         id: search
 
                         Layout.fillWidth: true
+                        Layout.minimumWidth: 0
                         placeholderText: qsTr("Rechercher")
                         text: root.query
                         onTextChanged: root.query = text
@@ -499,7 +550,7 @@ Item {
                 }
 
                 StyledText {
-                    visible: root.shownMode === "notes"
+                    visible: root.shownMode === "notes" && !root.quick
                     Layout.alignment: Qt.AlignHCenter
                     readonly property int n: Notes.notes.filter(n => n.locked || n.body.trim()).length
 
