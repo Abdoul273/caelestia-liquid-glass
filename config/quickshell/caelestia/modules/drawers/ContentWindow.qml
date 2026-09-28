@@ -180,8 +180,17 @@ StyledWindow {
 
             panel: panels.dashboard
             deformAmount: 0.1
-            // Sans bord haut (île), le dashboard fermé doit remonter entièrement hors de l'écran
-            y: panel.y + root.borderThickness - (Island.hideTopBorder ? (root.borderThickness + 24) * panels.dashboard.offsetScale : 0)
+            // Sans bord haut (île) : comme l'île, le haut dépasse de l'écran (coins du bas seuls arrondis)
+            // et le dashboard fermé remonte entièrement hors de l'écran
+            y: panel.y + root.borderThickness - (Island.hideTopBorder ? radius + (root.borderThickness + 24) * panels.dashboard.offsetScale : 0)
+            implicitHeight: panel.height + (Island.hideTopBorder ? radius : 0)
+        }
+
+        // Épaules du dashboard (Notes, Tâches…) : il sort du bord de l'écran comme l'île
+        Shoulders {
+            lx: dashBg.x
+            rx: dashBg.x + dashBg.width
+            s: 26 * Math.max(0, 1 - panels.dashboard.offsetScale * 1.6)
         }
 
         // L'île fait partie de la forme fluide : même verre, même fusion que les panneaux.
@@ -198,59 +207,10 @@ StyledWindow {
         }
 
         // Épaules de l'île : deux arrondis concaves qui la font sortir du bord de l'écran
-        Shape {
-            id: islandShoulders
-
-            readonly property real s: Math.min(18, panels.island.h * 0.55)
-            readonly property real lx: islandBg.x
-            readonly property real rx: islandBg.x + islandBg.width
-
-            anchors.fill: parent
-            visible: Island.hideTopBorder && s > 0.5
-            preferredRendererType: Shape.CurveRenderer
-
-            ShapePath {
-                fillColor: blobGroup.color
-                strokeColor: "transparent"
-                startX: islandShoulders.lx - islandShoulders.s
-                startY: -1
-                PathLine {
-                    x: islandShoulders.lx + 1
-                    y: -1
-                }
-                PathLine {
-                    x: islandShoulders.lx + 1
-                    y: islandShoulders.s
-                }
-                PathArc {
-                    x: islandShoulders.lx - islandShoulders.s
-                    y: 0
-                    radiusX: islandShoulders.s
-                    radiusY: islandShoulders.s
-                    direction: PathArc.Counterclockwise
-                }
-            }
-
-            ShapePath {
-                fillColor: blobGroup.color
-                strokeColor: "transparent"
-                startX: islandShoulders.rx + islandShoulders.s
-                startY: -1
-                PathLine {
-                    x: islandShoulders.rx - 1
-                    y: -1
-                }
-                PathLine {
-                    x: islandShoulders.rx - 1
-                    y: islandShoulders.s
-                }
-                PathArc {
-                    x: islandShoulders.rx + islandShoulders.s
-                    y: 0
-                    radiusX: islandShoulders.s
-                    radiusY: islandShoulders.s
-                }
-            }
+        Shoulders {
+            lx: islandBg.x
+            rx: islandBg.x + islandBg.width
+            s: Math.min(18, panels.island.h * 0.55)
         }
 
         // Centre de contrôle : même verre, collé au haut de l'écran
@@ -263,6 +223,12 @@ StyledWindow {
             y: panel.y + root.borderThickness - radius
             implicitHeight: panel.height + radius
             visible: panels.controlCenter.visible
+        }
+
+        Shoulders {
+            lx: ccBg.x
+            rx: ccBg.x + ccBg.width
+            s: 22 * Math.max(0, 1 - panels.controlCenter.offsetScale * 1.6)
         }
 
         // Dock : même verre ; replié, le rectangle descend bien sous l'écran (aucune bosse)
@@ -516,6 +482,62 @@ StyledWindow {
         screen: root.screen
         slot: "panels"
         component: panels
+    }
+
+    // Deux arrondis concaves en haut d'un panneau collé au bord de l'écran (île, dashboard, centre de contrôle)
+    component Shoulders: Shape {
+        id: shoulders
+
+        required property real s
+        required property real lx
+        required property real rx
+
+        anchors.fill: parent
+        visible: Island.hideTopBorder && s > 0.5
+        preferredRendererType: Shape.CurveRenderer
+
+        ShapePath {
+            fillColor: blobGroup.color
+            strokeColor: "transparent"
+            startX: shoulders.lx - shoulders.s
+            startY: -1
+            PathLine {
+                x: shoulders.lx + 1
+                y: -1
+            }
+            PathLine {
+                x: shoulders.lx + 1
+                y: shoulders.s
+            }
+            PathArc {
+                x: shoulders.lx - shoulders.s
+                y: 0
+                radiusX: shoulders.s
+                radiusY: shoulders.s
+                direction: PathArc.Counterclockwise
+            }
+        }
+
+        ShapePath {
+            fillColor: blobGroup.color
+            strokeColor: "transparent"
+            startX: shoulders.rx + shoulders.s
+            startY: -1
+            PathLine {
+                x: shoulders.rx - 1
+                y: -1
+            }
+            PathLine {
+                x: shoulders.rx - 1
+                y: shoulders.s
+            }
+            PathArc {
+                x: shoulders.rx + shoulders.s
+                y: 0
+                radiusX: shoulders.s
+                radiusY: shoulders.s
+            }
+        }
     }
 
     component PanelBg: BlobRect {

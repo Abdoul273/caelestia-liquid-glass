@@ -191,7 +191,7 @@ Item {
                         }
 
                         StyledText {
-                            text: root.shownMode === "tasks" ? qsTr("Synchronisé avec AuraTask") : qsTr("Ctrl+N nouvelle note")
+                            text: root.shownMode === "tasks" ? qsTr("Synchronisé avec AuraTask") : qsTr("Synchronisé avec AetherNotes")
                             font: Tokens.font.label.small
                             color: Colours.palette.m3outline
                         }
@@ -352,6 +352,14 @@ Item {
                                 spacing: Tokens.spacing.extraSmall
 
                                 MaterialIcon {
+                                    visible: noteItem.modelData.locked
+                                    text: "lock"
+                                    fill: 1
+                                    color: Colours.palette.m3tertiary
+                                    fontStyle: Tokens.font.icon.builders.medium.scale(0.75).build()
+                                }
+
+                                MaterialIcon {
                                     visible: noteItem.modelData.pinned
                                     text: "keep"
                                     fill: 1
@@ -493,7 +501,7 @@ Item {
                 StyledText {
                     visible: root.shownMode === "notes"
                     Layout.alignment: Qt.AlignHCenter
-                    readonly property int n: Notes.notes.filter(n => n.body.trim()).length
+                    readonly property int n: Notes.notes.filter(n => n.locked || n.body.trim()).length
 
                     text: n === 1 ? qsTr("1 note") : qsTr("%1 notes").arg(n)
                     font: Tokens.font.label.small
@@ -551,14 +559,14 @@ Item {
 
                         MaterialIcon {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: Notes.dirty ? "sync" : "cloud_done"
-                            color: Notes.dirty ? Colours.palette.m3tertiary : Colours.palette.m3primary
+                            text: Notes.syncFailed ? "cloud_off" : Notes.dirty ? "sync" : "cloud_done"
+                            color: Notes.syncFailed ? Colours.palette.m3error : Notes.dirty ? Colours.palette.m3tertiary : Colours.palette.m3primary
                             fontStyle: Tokens.font.icon.builders.medium.scale(0.8).build()
                         }
 
                         StyledText {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: Notes.dirty ? qsTr("Enregistrement…") : qsTr("Enregistré")
+                            text: Notes.syncFailed ? qsTr("Synchro impossible") : Notes.dirty ? qsTr("Synchronisation…") : qsTr("Synchronisé")
                             font: Tokens.font.label.medium
                             color: Colours.palette.m3onSurfaceVariant
                         }
@@ -571,7 +579,7 @@ Item {
                     IconButton {
                         icon: "checklist"
                         type: IconButton.Text
-                        enabled: !!Notes.current
+                        enabled: !!Notes.current && !Notes.current.locked
                         onClicked: editor.insertCheckbox()
                     }
 
@@ -635,7 +643,7 @@ Item {
                         rightPadding: Tokens.padding.small
                         bottomPadding: Tokens.padding.large
 
-                        enabled: !!Notes.current
+                        enabled: !!Notes.current && !Notes.current.locked
                         wrapMode: TextEdit.Wrap
                         textFormat: TextEdit.PlainText
                         selectByMouse: true
@@ -657,6 +665,17 @@ Item {
                             cursorPosition = text.length;
                             syncing = false;
                             flick.contentY = 0;
+                        }
+
+                        // Modifiée dans AetherNotes : on recharge sans perdre la position
+                        function reloadKeepingCursor(): void {
+                            const pos = cursorPosition;
+                            const y = flick.contentY;
+                            syncing = true;
+                            text = Notes.current?.body ?? "";
+                            cursorPosition = Math.min(pos, text.length);
+                            syncing = false;
+                            flick.contentY = y;
                         }
 
                         function lineBounds(): var {
@@ -699,6 +718,11 @@ Item {
 
                             function onLoadedChanged(): void {
                                 editor.load();
+                            }
+
+                            function onExternalChange(id: string): void {
+                                if (id === Notes.currentId)
+                                    editor.reloadKeepingCursor();
                             }
                         }
 
@@ -750,7 +774,7 @@ Item {
                         StyledText {
                             x: editor.leftPadding
                             visible: !editor.text
-                            text: Notes.current ? qsTr("Commence à écrire…\nLa première ligne sert de titre.") : qsTr("Crée une note avec + ou Ctrl+N")
+                            text: Notes.current?.locked ? qsTr("🔒 Note chiffrée\nOuvre-la dans AetherNotes pour la lire.") : Notes.current ? qsTr("Commence à écrire…\nLa première ligne sert de titre.") : qsTr("Crée une note avec + ou Ctrl+N")
                             color: Colours.palette.m3outline
                             font: editor.font
                         }

@@ -1,0 +1,176 @@
+#!/usr/bin/env python3
+"""Shared, locked note store for AetherNotes and the Caelestia notes panel.
+
+State: {"revision": n, "notes": [Note, ...], "deleted": {id: ms}}
+Commands (JSON from argv[2] or stdin with "-"):
+  read                      print the state
+  sync {notes, deleted}     merge, last write wins on updatedAt; tombstones win over older edits
+  import [Note, ...]        add notes whose id is unknown
+  import-legacy PATH        one-time import of the old Caelestia notes.json ([{id, body, pinned, created, updated}])
+"""
+
+import fcntl
+import json
+import os
+import re
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+STORE = Path(os.environ.get("AETHERNOTES_FILE", Path.home() / ".local/share/aethernotes/notes.json"))
+TOMBSTONE_DAYS = 60
+
+
+def now_ms():
+    return int(time.time() * 1000)
+
+
+def write_state(state):
+    STORE.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", dir=STORE.parent, prefix=".notes-", delete=False
+    ) as tmp:
+        name = tmp.name
+        json.dump(state, tmp, ensure_ascii=False, indent=2)
+        tmp.flush()
+        os.fsync(tmp.fileno())
+    os.chmod(name, 0o600)
+    os.replace(name, STORE)
+
+
+def load_state():
+    if STORE.exists():
+        state = json.loads(STORE.read_text(encoding="utf-8"))
+    else:
+        state = {}
+    state.setdefault("revision", 0)
+    state.setdefault("notes", [])
+    state.setdefault("deleted", {})
+    return state
+
+
+def payload():
+    raw = sys.stdin.read() if len(sys.argv) <= 2 or sys.argv[2] == "-" else sys.argv[2]
+    return json.loads(raw) if raw.strip() else {}
+
+
+def stamp(note):
+    try:
+        return int(note.get("updatedAt") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def sync(state, data):
+    notes = {n["id"]: n for n in state["notes"] if isinstance(n, dict) and isinstance(n.get("id"), str)}
+    order = [n["id"] for n in state["notes"] if isinstance(n, dict) and isinstance(n.get("id"), str)]
+    deleted = state["deleted"]
+    changed = False
+
+    for note_id, ts in (data.get("deleted") or {}).items():
+        ts = int(ts or 0)
+        if ts > int(deleted.get(note_id, 0)):
+            deleted[note_id] = ts
+            changed = True
+
+    for note in data.get("notes") or []:
+        if not isinstance(note, dict) or not isinstance(note.get("id"), str):
+            continue
+        note_id = note["id"]
+        if int(deleted.get(note_id, 0)) >= stamp(note):
+            continue
+        old = notes.get(note_id)
+        if old is None:
+            notes[note_id] = note
+            order.insert(0, note_id)
+            changed = True
+        elif stamp(note) > stamp(old) or (stamp(note) == stamp(old) and note != old):
+            notes[note_id] = note
+            changed = True
+
+    # A tombstone removes every version it is newer than
+    for note_id in list(notes):
+        if int(deleted.get(note_id, 0)) >= stamp(notes[note_id]):
+            del notes[note_id]
+            changed = True
+
+    limit = now_ms() - TOMBSTONE_DAYS * 86400000
+    for note_id in [k for k, ts in deleted.items() if int(ts) < limit]:
+        del deleted[note_id]
+        changed = True
+
+    state["notes"] = [notes[i] for i in order if i in notes]
+    return changed
+
+
+def legacy_note(item):
+    body = str(item.get("body", ""))
+    first = next((l for l in body.split("\n") if l.strip()), "")
+    total = len(re.findall(r"-\s+\[[ xX]\]", body))
+    done = len(re.findall(r"-\s+\[[xX]\]", body))
+    words = len(body.split())
+    created = int(item.get("created") or now_ms())
+    return {
+        "id": f"caelestia-{item.get('id')}",
+        "title": re.sub(r"^#+\s*", "", first).strip() or "Nouvelle note",
+        "content": body,
+        "tags": [],
+        "workspaceId": "personal",
+        "createdAt": created,
+        "updatedAt": int(item.get("updated") or created),
+        "isPinned": bool(item.get("pinned")),
+        "isArchived": False,
+        "isLocked": False,
+        "revisions": [],
+        "words": words,
+        "characters": len(body),
+        "readTimeMinutes": max(1, -(-words // 200)),
+        "totalTasks": total,
+        "completedTasks": done,
+        "hasTasks": total > 0,
+    }
+
+
+def main():
+    command = sys.argv[1] if len(sys.argv) > 1 else "read"
+    STORE.parent.mkdir(parents=True, exist_ok=True)
+    with (STORE.parent / ".notes.lock").open("a+") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        state = load_state()
+        fresh = not STORE.exists()
+        if command == "read":
+            changed = fresh
+        elif command == "sync":
+            changed = sync(state, payload())
+        elif command == "import":
+            known = {n["id"] for n in state["notes"]}
+            incoming = [n for n in payload() or [] if isinstance(n, dict) and n.get("id") not in known]
+            state["notes"] = incoming + state["notes"]
+            changed = bool(incoming) or fresh
+        elif command == "import-legacy":
+            changed = fresh
+            if not state.get("legacyImported"):
+                try:
+                    old = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+                except (OSError, ValueError, IndexError):
+                    old = []
+                known = {n["id"] for n in state["notes"]}
+                incoming = [legacy_note(i) for i in old if isinstance(i, dict) and str(i.get("body", "")).strip()]
+                state["notes"] = [n for n in incoming if n["id"] not in known] + state["notes"]
+                state["legacyImported"] = True
+                changed = True
+        else:
+            raise ValueError(f"Unknown command: {command}")
+        if changed:
+            state["revision"] += 1
+            write_state(state)
+        print(json.dumps(state, ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, ValueError, KeyError) as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)

@@ -133,7 +133,7 @@ Appuie sur **`Super + H`** : une fenêtre en verre liste **tous** les raccourcis
 | `Super + H` | Tous les raccourcis |
 | `Super + I` | Paramètres de Caelestia |
 | `Super + A` | Centre de contrôle |
-| `Super + Maj + N` | Notes rapides |
+| `Super + Maj + N` | Notes rapides (synchronisées avec AetherNotes) |
 | `Super + Maj + T` | Tâches synchronisées avec AuraTask |
 | `Super + Retour arrière` | Éteindre / redémarrer / verrouiller |
 | `Super + Maj + R` | Recharger Hyprland et le shell |
