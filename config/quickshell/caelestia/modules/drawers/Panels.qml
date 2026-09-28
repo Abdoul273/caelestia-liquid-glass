@@ -118,6 +118,8 @@ Item {
         id: dashboard
 
         screenState: root.screenState
+        island: island
+        screenTop: root.borderThickness
 
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top

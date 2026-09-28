@@ -26,47 +26,67 @@ Item {
 
     readonly property real nonAnimHeight: (content.item as Content)?.nonAnimHeight ?? 0
     readonly property bool shouldBeActive: screenState.dashboard && Config.dashboard.enabled
-    property real offsetScale: shouldBeActive ? 0 : 1
 
-    visible: offsetScale < 1
-    anchors.topMargin: (-implicitHeight - 5) * offsetScale
-    implicitHeight: content.implicitHeight
-    implicitWidth: content.implicitWidth || 854 // Hard coded fallback for first open
-    opacity: 1 - offsetScale
+    // ── Ouverture façon Dynamic Island : le panneau naît de l'île et grandit à partir d'elle ──
+    property Item island // l'île (pour partir de sa taille exacte)
+    property real screenTop // décalage entre le haut du panneau et le haut de l'écran
+    property real fromW: 240
+    property real fromH: 40
+    property real morph: shouldBeActive ? 1 : 0
+    readonly property real offsetScale: 1 - morph
+    // Forme visible actuelle (le verre de ContentWindow la suit)
+    readonly property real curW: fromW + (width - fromW) * morph
+    readonly property real visBottom: (fromH - screenTop) + (height - fromH + screenTop) * morph
 
-    Behavior on offsetScale {
-        Anim {}
+    onShouldBeActiveChanged: {
+        if (shouldBeActive && island && island.h > 1) {
+            fromW = island.w;
+            fromH = island.h;
+        } else if (shouldBeActive) {
+            fromW = 240;
+            fromH = 40;
+        }
     }
 
-    Loader {
-        id: content
+    visible: morph > 0.001
+    implicitHeight: content.implicitHeight
+    implicitWidth: content.implicitWidth || 854 // Hard coded fallback for first open
 
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottom: parent.bottom
-
-        active: root.shouldBeActive || root.visible
-
-        // Ouverture façon macOS : le contenu se pose avec un léger zoom et un fondu
-        // un peu en retard sur le panneau, pour une sensation de profondeur.
-        property real reveal: root.shouldBeActive ? 1 : 0
-        opacity: reveal
-        scale: 0.94 + 0.06 * reveal
-        transformOrigin: Item.Top
-
-        Behavior on reveal {
-            SequentialAnimation {
-                PauseAnimation {
-                    duration: root.shouldBeActive ? 60 : 0
-                }
-                Anim {
-                    type: Anim.DefaultSpatial
-                }
-            }
+    Behavior on morph {
+        NumberAnimation {
+            duration: root.shouldBeActive ? 560 : 360
+            easing.type: root.shouldBeActive ? Easing.OutBack : Easing.InOutCubic
+            easing.overshoot: 0.7
         }
+    }
 
-        sourceComponent: Content {
-            screenState: root.screenState
-            facePicker: root.facePicker
+    // Le contenu est découpé à la forme qui grandit, puis se pose en fondu + léger zoom
+    Item {
+        id: clipper
+
+        x: (root.width - root.curW) / 2
+        y: -root.screenTop - 60
+        width: Math.max(0, root.curW)
+        height: Math.max(0, root.visBottom + root.screenTop + 60)
+        clip: root.morph < 0.999
+
+        Loader {
+            id: content
+
+            x: (root.width - width) / 2 - clipper.x
+            y: -clipper.y
+
+            active: root.shouldBeActive || root.visible
+
+            readonly property real reveal: Math.max(0, Math.min(1, (root.morph - 0.4) / 0.6))
+            opacity: reveal
+            scale: 0.92 + 0.08 * reveal
+            transformOrigin: Item.Top
+
+            sourceComponent: Content {
+                screenState: root.screenState
+                facePicker: root.facePicker
+            }
         }
     }
 }

@@ -180,17 +180,22 @@ StyledWindow {
 
             panel: panels.dashboard
             deformAmount: 0.1
-            // Sans bord haut (île) : comme l'île, le haut dépasse de l'écran (coins du bas seuls arrondis)
-            // et le dashboard fermé remonte entièrement hors de l'écran
-            y: panel.y + root.borderThickness - (Island.hideTopBorder ? radius + (root.borderThickness + 24) * panels.dashboard.offsetScale : 0)
-            implicitHeight: panel.height + (Island.hideTopBorder ? radius : 0)
+            visible: panels.dashboard.visible
+            // Le verre naît de l'île (même taille, même place) et grandit jusqu'au panneau.
+            // Le haut dépasse de l'écran : seuls les coins du bas sont arrondis.
+            radius: Math.min(panels.dashboard.fromH / 2, 32) + (Tokens.rounding.extraLarge - Math.min(panels.dashboard.fromH / 2, 32)) * panels.dashboard.morph
+            x: panel.x + bar.implicitWidth + (panel.width - panels.dashboard.curW) / 2
+            implicitWidth: panels.dashboard.curW
+            y: -radius
+            implicitHeight: Math.max(0, panel.y + root.borderThickness + panels.dashboard.visBottom) + radius
         }
 
         // Épaules du dashboard (Notes, Tâches…) : il sort du bord de l'écran comme l'île
         Shoulders {
             lx: dashBg.x
             rx: dashBg.x + dashBg.width
-            s: 26 * Math.max(0, 1 - panels.dashboard.offsetScale * 1.6)
+            // Même épaules que l'île au départ, puis celles du panneau
+            s: panels.dashboard.visible ? Math.min(18, panels.dashboard.fromH * 0.55) + (26 - Math.min(18, panels.dashboard.fromH * 0.55)) * panels.dashboard.morph : 0
         }
 
         // L'île fait partie de la forme fluide : même verre, même fusion que les panneaux.
