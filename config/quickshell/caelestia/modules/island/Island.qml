@@ -266,6 +266,105 @@ Item {
         onTriggered: camProc.running = true
     }
 
+    // ── Appels et visio : micro pris par une app d'appel (ou micro + caméra ensemble) ──
+    readonly property var callStream: recStreams.find(n => {
+        const p = n.properties ?? {};
+        const app = `${p["application.name"] ?? ""} ${p["application.process.binary"] ?? ""}`.toLowerCase();
+        return !/gpu-screen-recorder|wf-recorder|obs|arecord|pw-record|parecord|easyeffects|audacity/.test(app);
+    }) ?? null
+    readonly property string callAppNow: callStream?.properties?.["application.name"] ?? ""
+    // Retenu pendant tout l'appel (le flux peut disparaître un instant, ou à la fin)
+    property string callAppName
+    onCallAppNowChanged: if (callAppNow) callAppName = callAppNow
+    property string callTitleKept
+    readonly property string callBinary: (callStream?.properties?.["application.process.binary"] ?? "").toLowerCase()
+    readonly property bool callAppKnown: /discord|vesktop|telegram|zoom|teams|slack|skype|signal|whatsapp|jitsi|webex|element|chrom|firefox|brave|edge|vivaldi|opera|zen/.test(`${callAppName} ${callBinary}`.toLowerCase())
+    readonly property bool callWanted: Island.privacy && callStream !== null && (camInUse || callAppKnown)
+    property bool inCall
+    property real callStart: 0
+    property real callElapsed: 0
+    readonly property bool callMuted: Audio.sourceMuted || !!callStream?.audio?.muted
+
+    // Fenêtre de l'appel : même processus, sinon même app (titre qui ressemble à un appel en priorité)
+    readonly property var callWindow: {
+        if (!inCall)
+            return null;
+        const pid = parseInt(callStream?.properties?.["application.process.id"] ?? "0");
+        const wins = Hyprland.toplevels.values;
+        const byPid = wins.find(t => pid > 0 && t.lastIpcObject?.pid === pid);
+        if (byPid)
+            return byPid;
+        const key = (callBinary || callAppName.split(" ")[0] || "").toLowerCase().replace(/[-_].*$/, "");
+        if (!key)
+            return null;
+        const same = wins.filter(t => `${t.lastIpcObject?.class ?? ""} ${t.lastIpcObject?.initialClass ?? ""}`.toLowerCase().includes(key));
+        return same.find(t => /meet|zoom|teams|discord|appel|call|jitsi|whereby|webex|visio|réunion|meeting/i.test(t.title ?? "")) ?? same[0] ?? null;
+    }
+    readonly property string callTitle: {
+        const t = (callWindow?.title ?? "").replace(/\s*[-–—|]\s*(Google Chrome|Chromium|Mozilla Firefox|Brave|Microsoft Edge|Vivaldi)$/i, "").trim();
+        return t || callTitleKept || callAppName || qsTr("Appel en cours");
+    }
+    onCallWindowChanged: if (callWindow?.title) callTitleKept = callTitle
+
+    Timer {
+        interval: 2000
+        running: root.callWanted && !root.inCall
+        onTriggered: {
+            root.callStart = Date.now();
+            root.callElapsed = 0;
+            root.callTitleKept = "";
+            root.inCall = true;
+        }
+    }
+    Timer {
+        interval: 4000
+        running: !root.callWanted && root.inCall
+        onTriggered: root.inCall = false
+    }
+    Timer {
+        interval: 1000
+        running: root.inCall
+        repeat: true
+        onTriggered: root.callElapsed = (Date.now() - root.callStart) / 1000
+    }
+
+    // Coupe le micro pour l'appel seulement (son flux) ; si le micro entier était coupé, le rallume
+    function toggleCallMic(): void {
+        if (callMuted) {
+            if (callStream?.audio)
+                callStream.audio.muted = false;
+            if (Audio.sourceMuted && Audio.source?.audio)
+                Audio.source.audio.muted = false;
+        } else if (callStream?.audio) {
+            callStream.audio.muted = true;
+        } else if (Audio.source?.audio) {
+            Audio.source.audio.muted = true;
+        }
+    }
+
+    function focusCall(): void {
+        const t = callWindow;
+        if (t)
+            Hypr.dispatch(Hypr.usingLua ? `hl.dsp.focus({ window = "address:0x${t.address}" })` : `focuswindow address:0x${t.address}`);
+    }
+
+    function fmtLong(s: real): string {
+        const h = Math.floor(s / 3600);
+        return h > 0 ? `${h}:${Math.floor(s % 3600 / 60).toString().padStart(2, "0")}:${Math.floor(s % 60).toString().padStart(2, "0")}` : fmtTime(s);
+    }
+
+    TextMetrics {
+        id: callTitleMetrics
+
+        text: root.callTitle
+        font.pointSize: 9.5
+        font.weight: Font.Medium
+    }
+
+    // ── Bluetooth connecté (icône verte au repos) ──
+    readonly property var btConnected: Bluetooth.devices.values.filter(d => d?.connected)
+    readonly property bool btAudio: btConnected.some(d => /audio|head|ear|phone/i.test(d?.icon ?? ""))
+
     // ── Compte à rebours avant un enregistrement ──
     property int countLeft: 0
     property list<string> recArgs: []
@@ -781,22 +880,22 @@ Item {
     }
 
     // Activités en cours affichables en compact ; celle qu'on a regardée en dernier passe devant
-    readonly property list<string> compactActs: [...(Recorder.running ? ["record"] : []), ...(clockKind !== "" ? ["clockMini"] : []), ...(hasMedia && playing ? ["media"] : [])]
+    readonly property list<string> compactActs: [...(inCall ? ["call"] : []), ...(Recorder.running ? ["record"] : []), ...(clockKind !== "" ? ["clockMini"] : []), ...(hasMedia && playing ? ["media"] : [])]
     readonly property string compactPick: {
-        const fromPage = ({ recordFull: "record", clock: "clockMini", player: "media" })[pageName];
+        const fromPage = ({ callFull: "call", recordFull: "record", clock: "clockMini", player: "media" })[pageName];
         return fromPage && compactActs.includes(fromPage) ? fromPage : (compactActs[0] ?? "");
     }
     // Les autres activités, en petites icônes au bord de l'île compacte (+ caféine)
     readonly property list<string> otherActs: [...compactActs.filter(a => a !== mode), ...(IdleInhibitor.enabled ? ["caffeine"] : [])]
-    readonly property bool compactActive: mode === "record" || mode === "clockMini" || mode === "media"
+    readonly property bool compactActive: mode === "call" || mode === "record" || mode === "clockMini" || mode === "media"
     readonly property real actsInset: compactActive && otherActs.length > 0 ? otherActs.length * 18 + 12 : 0
 
     function actIcon(a: string): string {
-        return ({ record: "radio_button_checked", clockMini: "timer", media: "music_note", caffeine: "coffee" })[a] ?? "";
+        return ({ call: callMuted ? "mic_off" : "call", record: "radio_button_checked", clockMini: "timer", media: "music_note", caffeine: "coffee" })[a] ?? "";
     }
 
     function actColour(a: string): color {
-        return ({ record: "#ff453a", clockMini: "#ff9f0a", media: root.accent, caffeine: root.fg })[a] ?? root.fg;
+        return ({ call: callMuted ? "#ff453a" : root.green, record: "#ff453a", clockMini: "#ff9f0a", media: root.accent, caffeine: root.fg })[a] ?? root.fg;
     }
 
     readonly property bool notifHasActions: (notif?.actions?.length ?? 0) > 0
@@ -852,17 +951,21 @@ Item {
             return Qt.size(pageWidth, 150);
         case "record":
             return Qt.size(210 + actsInset, 40);
+        case "call":
+            return Qt.size(Math.min(340, 150 + callTitleMetrics.advanceWidth) + actsInset, 40);
+        case "callFull":
+            return Qt.size(pageWidth, 96);
         case "media":
             return Qt.size((hasLyrics ? 400 : 290) + actsInset, 40);
         default:
             // Au repos : juste l'heure (ou rien si Island.clock est coupé)
-            return Island.clock ? Qt.size(240 + (showBattery ? 34 : 0) + (showBattery && batteryPctShown ? 42 : 0) + (micInUse || camInUse ? 24 : 0) + (shelf.length > 0 ? 34 : 0) + (IdleInhibitor.enabled ? 22 : 0), 40) : Qt.size(150, 0);
+            return Island.clock ? Qt.size(240 + (showBattery ? 34 : 0) + (showBattery && batteryPctShown ? 42 : 0) + (micInUse || camInUse ? 24 : 0) + (shelf.length > 0 ? 34 : 0) + (IdleInhibitor.enabled ? 22 : 0) + (btConnected.length > 0 ? 24 : 0), 40) : Qt.size(150, 0);
         }
     }
 
     property real w: target.width
     property real h: target.height
-    readonly property real radius: Math.min(h / 2, mode === "player" || mode === "info" || mode === "perf" || mode === "notif" || mode === "bt" || mode === "shot" || mode === "clock" || mode === "drop" || mode === "toast" || mode === "done" || mode === "alarm" || mode === "count" || mode === "recordFull" || mode === "caffeine" || mode === "center" || (mode === "charge" && chargePlugged) ? 32 : h / 2)
+    readonly property real radius: Math.min(h / 2, mode === "player" || mode === "info" || mode === "perf" || mode === "notif" || mode === "bt" || mode === "shot" || mode === "clock" || mode === "drop" || mode === "toast" || mode === "done" || mode === "alarm" || mode === "count" || mode === "recordFull" || mode === "callFull" || mode === "caffeine" || mode === "center" || (mode === "charge" && chargePlugged) ? 32 : h / 2)
 
     function flash(kind: string, ms: int): void {
         if (!ready)
@@ -1338,7 +1441,7 @@ Item {
 
     // Pages de l'île ouverte : enregistrement et minuteur en cours d'abord (s'il y en a),
     // puis heure/météo ↔ performances du PC ↔ musique (si un lecteur est actif)
-    readonly property list<string> pages: [...(Recorder.running ? ["recordFull"] : []), ...(clockKind !== "" ? ["clock"] : []), ...(IdleInhibitor.enabled ? ["caffeine"] : []), "info", "perf", ...(hasMedia ? ["player"] : [])]
+    readonly property list<string> pages: [...(inCall ? ["callFull"] : []), ...(Recorder.running ? ["recordFull"] : []), ...(clockKind !== "" ? ["clock"] : []), ...(IdleInhibitor.enabled ? ["caffeine"] : []), "info", "perf", ...(hasMedia ? ["player"] : [])]
     // Page retenue par son nom : elle reste la même quand d'autres pages apparaissent ou disparaissent
     property string pageName: "info"
     readonly property int pageIndex: Math.max(0, pages.indexOf(pageName))
@@ -1366,6 +1469,12 @@ Item {
             else if (root.pageName === "caffeine")
                 root.pageName = "info";
         }
+    }
+    onInCallChanged: {
+        if (inCall)
+            pageName = "callFull";
+        else if (pageName === "callFull")
+            pageName = "info";
     }
     Connections {
         target: Recorder
@@ -1759,6 +1868,35 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 9
 
+                // Bluetooth connecté : icône verte (casque si c'est un appareil audio), apparaît en douceur
+                Item {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: root.btConnected.length > 0 ? 15 : 0
+                    height: 16
+                    opacity: root.btConnected.length > 0 ? 1 : 0
+                    visible: opacity > 0.01
+
+                    Behavior on width {
+                        NumberAnimation {
+                            duration: 300
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: 300
+                        }
+                    }
+
+                    MaterialIcon {
+                        anchors.centerIn: parent
+                        text: root.btAudio ? "headphones" : "bluetooth"
+                        color: root.green
+                        fontStyle: Tokens.font.icon.size(13).build()
+                        fill: 1
+                    }
+                }
+
                 StyledText {
                     anchors.verticalCenter: parent.verticalCenter
                     visible: root.showBattery && root.batteryPctShown
@@ -2017,6 +2155,98 @@ Item {
                 count: 5
                 barWidth: 3
                 maxHeight: 16
+            }
+        }
+
+        // ── appel en cours (compact) : combiné vert qui respire, titre, durée ──
+        Face {
+            active: root.mode === "call"
+            inset: root.actsInset
+
+            Item {
+                id: callMiniIcon
+
+                anchors.left: parent.left
+                anchors.leftMargin: 14
+                anchors.verticalCenter: parent.verticalCenter
+                width: 24
+                height: 24
+
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 24
+                    height: 24
+                    radius: 12
+                    color: root.callMuted ? root.red : root.green
+                    opacity: 0.35
+
+                    SequentialAnimation on scale {
+                        running: root.mode === "call" && !root.callMuted
+                        loops: Animation.Infinite
+                        NumberAnimation {
+                            from: 0.7
+                            to: 1.25
+                            duration: 1300
+                            easing.type: Easing.OutCubic
+                        }
+                        NumberAnimation {
+                            to: 0.7
+                            duration: 0
+                        }
+                    }
+                    SequentialAnimation on opacity {
+                        running: root.mode === "call" && !root.callMuted
+                        loops: Animation.Infinite
+                        NumberAnimation {
+                            from: 0.45
+                            to: 0
+                            duration: 1300
+                        }
+                    }
+                }
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 20
+                    height: 20
+                    radius: 10
+                    color: root.callMuted ? root.red : root.green
+
+                    MaterialIcon {
+                        anchors.centerIn: parent
+                        text: root.callMuted ? "mic_off" : root.camInUse ? "videocam" : "call"
+                        color: "white"
+                        fontStyle: Tokens.font.icon.size(11).build()
+                        fill: 1
+                    }
+                }
+            }
+
+            StyledText {
+                anchors.left: callMiniIcon.right
+                anchors.leftMargin: 9
+                anchors.right: callMiniTime.left
+                anchors.rightMargin: 10
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.callTitle
+                elide: Text.ElideRight
+                color: root.fgDim
+                font.pointSize: 9.5
+                font.weight: Font.Medium
+            }
+
+            StyledText {
+                id: callMiniTime
+
+                anchors.right: parent.right
+                anchors.rightMargin: 18
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.fmtLong(root.callElapsed)
+                color: root.callMuted ? root.red : root.green
+                font.pointSize: 10
+                font.weight: Font.DemiBold
+                font.features: {
+                    "tnum": 1
+                }
             }
         }
 
@@ -3441,6 +3671,118 @@ Item {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: Recorder.stop()
+                    }
+                }
+            }
+        }
+
+        // ── appel en cours (île ouverte) : qui, depuis quand, micro, retour à l'appel ──
+        Face {
+            active: root.mode === "callFull"
+            slide: root.pageSlide("callFull")
+
+            Rectangle {
+                id: callBadge
+
+                anchors.left: parent.left
+                anchors.leftMargin: 26
+                anchors.verticalCenter: parent.verticalCenter
+                width: 48
+                height: 48
+                radius: 24
+                color: Qt.alpha(root.callMuted ? root.red : root.green, 0.22)
+
+                Behavior on color {
+                    ColorAnimation {
+                        duration: 250
+                    }
+                }
+
+                MaterialIcon {
+                    anchors.centerIn: parent
+                    text: root.camInUse ? "videocam" : "call"
+                    color: root.callMuted ? root.red : root.green
+                    fontStyle: Tokens.font.icon.size(20).build()
+                    fill: 1
+                }
+            }
+
+            Column {
+                anchors.left: callBadge.right
+                anchors.leftMargin: 14
+                anchors.right: callButtons.left
+                anchors.rightMargin: 12
+                anchors.verticalCenter: callBadge.verticalCenter
+                spacing: 1
+
+                StyledText {
+                    width: parent.width
+                    elide: Text.ElideRight
+                    text: root.callTitle
+                    color: root.fg
+                    font.pointSize: 12
+                    font.weight: Font.Bold
+                }
+                StyledText {
+                    width: parent.width
+                    elide: Text.ElideRight
+                    text: `${root.fmtLong(root.callElapsed)} · ${root.callMuted ? qsTr("micro coupé") : root.camInUse ? qsTr("visio") : qsTr("appel")}${root.callWindow && root.callAppName && !root.callTitle.includes(root.callAppName) ? " · " + root.callAppName : ""}`
+                    color: root.callMuted ? root.red : root.fgDim
+                    font.pointSize: 9
+                    font.features: {
+                        "tnum": 1
+                    }
+                }
+            }
+
+            Row {
+                id: callButtons
+
+                anchors.right: parent.right
+                anchors.rightMargin: 26
+                anchors.verticalCenter: callBadge.verticalCenter
+                spacing: 10
+
+                ShotButton {
+                    visible: root.callWindow !== null
+                    icon: "open_in_new"
+                    tip: qsTr("Aller à l'appel")
+                    onClicked: root.focusCall()
+                }
+                // Micro : rouge quand il est coupé
+                Rectangle {
+                    width: 40
+                    height: 40
+                    radius: 20
+                    color: root.callMuted ? root.red : Qt.alpha(Colours.palette.m3onSurface, callMicArea.pressed ? 0.24 : callMicArea.containsMouse ? 0.17 : 0.1)
+                    scale: callMicArea.pressed ? 0.9 : 1
+
+                    Behavior on color {
+                        ColorAnimation {
+                            duration: 200
+                        }
+                    }
+                    Behavior on scale {
+                        NumberAnimation {
+                            duration: 120
+                        }
+                    }
+
+                    MaterialIcon {
+                        anchors.centerIn: parent
+                        text: root.callMuted ? "mic_off" : "mic"
+                        color: root.callMuted ? "white" : root.fg
+                        fontStyle: Tokens.font.icon.size(17).build()
+                        fill: 1
+                    }
+
+                    MouseArea {
+                        id: callMicArea
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.toggleCallMic()
                     }
                 }
             }
