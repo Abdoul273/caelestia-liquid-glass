@@ -393,7 +393,7 @@ Item {
                     const f = (m.finished ?? [])[0];
                     if (f && root.ready) {
                         root.fileDone = f;
-                        Quickshell.execDetached(["pw-play", "--volume", "0.5", "/usr/share/sounds/freedesktop/stereo/complete.oga"]);
+                        root.playShort("transfert", "/usr/share/sounds/freedesktop/stereo/complete.oga");
                         root.flash("fileDone", 6000);
                     }
                 } catch (e) {}
@@ -487,7 +487,7 @@ Item {
                     priority: t.priority,
                     late: m.late
                 };
-                Quickshell.execDetached(["pw-play", "/usr/share/sounds/freedesktop/stereo/message-new-instant.oga"]);
+                root.playShort("rappel", "/usr/share/sounds/freedesktop/stereo/message-new-instant.oga");
                 taskAlertTimeout.restart();
                 return;
             }
@@ -737,28 +737,17 @@ Item {
         const label = clockLabel;
         const total = clockTotal;
         clockKind = "";
-        Quickshell.execDetached(["pw-play", "/usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga"]);
         if (pomoOn) {
-            // Pomodoro : on enchaîne tout seul sur la phase suivante
-            if (pomoPhase === "work") {
-                pomoPhase = "rest";
-                doneTitle = qsTr("Focus terminé");
-                doneSub = qsTr("Pause de %1").arg(fmtClock(pomoRest));
-                startTimer(pomoRest, qsTr("Pause"));
-            } else {
-                pomoPhase = "work";
-                pomoRound += 1;
-                doneTitle = qsTr("Pause terminée");
-                doneSub = qsTr("Session %1").arg(pomoRound);
-                startTimer(pomoWork, qsTr("Focus"));
-            }
-            flash("done", 4500);
+            // Pomodoro : ça sonne, puis on choisit d'enchaîner (Pause / Reprendre) depuis l'île
+            if (pomoPhase === "work")
+                ring("pomoWork", qsTr("Focus terminé"), qsTr("Session %1 · place à %2 de pause").arg(pomoRound).arg(fmtHuman(pomoRest)), total);
+            else
+                ring("pomoRest", qsTr("Pause terminée"), qsTr("Prêt pour la session %1 ?").arg(pomoRound + 1), total);
+            saveClock();
             return;
         }
-        doneTitle = label ? qsTr("%1 : terminé").arg(label) : qsTr("Minuteur terminé");
-        doneSub = fmtClock(total);
+        ring("timer", label || qsTr("Minuteur"), qsTr("Minuteur de %1 terminé").arg(fmtHuman(total)), total);
         saveClock();
-        flash("done", 8000);
     }
 
     // État publié pour l'app Horloge (~/.local/state/caelestia/island-clock.json)
@@ -778,7 +767,8 @@ Item {
                 phase: pomoPhase,
                 round: pomoRound
             },
-            alarm: alarmRinging ? alarmLabel : null
+            alarm: alarmRinging ? alarmLabel : null,
+            ring: alarmRinging ? { kind: ringKind, label: alarmLabel, sub: ringSub, since: ringSince } : null
         }));
     }
 
@@ -844,16 +834,55 @@ Item {
         }
     }
 
+    // ── Sonnerie commune : alarmes, fin de minuteur, fin de phase pomodoro ──
+    // Elle continue tant qu'on ne l'arrête pas depuis l'île (ou l'app Horloge / IPC).
+    property string ringKind: "" // alarm, timer, pomoWork, pomoRest
+    property string ringSub: ""
+    property real ringTotal: 0
+    property real ringSince: 0
+    property real ringElapsed: 0
+    property int ringLoops: 0
+    property list<var> ringPaused: [] // lecteurs mis en pause pendant la sonnerie
+    // Son personnalisé : ~/.local/share/caelestia/sounds/alarme.* (sinon le son système)
+    readonly property string ringSoundDir: `${Quickshell.env("HOME")}/.local/share/caelestia/sounds`
+
     function ringAlarm(label: string, hm: string): void {
+        ring("alarm", label, hm, 0);
+    }
+
+    function ring(kind: string, label: string, sub: string, total: real): void {
+        ringKind = kind;
         alarmLabel = label;
-        alarmTime = hm;
+        alarmTime = kind === "alarm" ? sub : "";
+        ringSub = sub;
+        ringTotal = total;
+        ringSince = Date.now();
+        ringElapsed = 0;
+        ringLoops = 0;
+        // La musique se met en pause le temps de la sonnerie, puis reprend
+        if (root.screen === Quickshell.screens[0]) {
+            const paused = [];
+            for (const pl of Mpris.players.values)
+                if (pl.isPlaying && pl.canPause) {
+                    pl.pause();
+                    paused.push(pl);
+                }
+            ringPaused = paused;
+        }
         alarmRinging = true;
         saveClock();
-        flash("alarm", 5 * 60 * 1000);
     }
 
     function stopAlarm(): void {
+        if (!alarmRinging)
+            return;
         alarmRinging = false;
+        ringKind = "";
+        ringPlayer.running = false;
+        for (const pl of ringPaused)
+            if (pl && pl.canPlay)
+                pl.play();
+        ringPaused = [];
         saveClock();
         if (pulse === "alarm") {
             pulseTimer.stop();
@@ -863,19 +892,81 @@ Item {
         }
     }
 
+    // Répéter : alarme → dans 9 min ; minuteur → même durée ; +1 min
     function snoozeAlarm(): void {
-        const label = alarmLabel;
+        const kind = ringKind, label = alarmLabel, total = ringTotal;
         stopAlarm();
-        startTimer(9 * 60, qsTr("%1 (répétition)").arg(label));
+        if (kind === "timer")
+            startTimer(total, label === qsTr("Minuteur") ? "" : label);
+        else
+            startTimer(9 * 60, qsTr("%1 (répétition)").arg(label));
     }
 
-    // Sonnerie qui se répète tant que l'alarme n'est pas arrêtée
+    function ringPlusOne(): void {
+        const label = alarmLabel;
+        stopAlarm();
+        startTimer(60, label === qsTr("Minuteur") ? "" : label);
+    }
+
+    // Pomodoro : enchaîner sur la phase suivante
+    function ringNextPhase(): void {
+        const kind = ringKind;
+        stopAlarm();
+        if (kind === "pomoWork") {
+            pomoPhase = "rest";
+            startTimer(pomoRest, qsTr("Pause"));
+        } else {
+            pomoPhase = "work";
+            pomoRound += 1;
+            startTimer(pomoWork, qsTr("Focus"));
+        }
+    }
+
+    function stopRingAll(): void {
+        pomoOn = false;
+        stopAlarm();
+        saveClock();
+    }
+
+    // Un son par moment (~/Documents/Sons Caelestia, lien ~/.local/share/caelestia/sounds) :
+    // premier passage = version « -intro » dont le volume monte en 20 s, puis boucle à plein volume.
+    // Son absent → alarme.ogg → son système. Un seul écran joue.
+    readonly property string ringSoundName: ({ timer: "minuteur", alarm: "alarme", pomoWork: "fin-focus", pomoRest: "fin-pause" })[ringKind] ?? "alarme"
+
+    Process {
+        id: ringPlayer
+
+        command: ["sh", "-c", 'd="$1"; n="$2"; for f in "$d/$n$3.ogg" "$d/$n.ogg" "$d/alarme$3.ogg" "$d/alarme.ogg" /usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga; do [ -f "$f" ] && exec pw-play --volume "$4" "$f"; done', "sh", root.ringSoundDir, root.ringSoundName, root.ringLoops === 0 ? "-intro" : "", "1.0"]
+        onExited: if (root.alarmRinging) ringNext.restart()
+    }
+
+    // Sons courts : rappel de tâche, transfert terminé (son système si le fichier manque)
+    function playShort(name: string, fallback: string): void {
+        if (root.screen !== Quickshell.screens[0])
+            return;
+        Quickshell.execDetached(["sh", "-c", 'f="$1/$2.ogg"; [ -f "$f" ] || f="$3"; exec pw-play "$f"', "sh", root.ringSoundDir, name, fallback]);
+    }
+    Timer {
+        id: ringNext
+
+        interval: 150
+        onTriggered: {
+            if (!root.alarmRinging)
+                return;
+            root.ringLoops += 1;
+            ringPlayer.running = true;
+        }
+    }
+    onAlarmRingingChanged: {
+        if (alarmRinging && screen === Quickshell.screens[0])
+            ringPlayer.running = true;
+    }
     Timer {
         running: root.alarmRinging
-        interval: 2600
+        interval: 1000
         repeat: true
         triggeredOnStart: true
-        onTriggered: Quickshell.execDetached(["pw-play", "/usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga"])
+        onTriggered: root.ringElapsed = (Date.now() - root.ringSince) / 1000
     }
 
     function openClockApp(): void {
@@ -904,6 +995,17 @@ Item {
         pomoOn = false;
         laps = [];
         saveClock();
+    }
+
+    // « 10 min », « 1 h 30 », « 45 s »
+    function fmtHuman(sec: real): string {
+        sec = Math.round(Math.max(0, sec));
+        const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+        if (h > 0)
+            return m > 0 ? `${h} h ${m.toString().padStart(2, "0")}` : `${h} h`;
+        if (m > 0)
+            return s > 0 ? `${m} min ${s} s` : `${m} min`;
+        return `${s} s`;
     }
 
     function fmtClock(sec: real): string {
@@ -1091,7 +1193,7 @@ Item {
         case "done":
             return Qt.size(380, 68);
         case "alarm":
-            return Qt.size(430, 96);
+            return Qt.size(ringKind === "alarm" ? 500 : 580, 118);
         case "blip":
             return Qt.size(blipSub ? 320 : 280, 44);
         case "ws":
@@ -1462,6 +1564,20 @@ Item {
         }
         function snooze(): void {
             root.snoozeAlarm();
+        }
+        function ringNext(): void {
+            root.ringNextPhase();
+        }
+        function stopAll(): void {
+            root.stopRingAll();
+        }
+        function testRing(kind: string): void {
+            if (kind === "timer")
+                root.ring("timer", qsTr("Pâtes"), qsTr("Minuteur de %1 terminé").arg(root.fmtHuman(600)), 600);
+            else if (kind === "pomo")
+                root.ring("pomoWork", qsTr("Focus terminé"), qsTr("Session 1 · place à 5 min de pause"), 1500);
+            else
+                root.ringAlarm(qsTr("Réveil"), Time.format("HH:mm"));
         }
         function testAlarm(label: string): void {
             root.ringAlarm(label || qsTr("Alarme"), Time.format("HH:mm"));
@@ -3733,56 +3849,168 @@ Item {
             }
         }
 
-        // ── alarme qui sonne ──
+        // ── ça sonne : alarme, fin de minuteur, fin de phase pomodoro ──
         Face {
+            id: ringFace
+
             active: root.mode === "alarm"
 
+            readonly property color tint: root.ringKind === "pomoRest" ? root.green : root.ringKind === "pomoWork" ? "#5e9eff" : "#ff9f0a"
+            readonly property bool isTimer: root.ringKind === "timer"
+            readonly property bool isPomo: root.ringKind === "pomoWork" || root.ringKind === "pomoRest"
+
+            // Lueur qui respire dans le verre, du côté de l'icône
             Rectangle {
-                id: alarmIcon
-
-                anchors.left: parent.left
-                anchors.leftMargin: 22
-                anchors.verticalCenter: parent.verticalCenter
-                width: 48
-                height: 48
-                radius: 24
-                color: Qt.alpha("#ff9f0a", 0.22)
-
-                SequentialAnimation on scale {
-                    running: root.mode === "alarm"
-                    loops: Animation.Infinite
-                    NumberAnimation {
-                        to: 1.12
-                        duration: 380
-                        easing.type: Easing.OutCubic
+                anchors.fill: parent
+                radius: 32
+                opacity: 0.55
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop {
+                        position: 0
+                        color: Qt.alpha(ringFace.tint, 0.28)
                     }
-                    NumberAnimation {
-                        to: 1
-                        duration: 520
-                        easing.type: Easing.InOutQuad
+                    GradientStop {
+                        position: 0.55
+                        color: "transparent"
                     }
                 }
 
-                MaterialIcon {
-                    anchors.centerIn: parent
-                    text: "alarm"
-                    color: "#ff9f0a"
-                    fontStyle: Tokens.font.icon.size(20).build()
-                    fill: 1
+                SequentialAnimation on opacity {
+                    running: root.mode === "alarm"
+                    loops: Animation.Infinite
+                    NumberAnimation {
+                        to: 0.95
+                        duration: 700
+                        easing.type: Easing.InOutSine
+                    }
+                    NumberAnimation {
+                        to: 0.35
+                        duration: 900
+                        easing.type: Easing.InOutSine
+                    }
+                }
+            }
+
+            Item {
+                id: ringIconBox
+
+                anchors.left: parent.left
+                anchors.leftMargin: 26
+                anchors.verticalCenter: parent.verticalCenter
+                width: 54
+                height: 54
+
+                // Ondes qui partent de l'icône
+                Repeater {
+                    model: 3
+
+                    Rectangle {
+                        id: wave
+
+                        required property int index
+
+                        anchors.centerIn: parent
+                        width: 54
+                        height: 54
+                        radius: 27
+                        color: "transparent"
+                        border.width: 2
+                        border.color: ringFace.tint
+                        opacity: 0
+
+                        SequentialAnimation {
+                            running: root.mode === "alarm"
+                            loops: Animation.Infinite
+
+                            PauseAnimation {
+                                duration: wave.index * 520
+                            }
+                            ParallelAnimation {
+                                NumberAnimation {
+                                    target: wave
+                                    property: "scale"
+                                    from: 1
+                                    to: 1.9
+                                    duration: 1560
+                                    easing.type: Easing.OutCubic
+                                }
+                                NumberAnimation {
+                                    target: wave
+                                    property: "opacity"
+                                    from: 0.7
+                                    to: 0
+                                    duration: 1560
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
+                            PauseAnimation {
+                                duration: (2 - wave.index) * 520
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 27
+                    color: ringFace.tint
+
+                    MaterialIcon {
+                        id: ringGlyph
+
+                        anchors.centerIn: parent
+                        text: ringFace.isTimer ? "timer" : root.ringKind === "pomoWork" ? "self_improvement" : root.ringKind === "pomoRest" ? "bolt" : "alarm"
+                        color: "white"
+                        fontStyle: Tokens.font.icon.size(24).build()
+                        fill: 1
+
+                        // Petite secousse de réveil
+                        SequentialAnimation on rotation {
+                            running: root.mode === "alarm"
+                            loops: Animation.Infinite
+                            NumberAnimation {
+                                to: 16
+                                duration: 70
+                            }
+                            NumberAnimation {
+                                to: -16
+                                duration: 140
+                            }
+                            NumberAnimation {
+                                to: 12
+                                duration: 120
+                            }
+                            NumberAnimation {
+                                to: -8
+                                duration: 100
+                            }
+                            NumberAnimation {
+                                to: 0
+                                duration: 80
+                            }
+                            PauseAnimation {
+                                duration: 900
+                            }
+                        }
+                    }
                 }
             }
 
             Column {
-                anchors.left: alarmIcon.right
-                anchors.leftMargin: 14
-                anchors.right: alarmButtons.left
+                anchors.left: ringIconBox.right
+                anchors.leftMargin: 18
+                anchors.right: ringButtons.left
                 anchors.rightMargin: 12
                 anchors.verticalCenter: parent.verticalCenter
+                spacing: 1
 
                 StyledText {
-                    text: root.alarmTime
+                    width: parent.width
+                    elide: Text.ElideRight
+                    text: root.ringKind === "alarm" ? root.alarmTime : root.alarmLabel
                     color: root.fg
-                    font.pointSize: 20
+                    font.pointSize: root.ringKind === "alarm" ? 22 : 15
                     font.weight: Font.Bold
                     font.features: {
                         "tnum": 1
@@ -3791,33 +4019,69 @@ Item {
                 StyledText {
                     width: parent.width
                     elide: Text.ElideRight
-                    text: root.alarmLabel
+                    text: root.ringKind === "alarm" ? root.alarmLabel : root.ringSub
                     color: root.fgDim
                     font.pointSize: 9.5
+                }
+                // Depuis combien de temps ça sonne (comme sur iPhone)
+                StyledText {
+                    text: qsTr("Sonne depuis %1").arg(root.fmtTime(root.ringElapsed))
+                    color: ringFace.tint
+                    font.pointSize: 8.5
+                    font.weight: Font.DemiBold
+                    font.features: {
+                        "tnum": 1
+                    }
                 }
             }
 
             Row {
-                id: alarmButtons
+                id: ringButtons
 
                 anchors.right: parent.right
-                anchors.rightMargin: 22
+                anchors.rightMargin: 24
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 8
 
+                // Bouton secondaire : +1 min (minuteur), Répéter (alarme), Terminer (pomodoro)
                 Rectangle {
-                    width: snoozeLbl.implicitWidth + 28
-                    height: 38
-                    radius: 19
-                    color: Qt.alpha(root.fg, snoozeArea.containsMouse ? 0.2 : 0.12)
+                    visible: ringFace.isTimer
+                    width: 44
+                    height: 44
+                    radius: 22
+                    color: Qt.alpha(root.fg, plusArea.pressed ? 0.26 : plusArea.containsMouse ? 0.2 : 0.12)
+                    scale: plusArea.pressed ? 0.92 : 1
+
+                    StyledText {
+                        anchors.centerIn: parent
+                        text: "+1"
+                        color: root.fg
+                        font.pointSize: 11
+                        font.weight: Font.Bold
+                    }
+                    MouseArea {
+                        id: plusArea
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.ringPlusOne()
+                    }
+                }
+                Rectangle {
+                    width: snoozeLbl.implicitWidth + 30
+                    height: 44
+                    radius: 22
+                    color: Qt.alpha(root.fg, snoozeArea.pressed ? 0.26 : snoozeArea.containsMouse ? 0.2 : 0.12)
+                    scale: snoozeArea.pressed ? 0.94 : 1
 
                     StyledText {
                         id: snoozeLbl
 
                         anchors.centerIn: parent
-                        text: qsTr("Répéter")
+                        text: ringFace.isPomo ? qsTr("Terminer") : ringFace.isTimer ? qsTr("Relancer") : qsTr("Répéter")
                         color: root.fg
-                        font.pointSize: 9.5
+                        font.pointSize: 10
                         font.weight: Font.DemiBold
                     }
                     MouseArea {
@@ -3826,23 +4090,45 @@ Item {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root.snoozeAlarm()
+                        onClicked: ringFace.isPomo ? root.stopRingAll() : root.snoozeAlarm()
                     }
                 }
+                // Bouton principal : Arrêter (ou Pause / Reprendre pour le pomodoro)
                 Rectangle {
-                    width: stopLbl.implicitWidth + 28
-                    height: 38
-                    radius: 19
-                    color: stopArea.containsMouse ? Qt.lighter("#ff9f0a", 1.1) : "#ff9f0a"
+                    width: stopRow.implicitWidth + 32
+                    height: 44
+                    radius: 22
+                    color: stopArea.containsMouse ? Qt.lighter(ringFace.tint, 1.12) : ringFace.tint
+                    scale: stopArea.pressed ? 0.94 : 1
 
-                    StyledText {
-                        id: stopLbl
+                    Behavior on scale {
+                        NumberAnimation {
+                            duration: 120
+                        }
+                    }
+
+                    Row {
+                        id: stopRow
 
                         anchors.centerIn: parent
-                        text: qsTr("Arrêter")
-                        color: "#1c1206"
-                        font.pointSize: 9.5
-                        font.weight: Font.Bold
+                        spacing: 5
+
+                        MaterialIcon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: root.ringKind === "pomoWork" ? "coffee" : root.ringKind === "pomoRest" ? "play_arrow" : "stop"
+                            color: "white"
+                            fontStyle: Tokens.font.icon.size(16).build()
+                            fill: 1
+                        }
+                        StyledText {
+                            id: stopLbl
+
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: root.ringKind === "pomoWork" ? qsTr("Pause") : root.ringKind === "pomoRest" ? qsTr("Reprendre") : qsTr("Arrêter")
+                            color: "white"
+                            font.pointSize: 10.5
+                            font.weight: Font.Bold
+                        }
                     }
                     MouseArea {
                         id: stopArea
@@ -3850,7 +4136,7 @@ Item {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root.stopAlarm()
+                        onClicked: ringFace.isPomo ? root.ringNextPhase() : root.stopAlarm()
                     }
                 }
             }

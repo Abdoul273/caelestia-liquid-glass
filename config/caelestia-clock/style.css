@@ -244,3 +244,21 @@ scrollbar slider { min-width: 4px; border-radius: 2px; background: alpha(@t_on_s
 /* Dans l'éditeur d'alarme, le sélecteur est hors de l'anneau : plus grand */
 .editor .picker-value { font-size: 44px; }
 .editor .picker-col { min-width: 70px; }
+
+/* ---------- Bandeau « ça sonne » (même sonnerie que la Dynamic Island) ---------- */
+.ring-banner {
+  margin: 12px 14px 4px;
+  padding: 10px 12px 10px 14px;
+  border-radius: 20px;
+  background: linear-gradient(90deg, alpha(@orange, 0.26), alpha(@orange, 0.08));
+  box-shadow: inset 0 1px alpha(white, 0.10), 0 0 0 1px alpha(@orange, 0.35);
+  animation: ring-glow 1.6s ease-in-out infinite;
+}
+@keyframes ring-glow {
+  0%, 100% { box-shadow: inset 0 1px alpha(white, 0.10), 0 0 0 1px alpha(@orange, 0.30); }
+  50% { box-shadow: inset 0 1px alpha(white, 0.10), 0 0 0 1px alpha(@orange, 0.75), 0 0 18px alpha(@orange, 0.35); }
+}
+.ring-banner .pill { min-width: 0; min-height: 38px; padding: 0 14px; font-size: 12.5px; }
+.ring-icon { font-size: 24px; color: @orange; min-width: 34px; }
+.ring-title { font-weight: 800; font-size: 14px; }
+.ring-sub { font-size: 11.5px; opacity: 0.7; }

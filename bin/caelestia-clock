@@ -316,6 +316,28 @@ class ClockApp(Gtk.Application):
         root.add_css_class("clock-root")
         self.window.set_child(root)
 
+        # Bandeau « ça sonne » : même sonnerie que la Dynamic Island, qu'on arrête d'ici aussi
+        self.ring_rev = Gtk.Revealer(transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN, transition_duration=260)
+        ring = Gtk.Box(spacing=10)
+        ring.add_css_class("ring-banner")
+        self.ring_icon = Gtk.Label(label="󰀠")
+        self.ring_icon.add_css_class("ring-icon")
+        ring.append(self.ring_icon)
+        txt = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True, valign=Gtk.Align.CENTER)
+        self.ring_title = Gtk.Label(xalign=0, ellipsize=3)
+        self.ring_title.add_css_class("ring-title")
+        self.ring_sub = Gtk.Label(xalign=0, ellipsize=3)
+        self.ring_sub.add_css_class("ring-sub")
+        txt.append(self.ring_title)
+        txt.append(self.ring_sub)
+        ring.append(txt)
+        self.ring_second = pill("Répéter", "grey", self.ring_second_clicked)
+        self.ring_main = pill("Arrêter", "orange", self.ring_main_clicked)
+        ring.append(self.ring_second)
+        ring.append(self.ring_main)
+        self.ring_rev.set_child(ring)
+        root.append(self.ring_rev)
+
         # Contrôle segmenté
         tabs = Gtk.Box(spacing=4, halign=Gtk.Align.CENTER)
         tabs.add_css_class("segmented")
@@ -697,6 +719,32 @@ class ClockApp(Gtk.Application):
 
     # -- état en direct
 
+    def ring_kind(self) -> str:
+        return ((self.state.get("ring") or {}).get("kind")) or ""
+
+    def ring_main_clicked(self) -> None:
+        island("ringNext" if self.ring_kind().startswith("pomo") else "stopAlarm")
+
+    def ring_second_clicked(self) -> None:
+        island("stopAll" if self.ring_kind().startswith("pomo") else "snooze")
+
+    def refresh_ring(self) -> None:
+        ring = self.state.get("ring")
+        self.ring_rev.set_reveal_child(bool(ring))
+        if not ring:
+            return
+        kind = ring.get("kind", "")
+        pomo = kind.startswith("pomo")
+        self.ring_icon.set_label({"timer": "󰔛", "pomoWork": "󰒲", "pomoRest": "󱐋"}.get(kind, "󰀠"))
+        title = ring.get("label", "")
+        if kind == "alarm":
+            title = f"{ring.get('sub', '')}  ·  {title}"
+        self.ring_title.set_label(title)
+        since = max(0, int(time.time() - ring.get("since", 0) / 1000))
+        self.ring_sub.set_label(f"Sonne depuis {since // 60}:{since % 60:02d}")
+        self.ring_main.set_label({"pomoWork": "Pause", "pomoRest": "Reprendre"}.get(kind, "Arrêter"))
+        self.ring_second.set_label("Terminer" if pomo else "Relancer" if kind == "timer" else "Répéter")
+
     def read_state(self) -> bool:
         self.state = load_json(STATE_FILE, {})
         self.refresh()
@@ -717,6 +765,7 @@ class ClockApp(Gtk.Application):
         return 0.0
 
     def refresh(self) -> None:
+        self.refresh_ring()
         st = self.state
         kind = st.get("kind", "")
         paused = bool(st.get("paused"))
@@ -786,6 +835,11 @@ class ClockApp(Gtk.Application):
 
     def tick(self) -> bool:
         st = self.state
+        if st.get("ring"):
+            now_s = int(time.time())
+            if now_s != getattr(self, "_ring_s", 0):
+                self._ring_s = now_s
+                self.refresh_ring()
         kind = st.get("kind", "")
         v = self.value()
         pomo = st.get("pomodoro", {}) or {}
