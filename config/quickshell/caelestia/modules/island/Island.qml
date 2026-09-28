@@ -5145,7 +5145,7 @@ Item {
                         radiusX: 25
                         radiusY: 25
                         startAngle: -90
-                        sweepAngle: Math.max(0.5, Math.min(1, ring.shown)) * 360
+                        sweepAngle: Math.max(0.01, Math.min(1, ring.shown)) * 360
                     }
                 }
             }
