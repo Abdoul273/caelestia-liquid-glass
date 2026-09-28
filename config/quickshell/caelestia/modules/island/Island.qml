@@ -37,7 +37,8 @@ Item {
     readonly property bool charging: !UPower.onBattery
     // Batterie au repos : icône toujours (sur portable), pourcentage seulement faible ou en charge
     readonly property bool showBattery: Island.battery && UPower.displayDevice.isLaptopBattery
-    readonly property bool batteryPctShown: charging && battery < 0.995 || battery < 0.2
+    readonly property bool battCharging: UPower.displayDevice.state === UPowerDeviceState.Charging || UPower.displayDevice.state === UPowerDeviceState.PendingCharge
+    readonly property bool batteryPctShown: battCharging && battery < 0.995 || battery < 0.2
 
     // ── Couleurs du thème (le verre suit le thème clair/sombre) ──
     readonly property color fg: Colours.palette.m3onSurface
@@ -749,7 +750,7 @@ Item {
     readonly property bool notifHasActions: (notif?.actions?.length ?? 0) > 0
     readonly property real shelfExtra: shelf.length > 0 ? 78 : 0
     // Même largeur pour les pages qu'on fait défiler : l'île ne rétrécit pas sous la souris
-    readonly property real pageWidth: 470
+    readonly property real pageWidth: 560
 
     // Taille visible (depuis le haut de l'écran) pour chaque mode
     readonly property size target: {
@@ -793,7 +794,7 @@ Item {
         case "info":
             return Qt.size(pageWidth, 118 + shelfExtra);
         case "perf":
-            return Qt.size(pageWidth, 142);
+            return Qt.size(pageWidth, 150);
         case "record":
             return Qt.size(210, 40);
         case "media":
@@ -1666,7 +1667,7 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     visible: root.showBattery && root.batteryPctShown
                     text: `${Math.round(root.battery * 100)} %`
-                    color: root.charging ? root.green : root.battery < 0.2 ? root.red : root.fgDim
+                    color: root.battCharging ? root.green : root.battery < 0.2 && !root.charging ? root.red : root.fgDim
                     font.pointSize: 9
                     font.weight: Font.DemiBold
                     font.features: {
@@ -1674,14 +1675,12 @@ Item {
                     }
                 }
 
-                // Icône de batterie : se vide selon le niveau, éclair en charge, pulse sous 10 %
-                Item {
+                // Même batterie que dans l'île ouverte ; pulse sous 10 %
+                BatteryGlyph {
                     id: idleBatt
 
                     anchors.verticalCenter: parent.verticalCenter
                     visible: root.showBattery
-                    width: 25
-                    height: 12
 
                     SequentialAnimation on opacity {
                         running: root.showBattery && root.battery < 0.1 && !root.charging && root.mode === "idle"
@@ -1697,54 +1696,6 @@ Item {
                             duration: 800
                             easing.type: Easing.InOutQuad
                         }
-                    }
-
-                    Rectangle {
-                        id: battShell
-
-                        width: 22
-                        height: 12
-                        radius: 3.5
-                        color: "transparent"
-                        border.width: 1.2
-                        border.color: Qt.alpha(root.fg, 0.55)
-
-                        Rectangle {
-                            x: 2
-                            y: 2
-                            height: parent.height - 4
-                            width: Math.max(2, (parent.width - 4) * root.battery)
-                            radius: 1.8
-                            color: root.charging ? root.green : root.battery < 0.2 ? root.red : root.fg
-
-                            Behavior on width {
-                                NumberAnimation {
-                                    duration: 400
-                                    easing.type: Easing.OutCubic
-                                }
-                            }
-                        }
-
-                        MaterialIcon {
-                            anchors.centerIn: parent
-                            visible: root.charging
-                            text: "bolt"
-                            color: "white"
-                            style: Text.Outline
-                            styleColor: Qt.alpha("black", 0.35)
-                            fontStyle: Tokens.font.icon.size(8).build()
-                            fill: 1
-                        }
-                    }
-
-                    Rectangle {
-                        anchors.left: battShell.right
-                        anchors.leftMargin: 1
-                        anchors.verticalCenter: battShell.verticalCenter
-                        width: 2
-                        height: 4
-                        radius: 1
-                        color: Qt.alpha(root.fg, 0.55)
                     }
                 }
 
@@ -3564,7 +3515,7 @@ Item {
                     StyledText {
                         anchors.verticalCenter: parent.verticalCenter
                         text: `${Math.round(root.battery * 100)} %`
-                        color: root.charging ? root.green : root.fgDim
+                        color: root.battCharging ? root.green : root.battery < 0.2 && !root.charging ? root.red : root.fgDim
                         font.pointSize: 10
                         font.weight: Font.DemiBold
                     }
@@ -3582,10 +3533,10 @@ Item {
 
             Row {
                 anchors.left: parent.left
-                anchors.leftMargin: 16
+                anchors.leftMargin: 26
                 anchors.verticalCenter: parent.verticalCenter
-                anchors.verticalCenterOffset: -2
-                spacing: 1
+                anchors.verticalCenterOffset: -3
+                spacing: 8
 
                 PerfRing {
                     icon: "memory"
@@ -3618,11 +3569,11 @@ Item {
             // Réseau : débit descendant / montant + courbe
             Item {
                 anchors.right: parent.right
-                anchors.rightMargin: 16
+                anchors.rightMargin: 26
                 anchors.verticalCenter: parent.verticalCenter
-                anchors.verticalCenterOffset: -2
-                width: 122
-                height: 86
+                anchors.verticalCenterOffset: -3
+                width: 140
+                height: 90
 
                 Rectangle {
                     anchors.fill: parent
@@ -3956,7 +3907,7 @@ Item {
         readonly property color tint: shown > 0.85 ? root.red : shown > 0.6 ? (Colours.light ? "#c77700" : "#ff9f0a") : root.accent
 
         spacing: 2
-        width: 76
+        width: 80
 
         Behavior on shown {
             NumberAnimation {
@@ -4214,28 +4165,60 @@ Item {
         }
     }
 
+    // Batterie façon barre de menus macOS, identique au repos et dans l'île ouverte :
+    // niveau réel, vert + éclair en charge, prise quand c'est branché et plein, rouge sous 20 %
     component BatteryGlyph: Item {
+        id: glyph
+
         readonly property real pct: UPower.displayDevice.percentage ?? 0
+        readonly property bool plugged: !UPower.onBattery
+        readonly property bool charging: UPower.displayDevice.state === UPowerDeviceState.Charging || UPower.displayDevice.state === UPowerDeviceState.PendingCharge
         readonly property color fg: Colours.palette.m3onSurface
+        readonly property color fillColour: charging ? (Colours.light ? "#1f9d3a" : "#32d74b") : pct < 0.2 && !plugged ? "#ff453a" : fg
 
         width: 26
         height: 12
 
         Rectangle {
+            id: glyphShell
+
             width: 23
             height: 12
             radius: 3.5
             color: "transparent"
             border.width: 1.2
-            border.color: Qt.alpha(parent.fg, 0.5)
+            border.color: Qt.alpha(glyph.fg, 0.5)
 
             Rectangle {
                 x: 2
                 y: 2
                 height: parent.height - 4
-                width: Math.max(2, (parent.width - 4) * parent.parent.pct)
+                width: Math.max(2, (parent.width - 4) * glyph.pct)
                 radius: 2
-                color: !UPower.onBattery ? (Colours.light ? "#1f9d3a" : "#32d74b") : parent.parent.pct < 0.2 ? "#ff453a" : parent.parent.fg
+                color: glyph.fillColour
+
+                Behavior on width {
+                    NumberAnimation {
+                        duration: 400
+                        easing.type: Easing.OutCubic
+                    }
+                }
+                Behavior on color {
+                    ColorAnimation {
+                        duration: 300
+                    }
+                }
+            }
+
+            MaterialIcon {
+                anchors.centerIn: parent
+                visible: glyph.plugged
+                text: "bolt"
+                color: glyph.charging ? "white" : Qt.alpha(Colours.palette.m3surface, 0.85)
+                style: Text.Outline
+                styleColor: glyph.charging ? Qt.alpha("black", 0.3) : "transparent"
+                fontStyle: Tokens.font.icon.size(8).build()
+                fill: 1
             }
         }
 
@@ -4245,7 +4228,7 @@ Item {
             width: 2
             height: 4
             radius: 1
-            color: Qt.alpha(parent.fg, 0.5)
+            color: Qt.alpha(glyph.fg, 0.5)
         }
     }
 
