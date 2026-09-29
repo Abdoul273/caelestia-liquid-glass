@@ -1371,27 +1371,33 @@ Item {
         pulseTimer.restart();
     }
 
-    // Notifications identiques (même appli, titre et texte) : une seule carte avec « ×N »
-    function groupKey(n: var): string {
-        return `${n.appName}\u0001${n.summary}\u0001${n.body}`;
+    // Centre de notifications : une pile par appli ; un clic la déplie (expandedApp)
+    property string expandedApp
+
+    function groupMembers(n: var): var {
+        const k = n.appName ?? "";
+        return Notifs.notClosed.filter(m => (m.appName ?? "") === k);
     }
 
-    function groupHeads(): var {
+    function centerItems(): var {
         const seen = {};
         const out = [];
         for (const n of Notifs.notClosed) {
-            const k = groupKey(n);
+            const k = n.appName ?? "";
             if (seen[k])
                 continue;
             seen[k] = true;
-            out.push(n);
+            if (expandedApp === k)
+                out.push(...groupMembers(n));
+            else
+                out.push(n);
         }
         return out;
     }
 
-    function groupMembers(n: var): var {
-        const k = groupKey(n);
-        return Notifs.notClosed.filter(m => groupKey(m) === k);
+    // Texte de notification sans balises ni entités HTML (&quot; &amp; …)
+    function plain(t: string): string {
+        return (t ?? "").replace(/<[^>]*>/g, "").replace(/&quot;/g, "\"").replace(/&#0?39;|&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&");
     }
 
     function showNext(): void {
@@ -1507,6 +1513,7 @@ Item {
         target: Island
 
         function onNotifCenterChanged(): void {
+            root.expandedApp = "";
             root.centerVisited = root.hovered;
             if (Island.notifCenter)
                 centerClose.restart();
@@ -4406,7 +4413,7 @@ Item {
                 clip: true
                 spacing: 8
                 boundsBehavior: Flickable.StopAtBounds
-                model: root.groupHeads()
+                model: root.centerItems()
 
                 add: Transition {
                     NumberAnimation {
@@ -4439,12 +4446,57 @@ Item {
                     }
                 }
 
-                delegate: Rectangle {
-                    id: card
+                delegate: Item {
+                    id: slot
 
                     required property var modelData
-                    readonly property string icon: modelData.appIcon ? Quickshell.iconPath(modelData.appIcon, true) : ""
                     readonly property int repeats: root.groupMembers(modelData).length
+                    readonly property bool stacked: repeats > 1 && root.expandedApp !== (modelData.appName ?? "")
+
+                    width: centerList.width
+                    height: card.height + (stacked ? 12 : 0)
+
+                    Behavior on height {
+                        NumberAnimation {
+                            duration: 220
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+
+                    // Cartes cachées derrière la première : la pile
+                    Rectangle {
+                        visible: slot.stacked
+                        z: -2
+                        x: 20
+                        y: 12
+                        width: parent.width - 40
+                        height: card.height
+                        radius: 18
+                        color: Qt.alpha(root.fg, 0.035)
+                        border.width: 1
+                        border.color: Qt.alpha(root.fg, 0.05)
+                    }
+                    Rectangle {
+                        visible: slot.stacked
+                        z: -1
+                        x: 10
+                        y: 6
+                        width: parent.width - 20
+                        height: card.height
+                        radius: 18
+                        color: Qt.alpha(root.fg, 0.05)
+                        border.width: 1
+                        border.color: Qt.alpha(root.fg, 0.06)
+                    }
+
+                    Rectangle {
+                    id: card
+
+                    property var modelData: slot.modelData
+                    readonly property string icon: modelData.appIcon ? Quickshell.iconPath(modelData.appIcon, true) : ""
+                    readonly property int repeats: slot.repeats
+                    readonly property bool stacked: slot.stacked
+                    readonly property bool expandedHead: repeats > 1 && !stacked && root.groupMembers(modelData)[0] === modelData
 
                     width: centerList.width
                     height: cardBody.implicitHeight + 24
@@ -4512,7 +4564,7 @@ Item {
                                 anchors.right: cardTime.left
                                 anchors.rightMargin: 8
                                 elide: Text.ElideRight
-                                text: (card.modelData.appName || qsTr("Notification")) + (card.repeats > 1 ? `  ×${card.repeats}` : "")
+                                text: (card.modelData.appName || qsTr("Notification")) + (card.repeats > 1 ? `  ×${card.repeats}` : "") + (card.expandedHead ? qsTr("  ·  Réduire") : "")
                                 color: root.fgDim
                                 font.pointSize: 8
                                 font.weight: Font.Medium
@@ -4548,7 +4600,7 @@ Item {
                             maximumLineCount: 3
                             elide: Text.ElideRight
                             textFormat: Text.PlainText
-                            text: (card.modelData.body ?? "").replace(/<[^>]*>/g, "")
+                            text: root.plain(card.modelData.body)
                             color: Qt.alpha(root.fg, 0.78)
                             font.pointSize: 8.5
                         }
@@ -4562,12 +4614,26 @@ Item {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             const n = card.modelData;
-                            const group = root.groupMembers(n);
+                            // Pile repliée : un clic la déplie
+                            if (card.stacked) {
+                                root.expandedApp = n.appName ?? "";
+                                return;
+                            }
                             if (n.actions?.length > 0)
                                 n.actions[0].invoke();
-                            for (const m of group)
-                                m.close();
+                            n.close();
                         }
+                    }
+
+                    // Replier la pile dépliée (sur le nom de l'appli)
+                    MouseArea {
+                        x: 62
+                        y: 8
+                        width: 240
+                        height: 18
+                        enabled: card.expandedHead
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.expandedApp = ""
                     }
 
                     // Fermer (au survol)
@@ -4600,10 +4666,12 @@ Item {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                for (const m of root.groupMembers(card.modelData))
+                                // Pile repliée : ferme toute la pile ; sinon seulement cette carte
+                                for (const m of card.stacked ? root.groupMembers(card.modelData) : [card.modelData])
                                     m.close();
                             }
                         }
+                    }
                     }
                 }
 
@@ -5026,7 +5094,7 @@ Item {
                     elide: Text.ElideRight
                     maximumLineCount: 1
                     textFormat: Text.PlainText
-                    text: (root.notif?.body ?? "").replace(/<[^>]*>/g, "").replace(/\n/g, " ")
+                    text: root.plain(root.notif?.body).replace(/\n/g, " ")
                     color: Qt.alpha(root.fg, 0.78)
                     font.pointSize: 9
                 }
