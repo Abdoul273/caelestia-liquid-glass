@@ -2040,8 +2040,10 @@ Item {
         if (root.paged) {
             if (root.wheelAxis === "")
                 root.wheelAxis = Math.abs(e.angleDelta.x) > Math.abs(e.angleDelta.y) ? "x" : "y";
+            // Toujours relancer la remise à zéro : sinon un geste vertical bloquait l'axe
+            // sur « y » pour de bon et les glissements gauche/droite étaient ignorés
+            wheelReset.restart();
             if (root.wheelAxis === "x") {
-                wheelReset.restart();
                 if (root.wheelDone)
                     return; // reste du même geste (ou inertie) : ignoré
                 root.wheelX += e.angleDelta.x;
