@@ -19,8 +19,6 @@ StyledRect {
     readonly property bool hasImage: modelData.image.length > 0
     readonly property bool hasAppIcon: modelData.appIcon.length > 0
     readonly property int bodyTextFormat: /[<*_`#\[\]]/.test(modelData.body) ? Text.MarkdownText : Text.PlainText
-    // Actions sans texte (ex. action « default » de kitty) : pas de bouton vide
-    readonly property bool hasActionText: modelData.actions.some(a => a.text !== "")
     readonly property int nonAnimHeight: summary.implicitHeight + (root.expanded ? Tokens.spacing.extraSmall * 2 + appName.height + body.height + actions.height + actions.anchors.topMargin : bodyPreview.height) + inner.anchors.margins * 2
     property bool expanded: Config.notifs.openExpanded
 
@@ -508,7 +506,7 @@ StyledRect {
                 IconButton {
                     isRound: true
                     shapeMorph: true
-                    fillWidth: !root.hasActionText
+                    fillWidth: root.modelData.actions.length === 0
                     inactiveColour: root.critical ? Qt.alpha(Colours.palette.m3secondary, 0.75) : Qt.alpha(Colours.palette.m3onSurface, 0.1)
                     inactiveOnColour: root.modelData.urgency === NotificationUrgency.Critical ? Colours.palette.m3onSecondary : Colours.palette.m3onSurfaceVariant
                     icon: "close"
@@ -522,13 +520,12 @@ StyledRect {
                     TextButton {
                         required property var modelData
 
-                        visible: modelData.text !== ""
                         isRound: true
                         shapeMorph: true
                         fillWidth: true
                         inactiveColour: root.critical ? Qt.alpha(Colours.palette.m3secondary, 0.75) : Qt.alpha(Colours.palette.m3onSurface, 0.1)
                         inactiveOnColour: root.modelData.urgency === NotificationUrgency.Critical ? Colours.palette.m3onSecondary : Colours.palette.m3onSurfaceVariant
-                        text: modelData.text
+                        text: modelData.text || qsTr("Voir")
                         onClicked: modelData.invoke()
 
                         label.horizontalAlignment: Text.AlignHCenter
@@ -544,7 +541,7 @@ StyledRect {
                 IconButton {
                     isRound: true
                     shapeMorph: true
-                    fillWidth: !root.hasActionText
+                    fillWidth: root.modelData.actions.length === 0
                     inactiveColour: root.critical ? Qt.alpha(Colours.palette.m3secondary, 0.75) : Qt.alpha(Colours.palette.m3onSurface, 0.1)
                     inactiveOnColour: root.modelData.urgency === NotificationUrgency.Critical ? Colours.palette.m3onSecondary : Colours.palette.m3onSurfaceVariant
                     icon: copyTimer.running ? "inventory" : "content_copy"
