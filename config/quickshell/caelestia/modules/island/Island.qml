@@ -1265,7 +1265,9 @@ Item {
         return ({ call: callMuted ? "#ff453a" : root.green, transfer: "#0a84ff", record: "#ff453a", clockMini: "#ff9f0a", media: root.accent, caffeine: root.fg })[a] ?? root.fg;
     }
 
-    readonly property bool notifHasActions: (notif?.actions?.length ?? 0) > 0
+    // Seules les actions avec un texte donnent un bouton (kitty envoie une action « default » sans libellé)
+    readonly property var notifButtons: (notif?.actions ?? []).filter(a => (a.text ?? "") !== "").slice(0, 3)
+    readonly property bool notifHasActions: notifButtons.length > 0
     readonly property real shelfExtra: shelf.length > 0 ? 78 : 0
     // Même largeur pour les pages qu'on fait défiler : l'île ne rétrécit pas sous la souris
     readonly property real pageWidth: clockKind !== "" ? Math.min(640, Math.max(560, clockTitleMetrics.advanceWidth + 250)) : 560
@@ -4981,7 +4983,7 @@ Item {
                 }
 
                 Repeater {
-                    model: (root.notif?.actions ?? []).slice(0, 3)
+                    model: root.notifButtons
 
                     Rectangle {
                         id: act
