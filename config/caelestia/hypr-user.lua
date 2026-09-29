@@ -239,5 +239,13 @@ hl.animation({ leaf = "workspaces", enabled = true, speed = 5.5, bezier = "macSp
 
 
 -- ---------------------------------------------------------------------------
+--  Tiling : les nouvelles fenêtres se placent à côté des autres
+-- ---------------------------------------------------------------------------
+-- Ignore les demandes « maximiser » des applis (kitty, Chrome…) : sinon chaque
+-- nouvelle fenêtre s'ouvre maximisée et cache les autres au lieu de se placer à côté
+hl.window_rule({ match = { class = ".*" }, suppress_event = "maximize" })
+
+
+-- ---------------------------------------------------------------------------
 --  Tes propres réglages : ajoute-les ci-dessous
 -- ---------------------------------------------------------------------------
