@@ -95,4 +95,30 @@ Singleton {
 
     // Bus des notifications à afficher (émis par services/Notifs.qml)
     signal notify(var notif)
+
+    // Texte copié dans le presse-papiers (l'île confirme par une pastille « Copié »)
+    signal copied
+
+    property bool clipReady // ignore le déclenchement initial de wl-paste au démarrage
+    property real lastCopy
+
+    Timer {
+        running: true
+        interval: 2500
+        onTriggered: root.clipReady = true
+    }
+
+    Process {
+        running: true
+        command: ["wl-paste", "--type", "text", "--watch", "sh", "-c", "echo c"]
+        stdout: SplitParser {
+            onRead: {
+                const now = Date.now();
+                if (!root.clipReady || now - root.lastCopy < 800)
+                    return;
+                root.lastCopy = now;
+                root.copied();
+            }
+        }
+    }
 }

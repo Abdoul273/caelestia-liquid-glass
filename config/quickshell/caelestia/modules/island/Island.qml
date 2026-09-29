@@ -651,7 +651,10 @@ Item {
     property string blipSub: ""
     property bool blipOn: true
 
+    property int blipTick // change à chaque pastille : relance le rebond du badge
+
     function blip(icon: string, text: string, sub: string, on: bool): void {
+        blipTick++;
         blipIcon = icon;
         blipText = text;
         blipSub = sub;
@@ -1145,6 +1148,15 @@ Item {
     readonly property bool hasLyrics: Island.lyrics && lyrics.length > 0 && lyricIndex >= 0
 
     // Paroles réactivées dans les réglages : on les recharge pour le morceau en cours
+    Connections {
+        target: Island
+
+        function onCopied(): void {
+            if (root.ready)
+                root.blip("content_copy", qsTr("Copié"), qsTr("Presse-papiers"), true);
+        }
+    }
+
     Connections {
         target: Island
 
@@ -3615,6 +3627,31 @@ Item {
                 height: 28
                 radius: 14
                 color: root.blipOn ? Qt.alpha(root.accent, 0.22) : root.fgFaint
+
+                // Petit rebond à chaque pastille (copie, Wi-Fi, VPN, Verr. Maj)
+                readonly property int tick: root.blipTick
+
+                onTickChanged: if (Motion.enabled) blipBounce.restart()
+
+                SequentialAnimation {
+                    id: blipBounce
+
+                    NumberAnimation {
+                        target: blipBadge
+                        property: "scale"
+                        from: 0.55
+                        to: 1.2
+                        duration: 150
+                        easing.type: Easing.OutCubic
+                    }
+                    NumberAnimation {
+                        target: blipBadge
+                        property: "scale"
+                        to: 1
+                        duration: 240
+                        easing.type: Easing.OutBack
+                    }
+                }
 
                 MaterialIcon {
                     anchors.centerIn: parent
