@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+"""Repère les textes probablement encore en anglais dans le shell.
+
+  tools/verifier-francais            analyse config/quickshell du dépôt
+  tools/verifier-francais CHEMIN     analyse un autre dossier (ex. ~/.config/quickshell/caelestia)
+
+Heuristique : chaînes de qsTr(...) et de « text/title/message/placeholderText : "..." »
+contenant des mots anglais courants. Un texte affiché mais écrit sans ces mots peut passer
+entre les mailles ; un terme technique gardé en anglais peut être signalé à tort.
+"""
+import re, sys
+from pathlib import Path
+
+RACINE = Path(__file__).resolve().parent.parent
+cible = Path(sys.argv[1]).expanduser() if len(sys.argv) > 1 else RACINE / "config" / "quickshell"
+
+MOTS = set("""the a an your you is are was be to of and or for with from not no on off in at by
+enable disable enabled disabled settings setting loading error failed click select open close
+search show hide please waiting battery low charger plug failed unable cannot can't don't
+connect disconnect connected disconnected network wireless brightness
+clear all none default cancel confirm delete remove add save apply reset
+restart shutdown sleep hibernate lock logout power wallpaper update updates
+copy paste cut undo redo new file folder name copied""".split())
+# Termes techniques qu'on garde volontairement en anglais
+TOLERES = {"Enhanced Open", "Wi-Fi", "Bluetooth", "Hyprland", "Caelestia", "Spotlight", "Pomodoro"}
+
+motif = re.compile(
+    r'(?:qsTr\(\s*"((?:[^"\\]|\\.)*)"|\b(?:text|title|message|placeholderText|summary|label)\s*:\s*"((?:[^"\\]|\\.)*)")')
+
+trouve = 0
+for f in sorted(cible.rglob("*.qml")):
+    for n, ligne in enumerate(f.read_text(errors="ignore").splitlines(), 1):
+        if ligne.lstrip().startswith("//"):
+            continue
+        for m in motif.finditer(ligne):
+            s = m.group(1) or m.group(2) or ""
+            if s in TOLERES or not re.search(r"[A-Za-z]{3}", s) or "\\(" in s:
+                continue
+            if re.fullmatch(r"[a-z0-9_]+", s):  # nom d'icône Material
+                continue
+            mots = re.findall(r"[A-Za-z']+", s.lower())
+            if len(mots) >= 1 and sum(w in MOTS for w in mots) >= (2 if len(mots) > 2 else 1) \
+                    and not re.search(r"[éèêàâçùûôîï]", s):
+                print(f"{f.relative_to(cible)}:{n}: {s}")
+                trouve += 1
+print(f"\n{trouve} texte(s) suspect(s).")
+sys.exit(1 if trouve else 0)

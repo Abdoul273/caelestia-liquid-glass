@@ -190,6 +190,9 @@ Retire tout ce que l'installateur a posé et **restaure ta configuration d'avant
 **Est-ce que ça ralentit mon PC ?**
 Non. Les shaders ne calculent presque rien en dehors des bords du verre. Mesuré : même consommation que le Caelestia d'origine, environ 7 % d'un cœur au repos.
 
+**J'ai modifié le shell ou ajouté des textes : comment garder le dépôt à jour ?**
+`tools/synchroniser` montre les écarts entre `~/.config/quickshell/caelestia` et le dépôt (`--appliquer` les recopie). `tools/verifier-francais` liste les textes qui semblent encore en anglais.
+
 **Ma version de caelestia-shell est différente.**
 Liquid Glass remplace le shell de Caelestia par une version modifiée, prévue pour `caelestia-shell` 2.3. Avec une autre version, l'installateur te prévient avant de continuer. En cas de problème, `./uninstall` remet tout comme avant.
 

@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Compare le shell installé (~/.config/quickshell/caelestia) au dépôt et, avec --appliquer,
+# recopie dans le dépôt les fichiers modifiés à la main (pour que ./install les remette
+# sur une nouvelle machine).
+#   tools/synchroniser              montre les écarts, ne modifie rien
+#   tools/synchroniser --appliquer  copie le shell installé → dépôt (sans commit)
+# Les sons (assets/sounds) sont ignorés : la version perso est dans ~/dotfiles.
+set -euo pipefail
+
+REPO="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+VIVANT="$HOME/.config/quickshell/caelestia"
+DEPOT="$REPO/config/quickshell/caelestia"
+[[ -d $VIVANT ]] || { echo "Shell introuvable : $VIVANT" >&2; exit 1; }
+
+ecarts=$(diff -rq -x sounds -x __pycache__ "$VIVANT" "$DEPOT" || true)
+if [[ -z $ecarts ]]; then
+    echo "✓ Le dépôt est à jour avec le shell installé."
+    exit 0
+fi
+echo "$ecarts"
+
+if [[ ${1:-} != --appliquer ]]; then
+    echo
+    echo "Écarts trouvés. Relance avec --appliquer pour recopier le shell installé dans le dépôt."
+    exit 1
+fi
+
+rsync -a --exclude sounds --exclude __pycache__ "$VIVANT/" "$DEPOT/"
+echo
+echo "✓ Copié dans le dépôt. Vérifie avec git diff, puis commit."
