@@ -1372,7 +1372,7 @@ Item {
             if (n && !n.closed) {
                 notif = n;
                 toastData = null;
-                flash("notif", n.urgency === 2 ? 9000 : 5000);
+                flash("notif", n.urgency === 2 ? 7000 : 4000);
                 return;
             }
         }

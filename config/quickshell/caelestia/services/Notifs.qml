@@ -94,6 +94,12 @@ Singleton {
         onNotification: notif => {
             notif.tracked = true;
 
+            // Doublons (même appli, même titre, même texte) : on garde seulement la plus récente
+            for (const old of root.notClosed) {
+                if (old.appName === notif.appName && old.summary === notif.summary && old.body === notif.body)
+                    old.close();
+            }
+
             const isPopup = root.shouldShowPopup();
             if (isPopup && !root.dnd)
                 Sounds.playNotification();
