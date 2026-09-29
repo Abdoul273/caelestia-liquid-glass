@@ -1359,6 +1359,29 @@ Item {
         pulseTimer.restart();
     }
 
+    // Notifications identiques (même appli, titre et texte) : une seule carte avec « ×N »
+    function groupKey(n: var): string {
+        return `${n.appName}\u0001${n.summary}\u0001${n.body}`;
+    }
+
+    function groupHeads(): var {
+        const seen = {};
+        const out = [];
+        for (const n of Notifs.notClosed) {
+            const k = groupKey(n);
+            if (seen[k])
+                continue;
+            seen[k] = true;
+            out.push(n);
+        }
+        return out;
+    }
+
+    function groupMembers(n: var): var {
+        const k = groupKey(n);
+        return Notifs.notClosed.filter(m => groupKey(m) === k);
+    }
+
     function showNext(): void {
         while (queue.length > 0) {
             const n = queue[0];
@@ -4346,7 +4369,7 @@ Item {
                 clip: true
                 spacing: 8
                 boundsBehavior: Flickable.StopAtBounds
-                model: Notifs.notClosed
+                model: root.groupHeads()
 
                 add: Transition {
                     NumberAnimation {
@@ -4384,6 +4407,7 @@ Item {
 
                     required property var modelData
                     readonly property string icon: modelData.appIcon ? Quickshell.iconPath(modelData.appIcon, true) : ""
+                    readonly property int repeats: root.groupMembers(modelData).length
 
                     width: centerList.width
                     height: cardBody.implicitHeight + 24
@@ -4451,7 +4475,7 @@ Item {
                                 anchors.right: cardTime.left
                                 anchors.rightMargin: 8
                                 elide: Text.ElideRight
-                                text: card.modelData.appName || qsTr("Notification")
+                                text: (card.modelData.appName || qsTr("Notification")) + (card.repeats > 1 ? `  ×${card.repeats}` : "")
                                 color: root.fgDim
                                 font.pointSize: 8
                                 font.weight: Font.Medium
@@ -4501,9 +4525,11 @@ Item {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             const n = card.modelData;
+                            const group = root.groupMembers(n);
                             if (n.actions?.length > 0)
                                 n.actions[0].invoke();
-                            n.close();
+                            for (const m of group)
+                                m.close();
                         }
                     }
 
@@ -4536,7 +4562,10 @@ Item {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: card.modelData.close()
+                            onClicked: {
+                                for (const m of root.groupMembers(card.modelData))
+                                    m.close();
+                            }
                         }
                     }
                 }
