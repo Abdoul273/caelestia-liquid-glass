@@ -331,7 +331,16 @@ data.setdefault("session", {}).setdefault("commands", {})["logout"] = ["caelesti
 data.setdefault("dashboard", {})["showOnHover"] = False
 data.setdefault("osd", {})["enabled"] = False
 data.setdefault("utilities", {}).setdefault("toasts", {})["chargingChanged"] = False
-path.write_text(json.dumps(data, indent=4) + "\n")
+# Alertes de batterie en français (les textes par défaut de Caelestia sont en anglais)
+data.setdefault("general", {})["battery"] = {
+    "warnLevels": [
+        {"level": 20, "title": "Batterie faible", "message": "Pensez à brancher un chargeur", "icon": "battery_android_alert"},
+        {"level": 10, "title": "Vous avez vu le message précédent ?", "message": "Vous devriez brancher un chargeur <b>maintenant</b>", "icon": "battery_android_alert"},
+        {"level": 5, "title": "Niveau de batterie critique", "message": "BRANCHEZ LE CHARGEUR IMMÉDIATEMENT !!", "icon": "battery_android_alert", "critical": True},
+    ],
+    "criticalLevel": 3,
+}
+path.write_text(json.dumps(data, indent=4, ensure_ascii=False) + "\n")
 PY
     ok "Déconnexion propre vers l'écran de connexion, Dynamic Island à la place de l'OSD"
 }
