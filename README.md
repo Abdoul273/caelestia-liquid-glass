@@ -22,7 +22,8 @@ Verre translucide partout, Mission Control, Spotlight, animations fluides façon
 ### 🫧 Liquid glass partout
 - **Tout le shell en verre** : barre, cadre de l'écran, barre latérale, tableau de bord, lanceur, menus, OSD volume/luminosité, menu de session, écran de verrouillage, paramètres.
 - **Une seule pièce de verre** : les panneaux sortent du cadre et s'y fondent, avec un **liseré lumineux** qui suit toutes les courbes et un **reflet qui suit la souris**.
-- **Deux shaders écrits sur mesure** (biseau éclairé, légère aberration chromatique, reflet spéculaire), le flou venant de Hyprland.
+- **Verre optique activé par défaut** : réfraction du fond d’écran sur le cadre, biseau fin, reflets au survol et irisation discrète. Les panneaux gardent une teinte plus dense pour lire le contenu ; le flou de Hyprland reste à deux passes.
+- **Cadre fin de 5 px**, fenêtres aux coins arrondis de 22 px, liseré de 1 px et ombres neutres. Le terminal garde une opacité de fond de 80 % et son texte reste net.
 - **Notifications en verre**, avec une arrivée en douceur.
 - **Écran de connexion façon macOS** (SDDM) : ton fond d'écran avec une grande horloge, puis, à la première touche, un flou, ta photo et un champ de mot de passe en verre. Le fond d'écran et la photo se synchronisent tout seuls avec ton bureau.
 - **kitty, Nautilus et les outils en verre** : fond translucide et flouté, **texte toujours net**, et le même liseré de verre sur le bord des fenêtres.

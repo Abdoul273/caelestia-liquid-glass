@@ -89,10 +89,12 @@ void main() {
     vec2 L = normalize(vec2(-0.5, -0.87));
     float facing = dot(n, L);
     float key = pow(max(facing, 0.0), 1.6);
-    float back = pow(max(-facing, 0.0), 2.2) * 0.7;
+    float back = pow(max(-facing, 0.0), 2.2) * 0.38;
 
     // ─── Fond : teinte légère
-    vec3 col = tint;
+    // Neutraliser légèrement la dominante du fond d'écran.
+    float tintLuma = dot(tint, vec3(0.2126, 0.7152, 0.0722));
+    vec3 col = mix(vec3(tintLuma), tint, 0.72);
     float a = tintAlpha;
 
     // ─── Réfraction du fond d'écran dans le biseau (zone du cadre uniquement)
@@ -100,18 +102,21 @@ void main() {
     vec2 size = 1.0 / texel;
     float outside = min(min(px.x - zone.x, px.y - zone.y), min(size.x - zone.z - px.x, size.y - zone.w - px.y));
     float zoneMask = 1.0 - smoothstep(0.0, 36.0, outside);
+    // Le cadre reste clair ; le cœur des panneaux garde du contraste.
+    float hasFrame = step(0.5, dot(zone, vec4(1.0)));
+    a *= mix(1.0, 0.52, zoneMask * hasFrame);
     float lens = pow(bevel, 1.6) * refraction * zoneMask;
     if (lens > 0.002) {
         // La lentille « aspire » l'image depuis l'intérieur : effet de loupe sur les bords
-        vec2 disp = -n * lens * 26.0 * texel;
+        vec2 disp = -n * lens * 18.0 * texel;
         vec3 refr;
-        refr.r = texture(wallpaper, uv + disp * 1.12).r;
+        refr.r = texture(wallpaper, uv + disp * 1.035).r;
         refr.g = texture(wallpaper, uv + disp).g;
-        refr.b = texture(wallpaper, uv + disp * 0.86).b;
+        refr.b = texture(wallpaper, uv + disp * 0.965).b;
         // Le verre éclaircit et sature un peu ce qu'il réfracte
         float luma = dot(refr, vec3(0.299, 0.587, 0.114));
-        refr = mix(vec3(luma), refr, 1.25) * 1.06;
-        float w = clamp(lens * 1.3, 0.0, 0.92);
+        refr = mix(vec3(luma), refr, 1.08) * 1.02;
+        float w = clamp(lens * 0.85, 0.0, 0.65);
         col = mix(col, refr, w / max(a + w * (1.0 - a), 1e-3));
         a = a + w * (1.0 - a);
     }
@@ -126,19 +131,19 @@ void main() {
     a += fresnel * 0.06;
 
     // ─── Reflets spéculaires : large sur le biseau, net sur le liseré
-    vec3 rimTint = mix(vec3(1.0), vec3(0.5 + 0.5 * n.x, 0.55 + 0.2 * (n.x + n.y), 0.5 + 0.5 * n.y), 0.22);
-    float specWide = (key + back) * bevel * bevel * 0.35;
-    float lineLit = line * (0.22 + 0.9 * max(key, back * 1.3));
-    col = mix(col, rimTint, clamp((specWide + lineLit * 0.85) * light, 0.0, 1.0));
-    a += specWide * 0.2 + lineLit * 0.45;
+    vec3 rimTint = mix(vec3(1.0), vec3(0.5 + 0.5 * n.x, 0.55 + 0.2 * (n.x + n.y), 0.5 + 0.5 * n.y), 0.08);
+    float specWide = (key + back) * bevel * bevel * 0.22;
+    float lineLit = line * (0.10 + 0.65 * max(key, back * 1.3));
+    col = mix(col, rimTint, clamp((specWide + lineLit * 0.62) * light, 0.0, 1.0));
+    a += specWide * 0.14 + lineLit * 0.28;
 
     // ─── Reflet qui suit le pointeur (surtout sur les bords)
     vec2 md = (uv - mouse) / texel;
     float d2 = dot(md, md);
     float spot = exp(-d2 / (2.0 * 120.0 * 120.0)) * hover;
     float spotRim = exp(-d2 / (2.0 * 80.0 * 80.0)) * hover * (line + bevel * 0.8);
-    col = mix(col, vec3(1.0), clamp(spot * 0.06 + spotRim * 0.55, 0.0, 1.0));
-    a += spot * 0.03 + spotRim * 0.3;
+    col = mix(col, vec3(1.0), clamp(spot * 0.06 + spotRim * 0.160, 0.0, 1.0));
+    a += spot * 0.03 + spotRim * 0.16;
 
     a = clamp(a, 0.0, 1.0) * a0 * qt_Opacity;
     fragColor = vec4(col * a, a);

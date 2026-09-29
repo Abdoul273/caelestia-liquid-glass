@@ -68,7 +68,7 @@ StyledRect {
         radius: root.radius
         tintColour: root.critical ? Colours.palette.m3secondaryContainer : Colours.palette.m3surfaceContainer
         // Dans le panneau de verre fusionné, la carte devient une plaque plus légère posée dessus
-        tintOpacity: root.critical ? 0.55 : Glass.panels ? (Colours.light ? 0.2 : 0.14) : Colours.light ? 0.42 : 0.34
+        tintOpacity: root.critical ? 0.72 : Glass.panels ? (Colours.light ? 0.54 : 0.46) : Colours.light ? 0.42 : 0.34
         light: Glass.panels ? 0.8 : Colours.light ? 1.25 : 1
         hovered: glassMouse.containsMouse
         pointer: glassMouse.pointer
