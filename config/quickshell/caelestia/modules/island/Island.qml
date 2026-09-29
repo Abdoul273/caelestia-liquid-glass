@@ -42,12 +42,26 @@ Item {
     readonly property bool showBattery: Island.battery && UPower.displayDevice.isLaptopBattery
     readonly property bool battCharging: sysBattStatus ? sysBattStatus === "Charging" : UPower.displayDevice.state === UPowerDeviceState.Charging
 
+    // Lecture de la batterie toutes les 5 s (et tout de suite au branchement / débranchement).
+    // Arrondie au pour cent : sinon chaque micro-variation relançait l'animation de l'icône
+    // et faisait redessiner tout l'écran (flou compris) en continu → batterie vidée plus vite.
     Timer {
+        id: battTimer
+
         running: UPower.displayDevice.isLaptopBattery
         repeat: true
         triggeredOnStart: true
-        interval: 2000
+        interval: 5000
         onTriggered: {
+            if (!battProc.running)
+                battProc.running = true;
+        }
+    }
+    Connections {
+        target: UPower
+
+        function onOnBatteryChanged(): void {
+            battTimer.restart();
             if (!battProc.running)
                 battProc.running = true;
         }
@@ -63,7 +77,7 @@ Item {
                 const now = parseFloat(l[1]), full = parseFloat(l[2]);
                 if (l.length >= 3 && full > 0) {
                     root.sysBattStatus = l[0].trim();
-                    root.sysBattery = Math.max(0, Math.min(1, now / full));
+                    root.sysBattery = Math.round(Math.max(0, Math.min(1, now / full)) * 100) / 100;
                 }
             }
         }
