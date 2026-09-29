@@ -1,0 +1,13 @@
+# Session « dev » : éditeur à gauche, terminal + git à droite.
+# Ouvrir : Ctrl+Maj+Alt+O  ·  ou : kitty --session ~/.config/kitty/sessions/dev.kitty-session
+layout splits
+cd ~
+new_tab  code
+launch --title editeur
+launch --location=vsplit --bias=35 --title terminal
+launch --location=hsplit --title git sh -c "git status 2>/dev/null; exec \"$SHELL\""
+focus_matching_window title:editeur
+
+new_tab 󰍛 système
+layout stack
+launch --title btop btop

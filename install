@@ -27,6 +27,7 @@ PACKAGES=(
     kitty nautilus sushi              # terminal, fichiers, aperçu rapide (Espace)
     psmisc pipewire-audio swappy      # Dynamic Island : caméra utilisée, sonneries, annoter les captures
     fd jq                             # Spotlight (fichiers), quitter l'app active (Super + Maj + Q)
+    fzf btop                          # kitty : recherche floue dans l'historique, moniteur système
     hyprsunset                        # éclairage de nuit (sinon filtre d'écran de secours)
     ttf-jetbrains-mono-nerd noto-fonts-emoji
 )
@@ -288,8 +289,11 @@ install_files() {
     ok "Sonneries de l'île dans ${sounds_dir/#$HOME/~}"
 
     install_item config/kitty/kitty.conf "$HOME/.config/kitty/kitty.conf"
-    install_item config/kitty/liquid-glass.conf "$HOME/.config/kitty/liquid-glass.conf"
-    ok "kitty en verre"
+    for f in liquid-glass.conf theme.conf keys.conf tab_bar.py quick-access-terminal.conf \
+             sessions/dev.kitty-session; do
+        install_item "config/kitty/$f" "$HOME/.config/kitty/$f"
+    done
+    ok "kitty en verre (barre d'onglets, terminal déroulant Super + \`, sessions)"
 
     install_item config/starship/starship.toml "$HOME/.config/starship.toml"
     ok "Prompt Starship (capsules Catppuccin Mocha)"

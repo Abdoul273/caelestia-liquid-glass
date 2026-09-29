@@ -168,6 +168,10 @@ rebind("SUPER + Period", hl.dsp.exec_cmd(bin .. "caelestia-emoji-pro"))
 rebind("SUPER + P", hl.dsp.exec_cmd(bin .. "caelestia-display-pro"))
 rebind("SUPER + Space", hl.dsp.exec_cmd(bin .. "caelestia-spotlight"))
 rebind("SUPER + O", hl.dsp.exec_cmd(bin .. "caelestia-spotlight calc"))
+-- Terminal kitty déroulant (Super + `) : réglages dans ~/.config/kitty/quick-access-terminal.conf
+hl.layer_rule({ match = { namespace = "kitty-quick-access" }, blur = true, ignore_alpha = 0, animation = "slide top" })
+rebind("SUPER + grave", hl.dsp.exec_cmd("kitten quick-access-terminal"))
+
 rebind("SUPER + SHIFT + O", hl.dsp.exec_cmd(bin .. "caelestia-clock"))
 rebind("SUPER + H", hl.dsp.exec_cmd(bin .. "caelestia-shortcuts"))
 

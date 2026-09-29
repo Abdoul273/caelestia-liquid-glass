@@ -26,6 +26,7 @@ Verre translucide partout, Mission Control, Spotlight, animations fluides façon
 - **Notifications en verre**, avec une arrivée en douceur.
 - **Écran de connexion façon macOS** (SDDM) : ton fond d'écran avec une grande horloge, puis, à la première touche, un flou, ta photo et un champ de mot de passe en verre. Le fond d'écran et la photo se synchronisent tout seuls avec ton bureau.
 - **kitty, Nautilus et les outils en verre** : fond translucide et flouté, **texte toujours net**, et le même liseré de verre sur le bord des fenêtres.
+- **kitty survitaminé** : barre d'onglets en pilules (icône du programme, disposition, batterie, heure), terminal déroulant (``Super + ` ``), splits au clavier, recherche floue dans l'historique, sortie de la dernière commande, hints (liens, chemins, `fichier:ligne` → nvim), diffusion dans tous les panneaux, sessions, notification quand une longue commande finit, palette de commandes (`Ctrl + Maj + Alt + P`).
 - **Prompt Starship en capsules** : distribution + utilisateur, dossier, git, langages, durée, erreurs et heure dans des capsules Catppuccin Mocha reliées par une ligne.
 - **Les couleurs suivent ton fond d'écran** : tout est régénéré automatiquement à chaque changement de thème.
 
@@ -140,6 +141,8 @@ Appuie sur **`Super + H`** : une fenêtre en verre liste **tous** les raccourcis
 | `Super + Maj + F` | Concentration : active / arrête le dernier mode (Ne pas déranger, Travail, Sommeil) |
 | `Super + Retour arrière` | Éteindre / redémarrer / verrouiller |
 | `Super + Maj + R` | Recharger Hyprland et le shell |
+| ``Super + ` `` | Terminal kitty déroulant |
+| `Ctrl + Maj + Alt + P` (dans kitty) | Palette de toutes les actions kitty |
 
 ### Pavé tactile
 | Geste | Action |
@@ -163,7 +166,8 @@ Appuie sur **`Super + H`** : une fenêtre en verre liste **tous** les raccourcis
 | Changer d'applis par défaut, de raccourcis, d'espacement | `~/.config/caelestia/hypr-vars.lua` |
 | Ajouter tes propres réglages Hyprland | à la fin de `~/.config/caelestia/hypr-user.lua` |
 | Changer le style de tous les outils d'un coup | `~/.config/caelestia/tools-base.css` |
-| Rendre kitty plus ou moins transparent | `~/.config/kitty/liquid-glass.conf` → `background_opacity` |
+| Rendre kitty plus ou moins transparent | `~/.config/kitty/liquid-glass.conf` → `background_opacity` (ou `Ctrl + Maj + A` puis `M` / `L` à la volée) |
+| Raccourcis, couleurs, barre d'onglets de kitty | `~/.config/kitty/keys.conf`, `theme.conf`, `tab_bar.py` |
 | Changer ta photo (écran de connexion, tableau de bord) | remplace l'image `~/.face` |
 | Changer les sonneries (minuteur, alarme, Pomodoro, rappels, transferts) | remplace les `.ogg` du dossier `~/Documents/Sons Caelestia` (voir son `LISEZ-MOI.txt`) |
 
