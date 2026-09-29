@@ -119,7 +119,7 @@ QtObject {
         }
 
         function onBodyChanged(): void {
-            notif.body = notif.notification.body;
+            notif.body = notif.translateBody(notif.notification.body);
         }
 
         function onAppIconChanged(): void {
@@ -166,6 +166,18 @@ QtObject {
         }
 
         target: notif.notification
+    }
+
+    // Messages de Claude Code (envoyés en anglais par l'outil) : affichés en français
+    function translateBody(text: string): string {
+        let m;
+        if (text === "Claude is waiting for your input")
+            return qsTr("Claude attend votre réponse");
+        if ((m = text.match(/^Claude needs your permission to use (.+)$/)))
+            return qsTr("Claude demande l'autorisation d'utiliser %1").arg(m[1]);
+        if (text === "Claude Code needs your attention")
+            return qsTr("Claude Code a besoin de votre attention");
+        return text;
     }
 
     function updateTimeStr(): void {
@@ -222,7 +234,7 @@ QtObject {
 
         notificationId = notification.id;
         summary = notification.summary;
-        body = notification.body;
+        body = translateBody(notification.body);
         appIcon = notification.appIcon;
         appName = notification.appName;
         image = notification.image;

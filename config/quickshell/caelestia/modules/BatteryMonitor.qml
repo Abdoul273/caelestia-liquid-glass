@@ -24,7 +24,9 @@ Scope {
             for (const level of root.warnLevels) {
                 if (p <= level.level && root.lastPercentage > level.level) {
                     Sounds.playBatteryLow();
-                    Toaster.toast(level.title ?? qsTr("Avertissement batterie"), level.message ?? qsTr("Batterie faible"), level.icon ?? "battery_android_alert", level.critical ? Toast.Error : Toast.Warning);
+                    // Pourcentage et autonomie restante ajoutés au message d'alerte
+                    const rest = BatteryInfo.timeToEmpty > 0 ? qsTr(" · %1 restantes").arg(BatteryInfo.fmtDuration(BatteryInfo.timeToEmpty)) : "";
+                    Toaster.toast(`${level.title ?? qsTr("Avertissement batterie")} · ${Math.round(p)} %`, `${level.message ?? qsTr("Batterie faible")}${rest}`, level.icon ?? "battery_android_alert", level.critical ? Toast.Error : Toast.Warning);
                     break;
                 }
             }
