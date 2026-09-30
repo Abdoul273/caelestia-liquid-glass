@@ -305,7 +305,27 @@ Item {
     readonly property real blobHeight: bodyHeight * reveal
     readonly property real headroom: reveal > 0.01 ? (contextFor !== "" ? 190 : dragging ? 130 : 40) : 0
 
-    implicitWidth: row.width + pad * 2
+    // Largeur au repos (icônes non agrandies) : le Dock ne bouge plus quand les icônes grossissent,
+    // sinon le pointeur change de place par rapport aux icônes et elles clignotent
+    readonly property real restRowWidth: {
+        const n = items.length;
+        if (n === 0)
+            return iconSize + 6 + 1;
+        return iconSize + 6 + 1 + 6 + n * (iconSize + 6) - 6 + (items.some(i => i.separator) ? 7 : 0);
+    }
+
+    // Centre d'une icône au repos, dans le repère du Dock (-1 : bouton Applications)
+    function restCentre(index: int): real {
+        if (index < 0)
+            return pad + iconSize / 2;
+        let x = pad + iconSize + 6 + 1 + 6 + index * (iconSize + 6);
+        for (let i = 0; i <= index && i < items.length; i++)
+            if (items[i].separator)
+                x += 7;
+        return x + iconSize / 2;
+    }
+
+    implicitWidth: restRowWidth + pad * 2
     implicitHeight: Math.max(3, blobHeight + headroom)
 
     Behavior on reveal {
@@ -368,7 +388,8 @@ Item {
         Row {
             id: row
 
-            x: root.pad
+            // Les icônes agrandies débordent des deux côtés à parts égales
+            x: root.pad - (row.width - root.restRowWidth) / 2
             anchors.bottom: parent.bottom
             anchors.bottomMargin: root.pad + 6
             spacing: 6
@@ -570,13 +591,8 @@ Item {
         signal secondary
 
         // Grossissement façon macOS selon la distance au pointeur
-        // Centre de l'icône (sans compter son propre grossissement, pour éviter une boucle)
-        readonly property real centreX: {
-            di.dock.mouseX;
-            di.x;
-            parent?.x;
-            return mapToItem(di.dock, 0, 0).x + di.dock.iconSize / 2;
-        }
+        // Centre de l'icône au repos (indépendant du grossissement, pour éviter une boucle)
+        readonly property real centreX: di.dock.restCentre(di.index)
         readonly property real dist: Math.abs(di.dock.mouseX - centreX)
         readonly property real zoom: di.dock.hovered && !di.dock.dragging ? Math.max(0, 1 - dist / 150) : 0
         readonly property real size: di.dock.iconSize + (di.dock.maxIcon - di.dock.iconSize) * zoom * zoom
