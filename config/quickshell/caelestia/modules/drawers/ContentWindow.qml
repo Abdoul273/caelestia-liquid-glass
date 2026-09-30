@@ -381,13 +381,13 @@ StyledWindow {
         ShaderEffect {
             // Uniformes du style iOS (ignorés par le shader classique)
             readonly property vector4d zone: Qt.vector4d(bar.implicitWidth, root.borderThickness, root.borderThickness, root.borderThickness)
-            readonly property real refraction: wallpaperImg.status === Image.Ready ? 0.65 : 0
+            readonly property real refraction: wallpaperImg.status === Image.Ready ? 1 : 0
             readonly property var wallpaper: wallpaperTex
 
             readonly property vector2d texel: Qt.vector2d(1 / Math.max(1, width), 1 / Math.max(1, height))
             readonly property vector3d tint: Qt.vector3d(root.surfaceColour.r, root.surfaceColour.g, root.surfaceColour.b)
-            readonly property real tintAlpha: Glass.ios ? Glass.surfaceOpacity : Colours.light ? 0.56 : 0.46
-            readonly property real light: Glass.highlightStrength
+            readonly property real tintAlpha: Glass.ios ? (Colours.light ? 0.3 : 0.24) : Colours.light ? 0.56 : 0.46
+            readonly property real light: Colours.light ? 1.2 : 1
             readonly property real shadowStrength: 0.17 * Math.max(0, root.shadowOpacity) / 0.7
             readonly property point mouse: Qt.point(interactions.mouseX / Math.max(1, width), interactions.mouseY / Math.max(1, height))
             property real hover: interactions.containsMouse ? 1 : 0

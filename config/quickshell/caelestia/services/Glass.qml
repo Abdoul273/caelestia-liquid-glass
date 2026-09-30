@@ -13,11 +13,8 @@ Singleton {
     readonly property bool panels: true
     // Rendu du verre : "ios" = liquid glass façon iOS 26/27 (verre clair, réfraction, franges
     // de couleur, épaisseur) ; "classic" = le verre précédent (teinte + flou + liseré).
-    readonly property string style: "ios"
+    readonly property string style: "classic"
     readonly property bool ios: panels && style === "ios"
-    // Verre régulier sur les panneaux ; le shader allège uniquement le cadre.
-    readonly property real surfaceOpacity: Colours.light ? 0.64 : 0.52
-    readonly property real highlightStrength: Colours.light ? 0.95 : 0.85
     // Boutons et interrupteurs façon macOS (reflet, liseré, curseur lentille). false = style d'origine.
     readonly property bool controls: panels
     // Contrôles en verre bombé (shader glasscontrol) au lieu des simples dégradés. false = version d'avant.

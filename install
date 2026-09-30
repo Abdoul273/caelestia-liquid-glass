@@ -330,9 +330,6 @@ data.setdefault("session", {}).setdefault("commands", {})["logout"] = ["caelesti
 # Dynamic Island : elle remplace l'OSD et prend la place du dashboard au survol (Super+A reste)
 data.setdefault("dashboard", {})["showOnHover"] = False
 data.setdefault("osd", {})["enabled"] = False
-# Cadre discret : le verre se concentre sur les panneaux et les contrôles.
-data.setdefault("border", {}).setdefault("thickness", 5)
-data.setdefault("border", {}).setdefault("rounding", 26)
 data.setdefault("utilities", {}).setdefault("toasts", {})["chargingChanged"] = False
 # Alertes de batterie en français (les textes par défaut de Caelestia sont en anglais)
 data.setdefault("general", {})["battery"] = {

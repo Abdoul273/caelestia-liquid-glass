@@ -3,17 +3,6 @@
 --  Référence de toutes les variables : ~/.config/hypr/variables.lua
 -- ============================================================================
 return {
-    -- Verre fin : flou à deux passes, coins continus et ombre neutre.
-    blurSize = 10,
-    blurPasses = 2,
-    windowRounding = 22,
-    windowOpacity = 1.0,
-    windowBorderSize = 1,
-    shadowRange = 24,
-    shadowRenderPower = 3,
-    shadowColour = "rgba(00000040)",
-    activeWindowBorderColour = "rgba(ffffff38)",
-    inactiveWindowBorderColour = "rgba(ffffff12)",
     -- Applications par défaut
     terminal     = "kitty",
     fileExplorer = "nautilus",

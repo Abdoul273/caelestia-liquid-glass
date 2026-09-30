@@ -12,8 +12,8 @@ local bin = home .. "/.local/bin/"
 local started = os.time()
 
 -- Liseré de verre : lumineux en haut à gauche, reflet en bas à droite
-local glass_border = "rgba(ffffff45) rgba(ffffff08) rgba(ffffff08) rgba(ffffff20) 135deg "
-    .. "rgba(ffffff18) rgba(ffffff04) rgba(ffffff0c) 135deg"
+local glass_border = "rgba(ffffff70) rgba(ffffff0d) rgba(ffffff0d) rgba(ffffff30) 135deg "
+    .. "rgba(ffffff26) rgba(ffffff05) rgba(ffffff14) 135deg"
 
 -- Remplace un raccourci existant au lieu de l'ajouter en double
 local function rebind(keys, action, opts)
@@ -74,8 +74,8 @@ end)
 hl.config({
     decoration = {
         blur = {
-            vibrancy = 0.12,
-            noise    = 0.006,
+            vibrancy = 0.18,
+            noise    = 0.012,
         },
     },
 })
@@ -90,7 +90,7 @@ for _, class in ipairs(glass_apps) do
     hl.window_rule({
         match        = { class = class },
         opacity      = "1.0 override 1.0 override",
-        border_size  = 1,
+        border_size  = 2,
         border_color = glass_border,
     })
 end
@@ -101,7 +101,7 @@ hl.window_rule({
     match        = { class = "org.quickshell" },
     opaque       = false,
     opacity      = "1.0 override 1.0 override",
-    border_size  = 1,
+    border_size  = 2,
     border_color = glass_border,
 })
 
@@ -127,7 +127,7 @@ tool_window("caelestia-clipboard-pro|io.caelestia.ClipboardPro", "1120 700", { d
 tool_window("caelestia-display-pro|io.caelestia.DisplayPro", "540 720", { dim_around = true, stay_focused = true })
 tool_window("caelestia-emoji-pro|io.caelestia.EmojiPro", "760 620", { dim_around = true, stay_focused = true })
 tool_window("io.caelestia.Shortcuts", "1120 760", {
-    opacity = "1.0 override 1.0 override", border_size = 1, border_color = glass_border,
+    opacity = "1.0 override 1.0 override", border_size = 2, border_color = glass_border,
 })
 
 -- Recherche et calculatrice : en haut de l'écran, comme Spotlight
@@ -137,7 +137,7 @@ hl.window_rule({
     size         = "720 640",
     move         = "(monitor_w*0.5-360) (monitor_h*0.14)",
     opacity      = "1.0 override 1.0 override",
-    border_size  = 1,
+    border_size  = 2,
     border_color = glass_border,
     animation    = "popin 90%",
 })
@@ -148,7 +148,7 @@ hl.window_rule({
     size         = "440 700",
     move         = "(monitor_w*0.5-220) (monitor_h*0.1)",
     opacity      = "1.0 override 1.0 override",
-    border_size  = 1,
+    border_size  = 2,
     border_color = glass_border,
     animation    = "popin 90%",
 })
@@ -158,7 +158,7 @@ hl.window_rule({
     size         = "380 640",
     move         = "(monitor_w*0.5-190) (monitor_h*0.16)",
     opacity      = "1.0 override 1.0 override",
-    border_size  = 1,
+    border_size  = 2,
     border_color = glass_border,
     animation    = "popin 90%",
 })

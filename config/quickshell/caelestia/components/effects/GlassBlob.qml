@@ -7,7 +7,7 @@ import qs.services
 // l'éclairage des bords sont appliqués ici.
 ShaderEffect {
     property color tintColour: Colours.palette.m3surface
-    property real tintOpacity: Glass.ios ? Glass.surfaceOpacity : Colours.light ? 0.56 : 0.46
+    property real tintOpacity: Glass.ios ? (Colours.light ? 0.3 : 0.24) : Colours.light ? 0.56 : 0.46
     property real shadow: 0.17
     property Item pointerArea
     property bool pointerActive
@@ -15,7 +15,7 @@ ShaderEffect {
     readonly property vector2d texel: Qt.vector2d(1 / Math.max(1, width), 1 / Math.max(1, height))
     readonly property vector3d tint: Qt.vector3d(tintColour.r, tintColour.g, tintColour.b)
     readonly property real tintAlpha: tintOpacity
-    readonly property real light: Glass.highlightStrength
+    readonly property real light: Colours.light ? 1.2 : 1
     readonly property real shadowStrength: shadow
     property point mouse: Qt.point(0.5, 0)
     property real hover: pointerActive ? 1 : 0

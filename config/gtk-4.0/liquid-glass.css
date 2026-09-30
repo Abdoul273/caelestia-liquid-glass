@@ -5,7 +5,7 @@
 
 /* Verre de base : libadwaita 1.6+ tire ses fonds de variables CSS, on les rend translucides */
 window.nautilus-window {
-  --window-bg-color: alpha(@window_bg_color, 0.64);
+  --window-bg-color: alpha(#131317, 0.46);
   --view-bg-color: transparent;
   --headerbar-bg-color: transparent;
   --headerbar-backdrop-color: transparent;
@@ -15,9 +15,9 @@ window.nautilus-window {
   --sidebar-shade-color: alpha(white, 0.06);
   --secondary-sidebar-bg-color: transparent;
   --card-bg-color: alpha(white, 0.05);
-  background-color: alpha(@window_bg_color, 0.64);
+  background-color: alpha(@window_bg_color, 0.46);
   /* Voile lumineux en haut, comme une lentille éclairée d'en haut */
-  background-image: linear-gradient(to bottom, alpha(white, 0.035), alpha(white, 0.008) 35%, transparent 70%);
+  background-image: linear-gradient(to bottom, alpha(white, 0.06), alpha(white, 0.015) 35%, transparent 70%);
 }
 
 /* Barre latérale : la plus transparente, comme le Finder */

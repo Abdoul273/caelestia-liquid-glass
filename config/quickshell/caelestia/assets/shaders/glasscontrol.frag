@@ -60,24 +60,24 @@ void main() {
     // Caustique : la lumière traverse le verre et se concentre en bas, à l'intérieur du bord
     float caustic = smoothstep(0.05, 1.0, cy) * exp(-pow((t - 0.32) / 0.22, 2.0));
     // Ombre interne sous le bord supérieur : épaisseur du verre
-    float shade = (1.0 - smoothstep(-1.0, 0.1, cy)) * exp(-pow((t - 0.5) / 0.3, 2.0)) * 0.14;
+    float shade = smoothstep(0.1, -1.0, cy) * exp(-pow((t - 0.5) / 0.3, 2.0)) * 0.14;
 
     vec3 col = tint.rgb * (1.0 - shade);
     float a = tint.a * mix(1.0, 0.18, lens);
 
     // Bord : halo de Fresnel légèrement irisé
     vec3 fringe = vec3(0.55 + 0.45 * dir.x, 0.62 + 0.25 * dir.y, 0.55 - 0.45 * dir.x);
-    vec3 rimCol = mix(vec3(1.0), fringe, 0.08);
+    vec3 rimCol = mix(vec3(1.0), fringe, 0.35);
     float rim = fres * (0.55 + 0.6 * lens);
     col = mix(col, rimCol, clamp(rim * 0.65 * light, 0.0, 1.0));
-    a += rim * 0.22;
+    a += rim * 0.32;
 
     float spec = (spec1 + spec2) * (0.8 + 0.4 * lens);
     col = mix(col, vec3(1.0), clamp(spec * light, 0.0, 1.0));
-    a += spec * 0.36;
+    a += spec * 0.55;
 
     col = mix(col, vec3(1.0), clamp(caustic * (0.22 + 0.3 * lens), 0.0, 1.0));
-    a += caustic * (0.07 + 0.09 * lens);
+    a += caustic * (0.1 + 0.12 * lens);
 
     col = mix(col, vec3(1.0), hover * 0.06);
     a += hover * 0.04;

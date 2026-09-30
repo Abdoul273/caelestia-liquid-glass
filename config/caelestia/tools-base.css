@@ -7,7 +7,7 @@
  * ========================================================================== */
 
 window {
-  background: alpha(@t_surface, 0.68);
+  background: alpha(@t_surface, 0.52);
   color: @t_on_surface;
   font-family: "Rubik", "Inter", sans-serif;
   font-size: 13px;
@@ -16,7 +16,7 @@ window {
 /* Voile lumineux en haut, comme une plaque de verre éclairée */
 .app-root {
   background-color: transparent;
-  background-image: linear-gradient(to bottom, alpha(white, 0.035), alpha(white, 0.008) 28%, transparent 60%);
+  background-image: linear-gradient(to bottom, alpha(white, 0.06), alpha(white, 0.012) 28%, transparent 60%);
 }
 
 /* ---------- En-tête ---------- */

@@ -58,7 +58,7 @@ void main() {
     a += sheen * 0.5;
 
     // Biseau : zone de réfraction simulée le long du bord
-    float bevelW = 9.0;
+    float bevelW = 14.0;
     float bevel = exp(-e / bevelW * 2.2);
 
     // Lumière principale en haut à gauche, contre-reflet en bas à droite
@@ -69,15 +69,15 @@ void main() {
     float spec = (key + back) * bevel;
 
     // Liseré net d'un pixel (le « bord de verre »)
-    float line = (1.0 - smoothstep(0.2, 1.25, e));
-    float lineLit = line * (0.10 + 0.62 * max(key, back * 1.6));
+    float line = smoothstep(1.6, 0.2, e);
+    float lineLit = line * (0.22 + 0.78 * max(key, back * 1.6));
 
     // Aberration chromatique sur le biseau : léger décalage des teintes selon la normale
     vec3 chroma = vec3(0.5 + 0.5 * n.x, 0.5 + 0.25 * (n.x + n.y), 0.5 + 0.5 * n.y);
-    vec3 rimCol = mix(vec3(1.0), chroma, 0.08);
+    vec3 rimCol = mix(vec3(1.0), chroma, 0.35);
 
-    col = mix(col, rimCol, clamp(spec * 0.55 * light + lineLit * 0.62, 0.0, 1.0));
-    a += spec * 0.18 * light + lineLit * 0.28;
+    col = mix(col, rimCol, clamp(spec * 0.55 * light + lineLit * 0.85, 0.0, 1.0));
+    a += spec * 0.28 * light + lineLit * 0.45;
 
     // Épaisseur : léger assombrissement intérieur juste derrière le liseré
     float inner = smoothstep(2.0, 5.0, e) * (1.0 - smoothstep(5.0, 22.0, e));
@@ -88,8 +88,8 @@ void main() {
     float md = length(p - mp);
     float spot = exp(-(md * md) / (2.0 * 90.0 * 90.0)) * hover;
     float spotRim = exp(-(md * md) / (2.0 * 55.0 * 55.0)) * hover * (line + bevel * 0.6);
-    col = mix(col, vec3(1.0), clamp(spot * 0.10 + spotRim * 0.30, 0.0, 1.0));
-    a += spot * 0.06 + spotRim * 0.18;
+    col = mix(col, vec3(1.0), clamp(spot * 0.10 + spotRim * 0.55, 0.0, 1.0));
+    a += spot * 0.06 + spotRim * 0.35;
 
     a = clamp(a, 0.0, 1.0) * mask * qt_Opacity;
     fragColor = vec4(col * a, a);
