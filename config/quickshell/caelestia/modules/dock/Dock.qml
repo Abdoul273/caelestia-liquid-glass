@@ -152,7 +152,8 @@ Item {
         return map;
     }
 
-    readonly property var items: {
+    // Recalculé à chaque événement Hyprland (titre de fenêtre…) ; `items` ne change que si le contenu change
+    readonly property var itemsCalc: {
         const list = [];
         for (const id of pinned) {
             const e = DesktopEntries.byId(id) ?? DesktopEntries.heuristicLookup(id);
@@ -192,6 +193,21 @@ Item {
         }
         return list;
     }
+
+    // Liste stable : sans ça, le moindre changement de titre de fenêtre recréait toutes les icônes (clignotement)
+    property var items: []
+    property string itemsSig
+
+    function syncItems(): void {
+        const sig = JSON.stringify(itemsCalc.map(i => [i.id, i.pinned, i.separator ?? false, i.entry?.icon ?? "", i.entry?.name ?? ""]));
+        if (sig === itemsSig)
+            return;
+        itemsSig = sig;
+        items = itemsCalc;
+    }
+
+    onItemsCalcChanged: syncItems()
+    Component.onCompleted: syncItems()
 
     // ── Apps lancées dont le processus tourne encore (unités systemd app-*) ──
     property var bgUnits: ({}) // id de l'app → unité systemd
