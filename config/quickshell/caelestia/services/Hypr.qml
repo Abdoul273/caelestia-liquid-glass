@@ -38,6 +38,7 @@ Singleton {
     readonly property alias devices: extras.devices
 
     property bool hadKeyboard
+    property string lastKbLayout
     property string lastSpecialWorkspace: ""
 
     signal configReloaded
@@ -118,10 +119,16 @@ Singleton {
     }
 
     onKbLayoutFullChanged: {
-        if (hadKeyboard && GlobalConfig.utilities.toasts.kbLayoutChanged)
+        // Un appareil Bluetooth (casque AVRCP…) fait disparaître un instant le clavier
+        // principal : on ignore « Unknown » et on ne notifie que les vrais changements.
+        if (!keyboard || kbLayoutFull === "Unknown")
+            return;
+
+        if (hadKeyboard && lastKbLayout && kbLayoutFull !== lastKbLayout && GlobalConfig.utilities.toasts.kbLayoutChanged)
             Toaster.toast(qsTr("Disposition du clavier modifiée"), qsTr("Disposition changée pour : %1").arg(kbLayoutFull), "keyboard");
 
-        hadKeyboard = !!keyboard;
+        hadKeyboard = true;
+        lastKbLayout = kbLayoutFull;
     }
 
     Connections {
