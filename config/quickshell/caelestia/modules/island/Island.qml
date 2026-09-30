@@ -415,6 +415,26 @@ Item {
         return diff === 0 ? "" : diff === 1 ? qsTr("demain ") : Qt.locale("fr_FR").toString(d, "ddd ");
     }
 
+    // Beaucoup d'écouteurs (clones AirPods…) n'envoient leur batterie qu'à la connexion :
+    // BlueZ garde alors une valeur figée. On retient quand chaque valeur a été reçue et on
+    // affiche son âge au bout de 10 min pour ne pas la faire passer pour du direct.
+    property var btBattSeen: ({})
+
+    function btBatteryText(d: BluetoothDevice): string {
+        if (!d?.batteryAvailable)
+            return "";
+        const pct = Math.round(d.battery * 100);
+        const key = d.address || d.name;
+        const t = Date.now();
+        let seen = btBattSeen[key];
+        if (!seen || seen.p !== pct)
+            seen = btBattSeen[key] = { p: pct, t };
+        const min = Math.floor((t - seen.t) / 60000);
+        if (min < 10)
+            return ` · ${pct} %`;
+        return ` · ${pct} % ` + (min < 60 ? qsTr("il y a %1 min").arg(min) : qsTr("il y a %1 h").arg(Math.floor(min / 60)));
+    }
+
     readonly property list<var> infoChips: {
         void (now);
         void (Time.date);
@@ -423,7 +443,7 @@ Item {
         if (al)
             out.push({ icon: "alarm", text: `${al.label} · ${dayWord(al.at)}${Qt.formatTime(al.at, "HH:mm")}`, tint: "#ff9f0a" });
         for (const d of btConnected)
-            out.push({ icon: /audio|head|ear|phone/i.test(d?.icon ?? "") ? "headphones" : "bluetooth", text: (d.name || qsTr("Bluetooth")) + (d.batteryAvailable ? ` · ${Math.round(d.battery * 100)} %` : ""), tint: root.green });
+            out.push({ icon: /audio|head|ear|phone/i.test(d?.icon ?? "") ? "headphones" : "bluetooth", text: (d.name || qsTr("Bluetooth")) + btBatteryText(d), tint: root.green });
         if (IdleInhibitor.enabled)
             out.push({ icon: "coffee", text: IdleInhibitor.until > 0 ? qsTr("Écran allumé · %1").arg(IdleInhibitor.remainingText()) : qsTr("Écran toujours allumé"), tint: root.accent });
         if (NightLight.enabled)
