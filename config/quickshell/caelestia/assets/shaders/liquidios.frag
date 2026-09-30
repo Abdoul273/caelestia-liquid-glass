@@ -29,6 +29,7 @@ layout(std140, binding = 0) uniform buf {
 
 layout(binding = 1) uniform sampler2D source;
 layout(binding = 2) uniform sampler2D wallpaper;
+layout(binding = 3) uniform sampler2D windows; // blanc là où une fenêtre est sous le verre
 
 const float PI2 = 6.28318530718;
 
@@ -95,11 +96,13 @@ void main() {
     vec3 col = tint;
     float a = tintAlpha;
 
-    // ─── Réfraction du fond d'écran dans le biseau (zone du cadre uniquement)
+    // ─── Réfraction du fond d'écran dans le biseau : cadre, barre, et tout panneau posé
+    //     sur le bureau (aucune fenêtre dessous, sinon on garde le flou de Hyprland)
     vec2 px = uv / texel;
     vec2 size = 1.0 / texel;
     float outside = min(min(px.x - zone.x, px.y - zone.y), min(size.x - zone.z - px.x, size.y - zone.w - px.y));
     float zoneMask = 1.0 - smoothstep(0.0, 36.0, outside);
+    zoneMask = max(zoneMask, 1.0 - texture(windows, uv).r);
     float lens = pow(bevel, 1.6) * refraction * zoneMask;
     if (lens > 0.002) {
         // La lentille « aspire » l'image depuis l'intérieur : effet de loupe sur les bords

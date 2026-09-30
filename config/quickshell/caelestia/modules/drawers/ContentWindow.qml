@@ -374,6 +374,48 @@ StyledWindow {
         }
     }
 
+    // Emplacement des fenêtres de cet écran (bureau actif + bureau spécial ouvert) :
+    // le verre « iOS » ne réfracte le fond d'écran que là où aucune fenêtre n'est dessous.
+    Item {
+        id: windowMask
+
+        anchors.fill: parent
+        visible: false
+
+        Repeater {
+            model: {
+                if (!Glass.ios || !root.monitor)
+                    return [];
+                const wins = [...(root.monitor.activeWorkspace?.toplevels.values ?? [])];
+                const special = root.monitor.lastIpcObject.specialWorkspace?.name;
+                if (special)
+                    wins.push(...(Hypr.workspaces.values.find(ws => ws.name === special)?.toplevels.values ?? []));
+                return wins;
+            }
+
+            Rectangle {
+                required property var modelData
+                readonly property var ipc: modelData.lastIpcObject
+
+                x: (ipc.at?.[0] ?? 0) - root.monitor.x
+                y: (ipc.at?.[1] ?? 0) - root.monitor.y
+                width: ipc.size?.[0] ?? 0
+                height: ipc.size?.[1] ?? 0
+                color: "white"
+            }
+        }
+    }
+
+    ShaderEffectSource {
+        id: windowMaskTex
+
+        anchors.fill: parent
+        sourceItem: windowMask
+        hideSource: true
+        visible: false
+        textureSize: Qt.size(Math.round(width / 4), Math.round(height / 4))
+    }
+
     // Cadre, barre, sidebar et utilitaires en liquid glass
     Component {
         id: glassBlobEffect
@@ -383,6 +425,7 @@ StyledWindow {
             readonly property vector4d zone: Qt.vector4d(bar.implicitWidth, root.borderThickness, root.borderThickness, root.borderThickness)
             readonly property real refraction: wallpaperImg.status === Image.Ready ? 1 : 0
             readonly property var wallpaper: wallpaperTex
+            readonly property var windows: windowMaskTex
 
             readonly property vector2d texel: Qt.vector2d(1 / Math.max(1, width), 1 / Math.max(1, height))
             readonly property vector3d tint: Qt.vector3d(root.surfaceColour.r, root.surfaceColour.g, root.surfaceColour.b)

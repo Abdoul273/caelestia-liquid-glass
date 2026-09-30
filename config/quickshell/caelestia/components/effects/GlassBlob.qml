@@ -24,6 +24,7 @@ ShaderEffect {
     readonly property vector4d zone: Qt.vector4d(0, 0, 0, 0)
     readonly property real refraction: 0
     readonly property var wallpaper: dummyTex
+    readonly property var windows: dummyTex
 
     fragmentShader: Qt.resolvedUrl(Quickshell.shellPath(Glass.ios ? "assets/shaders/liquidios.frag.qsb" : "assets/shaders/glassblob.frag.qsb"))
 
