@@ -140,11 +140,15 @@ void main() {
             avgBig = ring(uv, 44.0, 12, gBig);
         float dome = clamp((1.0 - avgBig) * 2.0, 0.0, 1.0); // 1 au bord, 0 à ~44 px
         vec2 nBig = length(gBig) > 1e-4 ? normalize(gBig) : vec2(0.0);
-        // Le bord « aspire » l'image depuis l'intérieur : loupe douce, centre intact
-        vec2 duv = uv - nBig * pow(dome, 2.0) * 20.0 * texel;
+        // Le bord « aspire » l'image depuis l'intérieur, comme une goutte d'eau : forte
+        // loupe tout près du bord, centre intact, couleurs légèrement séparées
+        float bend = pow(dome, 1.7);
+        vec2 duv = uv - nBig * bend * 34.0 * texel;
+        vec2 cshift = -nBig * bend * 3.0 * texel;
         // Très léger adoucissement (le fond reste net, juste moins granuleux)
         vec2 o = 1.2 * texel;
-        vec3 bg = texture(wallpaper, duv).rgb * 0.4
+        vec3 core = vec3(texture(wallpaper, duv + cshift).r, texture(wallpaper, duv).g, texture(wallpaper, duv - cshift).b);
+        vec3 bg = core * 0.4
                 + texture(wallpaper, duv + vec2(o.x, o.y)).rgb * 0.15
                 + texture(wallpaper, duv + vec2(-o.x, o.y)).rgb * 0.15
                 + texture(wallpaper, duv + vec2(o.x, -o.y)).rgb * 0.15
@@ -155,6 +159,8 @@ void main() {
         // Voile : plus dense si le fond contraste avec le panneau (lune, page blanche…)
         float veil = mix(clearVeil, max(thickAlpha + 0.08, clearVeil), thick);
         vec3 glassCol = mix(bg, tint, veil);
+        // Verre clair d'iOS 27 : léger voile laiteux, plus lumineux vers le bord bombé
+        glassCol = mix(glassCol, vec3(1.0), (0.045 + bend * 0.07) * light);
         col = mix(col, glassCol, body);
         a = mix(a, 1.0, body);
     }
@@ -185,8 +191,8 @@ void main() {
 
     // ─── Reflets spéculaires : large sur le biseau, net sur le liseré
     vec3 rimTint = mix(vec3(1.0), vec3(0.5 + 0.5 * n.x, 0.55 + 0.2 * (n.x + n.y), 0.5 + 0.5 * n.y), 0.22);
-    float specWide = (key + back) * bevel * bevel * 0.35;
-    float lineLit = line * (0.22 + 0.9 * max(key, back * 1.3));
+    float specWide = (key + back) * bevel * bevel * 0.45;
+    float lineLit = line * (0.32 + 1.0 * max(key, back * 1.3));
     col = mix(col, rimTint, clamp((specWide + lineLit * 0.85) * light, 0.0, 1.0));
     a += specWide * 0.2 + lineLit * 0.45;
 

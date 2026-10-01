@@ -29,6 +29,17 @@ Singleton {
     // sombre…) : le panneau garde sa couleur, comme sur macOS. Plus bas = plus transparent.
     readonly property real thickAlpha: Colours.light ? 0.44 : 0.45
 
+    // Chaque carte en verre (couleur venant de tile()) devient sa propre pièce de verre
+    // bombée (biseau, reflets, liseré), comme les widgets d'iOS 27. false = simple voile.
+    readonly property bool tileLens: lensControls
+
+    function isTile(c: color): bool {
+        if (!panels || c.a < 0.025 || c.a > 0.17)
+            return false;
+        const o = Colours.palette.m3onSurface;
+        return Math.abs(c.r - o.r) + Math.abs(c.g - o.g) + Math.abs(c.b - o.b) < 0.03;
+    }
+
     // Fond des cartes à l'intérieur d'un panneau en verre : voile translucide au lieu d'un aplat
     function tile(original: color): color {
         if (!panels)

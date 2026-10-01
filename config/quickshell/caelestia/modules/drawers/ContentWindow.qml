@@ -624,7 +624,7 @@ StyledWindow {
             readonly property real thickAlpha: Glass.thickAlpha
             readonly property real unknownBg: 0
             readonly property real clearGlass: Glass.clear ? 1 : 0
-            readonly property real clearVeil: Colours.light ? 0.46 : 0.4
+            readonly property real clearVeil: Colours.light ? 0.26 : 0.22
             readonly property var wallpaper: wallpaperTex
             readonly property var windows: windowMaskTex
 
