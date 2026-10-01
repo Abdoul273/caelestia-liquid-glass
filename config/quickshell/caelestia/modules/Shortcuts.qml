@@ -82,8 +82,29 @@ Scope {
                 screenState.controlCenter = false;
                 screenState.launcher = false;
                 screenState.dashboard = false;
+                screenState.calculator = false;
             }
             screenState.spotlight = open;
+        }
+    }
+
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
+        name: "calculator"
+        description: qsTr("Ouvrir/Fermer la calculatrice")
+        onPressed: {
+            if (root.hasFullscreen)
+                return;
+            const screenState = ShellState.forActive();
+            const open = !screenState.calculator;
+            if (open) {
+                screenState.controlCenter = false;
+                screenState.launcher = false;
+                screenState.dashboard = false;
+                screenState.spotlight = false;
+            }
+            screenState.calculator = open;
         }
     }
 

@@ -42,6 +42,7 @@ Item {
     readonly property alias controlCenter: controlCenter
     readonly property alias dock: dock
     readonly property alias spotlight: spotlight
+    readonly property alias calculator: calculator
 
     anchors.fill: parent
     anchors.margins: borderThickness
@@ -163,6 +164,18 @@ Item {
 
         anchors.horizontalCenter: parent.horizontalCenter
         y: Math.round(parent.height * 0.2)
+    }
+
+    // Calculatrice : même goutte de verre, sous l'île
+    SpotlightModule.Calculator {
+        id: calculator
+
+        screen: root.screen
+        screenState: root.screenState
+        island: island
+
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: Math.round(parent.height * 0.11)
     }
 
     // Dock : sort du bas de l'écran au survol

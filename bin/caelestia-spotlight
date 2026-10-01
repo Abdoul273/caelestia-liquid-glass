@@ -1972,10 +1972,60 @@ def serve() -> int:
                           "icon": r.icon_url, "action": r.url})
         send(seq, "web", items, error=error)
 
+    def emit(obj: dict) -> None:
+        with lock:
+            sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
+            sys.stdout.flush()
+
+    def calc_history() -> list:
+        try:
+            return [list(x) for x in json.loads(HISTORY_FILE.read_text())][:12]
+        except (OSError, ValueError, TypeError):
+            return []
+
+    hist = calc_history()
+    if hist:
+        last = calculate(hist[0][1].split(" ")[0])
+        if last is not None:
+            CONSTANTS["ans"] = last
+
     for line in sys.stdin:
         try:
             msg = json.loads(line)
         except ValueError:
+            continue
+        # ── Calculatrice du shell
+        if "calc" in msg:
+            text = str(msg["calc"])
+            result = None
+            if text.strip():
+                result = convert(text)
+                if result is None:
+                    v = calculate(text)
+                    result = format_number(v) if v is not None else None
+            emit({"stage": "calc", "seq": msg.get("seq", 0), "result": result})
+            continue
+        if "commit" in msg:
+            expr, result = str(msg["commit"]), str(msg.get("result", ""))
+            hist = [[expr, result]] + [h for h in calc_history() if h[0] != expr]
+            try:
+                STATE_DIR.mkdir(parents=True, exist_ok=True)
+                HISTORY_FILE.write_text(json.dumps(hist[:12], ensure_ascii=False))
+            except OSError:
+                pass
+            v = calculate(result.split(" ")[0])
+            if v is not None:
+                CONSTANTS["ans"] = v
+            copy_text(result.replace(" ", "").replace("\u202f", ""))
+            emit({"stage": "history", "items": hist[:12]})
+            continue
+        if "history" in msg:
+            if msg["history"] == "clear":
+                try:
+                    HISTORY_FILE.write_text("[]")
+                except OSError:
+                    pass
+            emit({"stage": "history", "items": calc_history()})
             continue
         if "run" in msg:
             try:
