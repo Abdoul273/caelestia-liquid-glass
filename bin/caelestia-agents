@@ -1,0 +1,523 @@
+#!/usr/bin/env python3
+"""Agents IA dans la Dynamic Island de Caelestia.
+
+  caelestia-agents watch              état des agents (Claude Code, Codex) en lignes JSON, à chaque changement
+  caelestia-agents hook               hook PermissionRequest de Claude Code : la demande passe par l'île
+  caelestia-agents answer ID DÉCISION réponse de l'île (allow | deny | terminal)
+
+Les demandes en attente vivent dans ~/.local/state/caelestia/agent-perms/<id>.json ;
+l'île y répond par <id>.answer, que le hook attend.
+"""
+
+import json
+import os
+import signal
+import subprocess
+import sys
+import time
+import uuid
+from pathlib import Path
+
+HOME = Path.home()
+PERMS = HOME / ".local/state/caelestia/agent-perms"
+WAIT = 110  # secondes d'attente d'une réponse de l'île (timeout du hook : 120)
+TAIL = 96 * 1024
+
+
+def clip(text, n):
+    text = " ".join(str(text or "").split())
+    return text if len(text) <= n else text[: n - 1] + "…"
+
+
+def tail_lines(path, size=TAIL):
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            end = f.tell()
+            f.seek(max(0, end - size))
+            data = f.read()
+    except OSError:
+        return []
+    lines = data.split(b"\n")
+    if end > size:
+        lines = lines[1:]
+    out = []
+    for raw in lines:
+        try:
+            out.append(json.loads(raw))
+        except ValueError:
+            pass
+    return out
+
+
+def first_line(path):
+    try:
+        with open(path, "rb") as f:
+            return json.loads(f.readline())
+    except (OSError, ValueError):
+        return None
+
+
+def tool_label(name, inp):
+    inp = inp if isinstance(inp, dict) else {}
+    labels = {"Bash": "Commande", "Edit": "Modifie", "Write": "Écrit", "MultiEdit": "Modifie", "Read": "Lit",
+              "Grep": "Cherche", "Glob": "Cherche", "WebFetch": "Web", "WebSearch": "Recherche web",
+              "Agent": "Sous-agent", "Task": "Sous-agent", "NotebookEdit": "Notebook"}
+    detail = None
+    for k in ("description", "file_path", "command", "pattern", "path", "url", "query", "prompt"):
+        if isinstance(inp.get(k), str):
+            detail = inp[k]
+            if k in ("file_path", "path"):
+                detail = os.path.basename(detail.rstrip("/")) or detail
+            break
+    label = labels.get(name, name.replace("mcp__", "").split("__")[-1])
+    return f"{label} · {clip(detail, 70)}" if detail else label
+
+
+# ───────────────────────── processus ─────────────────────────
+
+def read_proc(pid):
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+    except OSError:
+        return None
+    rp = stat.rfind(")")
+    comm = stat[stat.find("(") + 1 : rp]
+    rest = stat[rp + 2 :].split()
+    return {"pid": pid, "ppid": int(rest[1]), "comm": comm, "start": int(rest[19])}
+
+
+def agent_of(p):
+    comm = p["comm"].lower()
+    try:
+        exe = os.readlink(f"/proc/{p['pid']}/exe")
+    except OSError:
+        exe = ""
+    try:
+        argv0 = Path(f"/proc/{p['pid']}/cmdline").read_bytes().split(b"\0")[0].decode(errors="replace")
+    except OSError:
+        argv0 = ""
+    names = {comm, os.path.basename(exe).lower(), os.path.basename(argv0).lower()}
+    if "claude" in names or "/claude/versions/" in exe:
+        return "claude"
+    if "codex" in names:
+        return "codex"
+    return None
+
+
+BOOT = 0.0
+try:
+    for line in open("/proc/stat"):
+        if line.startswith("btime"):
+            BOOT = float(line.split()[1])
+except OSError:
+    pass
+HZ = os.sysconf("SC_CLK_TCK")
+
+
+def scan():
+    procs = {}
+    for d in os.listdir("/proc"):
+        if d.isdigit():
+            p = read_proc(int(d))
+            if p:
+                procs[p["pid"]] = p
+    agents = {pid: k for pid, p in procs.items() if (k := agent_of(p))}
+    roots = []
+    for pid, kind in agents.items():
+        cur, root = procs[pid]["ppid"], True
+        for _ in range(32):
+            if cur <= 1:
+                break
+            if agents.get(cur) == kind:
+                root = False
+                break
+            cur = procs.get(cur, {}).get("ppid", 0)
+        if root:
+            roots.append((pid, kind))
+    return procs, roots
+
+
+_win_cache = (0.0, {})
+
+
+def windows():
+    global _win_cache
+    if time.time() - _win_cache[0] < 4:
+        return _win_cache[1]
+    out = {}
+    try:
+        res = subprocess.run(["hyprctl", "clients", "-j"], capture_output=True, timeout=2)
+        for c in json.loads(res.stdout or b"[]"):
+            out[c.get("pid")] = (c.get("address") or "").removeprefix("0x")
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        pass
+    _win_cache = (time.time(), out)
+    return out
+
+
+def window_of(pid, procs):
+    wins, cur = windows(), pid
+    for _ in range(24):
+        if cur in wins:
+            return wins[cur]
+        p = procs.get(cur)
+        if not p or p["ppid"] <= 1:
+            break
+        cur = p["ppid"]
+    return ""
+
+
+# ───────────────────────── sessions ─────────────────────────
+
+def claude_transcript(sid):
+    for d in (HOME / ".claude/projects").iterdir():
+        f = d / f"{sid}.jsonl"
+        if f.is_file():
+            return f
+    return None
+
+
+_transcripts = {}
+
+
+def claude_summary(sid):
+    path = _transcripts.get(sid)
+    if not path or not path.is_file():
+        path = claude_transcript(sid)
+        _transcripts[sid] = path
+    s = {"title": "", "tool": "", "reply": "", "prompt": "", "files": [], "model": ""}
+    if not path:
+        return s
+    custom = None
+    for line in tail_lines(path):
+        kind = line.get("type")
+        if kind in ("ai-title", "custom-title", "summary"):
+            t = line.get("customTitle") or line.get("aiTitle") or line.get("summary")
+            if t:
+                if kind == "custom-title":
+                    custom = clip(t, 60)
+                else:
+                    s["title"] = clip(t, 60)
+        elif kind in ("user", "assistant") and not line.get("isSidechain"):
+            msg = line.get("message") or {}
+            content = msg.get("content")
+            if kind == "user":
+                if line.get("isMeta"):
+                    continue
+                if isinstance(content, str) and not content.startswith("<"):
+                    s["prompt"] = clip(content, 120)
+                elif isinstance(content, list):
+                    if any(b.get("type") == "tool_result" for b in content if isinstance(b, dict)):
+                        s["tool"] = ""
+                    else:
+                        texts = [b.get("text") for b in content if isinstance(b, dict) and isinstance(b.get("text"), str)]
+                        texts = [t for t in texts if not t.startswith("<")]
+                        if texts:
+                            s["prompt"] = clip(texts[0], 120)
+                continue
+            if isinstance(msg.get("model"), str) and not msg["model"].startswith("<"):
+                s["model"] = msg["model"]
+            for b in content if isinstance(content, list) else []:
+                if not isinstance(b, dict):
+                    continue
+                if b.get("type") == "text" and (b.get("text") or "").strip():
+                    s["reply"] = clip(b["text"], 160)
+                    s["tool"] = ""
+                elif b.get("type") == "tool_use":
+                    inp = b.get("input") or {}
+                    s["tool"] = tool_label(b.get("name") or "Outil", inp)
+                    f = inp.get("file_path") or inp.get("notebook_path")
+                    if b.get("name") in ("Edit", "Write", "MultiEdit", "NotebookEdit") and f and f not in s["files"]:
+                        s["files"].append(f)
+    if custom:
+        s["title"] = custom
+    return s
+
+
+def codex_titles():
+    titles = {}
+    try:
+        for line in open(HOME / ".codex/session_index.jsonl"):
+            try:
+                v = json.loads(line)
+                titles[v["id"]] = v["thread_name"]
+            except (ValueError, KeyError):
+                pass
+    except OSError:
+        pass
+    return titles
+
+
+def codex_files():
+    root = HOME / ".codex/sessions"
+    days = sorted(root.glob("*/*/*"), reverse=True)[:4]
+    return [(f, f.stat().st_mtime) for d in days for f in d.glob("rollout-*.jsonl")]
+
+
+def codex_summary(path, titles):
+    meta = (first_line(path) or {}).get("payload") or {}
+    s = {"title": clip(titles.get(meta.get("id"), ""), 60), "tool": "", "reply": "", "prompt": "",
+         "files": [], "model": "", "busy": None}
+    for line in tail_lines(path):
+        p = line.get("payload") or {}
+        if line.get("type") == "turn_context":
+            s["model"] = p.get("model") or s["model"]
+        elif line.get("type") == "event_msg":
+            t = p.get("type")
+            if t == "task_started":
+                s["busy"] = True
+            elif t in ("task_complete", "turn_aborted"):
+                s["busy"], s["tool"] = False, ""
+                if p.get("last_agent_message"):
+                    s["reply"] = clip(p["last_agent_message"], 160)
+            elif t == "item_completed":
+                item = p.get("item") or {}
+                it = item.get("type")
+                if it == "CommandExecution":
+                    cmd = item.get("command")
+                    cmd = cmd[-1] if isinstance(cmd, list) and cmd else cmd
+                    s["tool"] = f"Commande · {clip(cmd, 70)}"
+                elif it == "FileChange":
+                    for f in (item.get("changes") or {}):
+                        if f not in s["files"]:
+                            s["files"].append(f)
+                        s["tool"] = f"Modifie · {os.path.basename(f)}"
+                elif it == "AgentMessage":
+                    txt = [c.get("text") for c in item.get("content") or [] if isinstance(c, dict) and c.get("text")]
+                    if txt:
+                        s["reply"] = clip(txt[0], 160)
+                elif it == "UserMessage":
+                    txt = [c.get("text") for c in item.get("content") or [] if isinstance(c, dict) and c.get("text")]
+                    txt = [t for t in txt if not t.startswith("<")]
+                    if txt:
+                        s["prompt"] = clip(txt[0], 120)
+    return s
+
+
+# ───────────────────────── demandes de permission ─────────────────────────
+
+def pid_alive(pid):
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def pending_perms():
+    out = []
+    if not PERMS.is_dir():
+        return out
+    for f in sorted(PERMS.glob("*.json")):
+        try:
+            p = json.loads(f.read_text())
+        except (OSError, ValueError):
+            continue
+        if (PERMS / f"{p.get('id')}.answer").exists():
+            continue
+        if not pid_alive(p.get("hookPid")):
+            f.unlink(missing_ok=True)
+            continue
+        out.append(p)
+    return out
+
+
+# ───────────────────────── watch ─────────────────────────
+
+def snapshot(state):
+    procs, roots = scan()
+    perms = pending_perms()
+    perm_pids = {p.get("agentPid") for p in perms}
+    need_codex = any(k == "codex" for _, k in roots)
+    titles = codex_titles() if need_codex else {}
+    cfiles = codex_files() if need_codex else []
+    agents = []
+    for pid, kind in roots:
+        p = procs[pid]
+        started = BOOT + p["start"] / HZ
+        try:
+            cwd = os.readlink(f"/proc/{pid}/cwd")
+        except OSError:
+            cwd = ""
+        status, name = "idle", ""
+        if kind == "claude":
+            try:
+                meta = json.loads((HOME / f".claude/sessions/{pid}.json").read_text())
+            except (OSError, ValueError):
+                meta = {}
+            cwd = meta.get("cwd") or cwd
+            raw = meta.get("status")
+            status = "working" if raw == "busy" else "idle" if raw in ("idle", None) else "waiting"
+            s = claude_summary(meta["sessionId"]) if meta.get("sessionId") else claude_summary("")
+            name = meta.get("name") or ""
+        else:
+            best = None
+            for f, mt in cfiles:
+                if mt < started - 5:
+                    continue
+                m = ((first_line(f) or {}).get("payload") or {})
+                if m.get("cwd") == cwd and (best is None or mt > best[1]):
+                    best = (f, mt)
+            s = codex_summary(best[0], titles) if best else {"title": "", "tool": "", "reply": "", "prompt": "", "files": [], "model": "", "busy": None}
+            if s.get("busy") is not None:
+                status = "working" if s["busy"] else "idle"
+            elif best and time.time() - best[1] < 8:
+                status = "working"
+        if pid in perm_pids:
+            status = "waiting"
+        prev = state.get(pid)
+        if prev and prev["status"] == status:
+            since = prev["since"]
+        elif not prev and kind == "claude" and status != "waiting" and meta.get("statusUpdatedAt"):
+            since = meta["statusUpdatedAt"] / 1000
+        else:
+            since = time.time()
+        state[pid] = {"status": status, "since": since}
+        agents.append({
+            "id": pid,
+            "kind": kind,
+            "status": status,
+            "since": int(since * 1000),
+            "started": int(started * 1000),
+            "project": os.path.basename(cwd.rstrip("/")) or "~",
+            "cwd": cwd,
+            "title": s["title"] or s["prompt"] or name,
+            "tool": s["tool"] if status == "working" else "",
+            "reply": s["reply"],
+            "files": len(s["files"]),
+            "model": s["model"],
+            "window": window_of(pid, procs),
+        })
+    for pid in list(state):
+        if pid not in {a["id"] for a in agents}:
+            del state[pid]
+    agents.sort(key=lambda a: ({"waiting": 0, "working": 1}.get(a["status"], 2), -a["started"]))
+    return {"agents": agents, "perms": perms}
+
+
+def watch():
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    state, last = {}, None
+    while True:
+        try:
+            snap = snapshot(state)
+        except Exception as e:  # une sonde ratée ne doit pas tuer l'île
+            print(f"caelestia-agents: {e}", file=sys.stderr)
+            time.sleep(2)
+            continue
+        line = json.dumps(snap, ensure_ascii=False, separators=(",", ":"))
+        if line != last:
+            print(line, flush=True)
+            last = line
+        busy = any(a["status"] != "idle" for a in snap["agents"]) or snap["perms"]
+        time.sleep(0.4 if snap["perms"] else 1 if busy else 2)
+
+
+# ───────────────────────── hook ─────────────────────────
+
+def island_running():
+    try:
+        res = subprocess.run(["pgrep", "-f", "qs -c caelestia"], capture_output=True, timeout=2)
+        return res.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def agent_pid():
+    procs, cur = {}, os.getppid()
+    for _ in range(12):
+        p = read_proc(cur)
+        if not p:
+            break
+        if agent_of(p) == "claude":
+            return cur
+        cur = p["ppid"]
+    return os.getppid()
+
+
+def perm_detail(tool, inp):
+    inp = inp if isinstance(inp, dict) else {}
+    if tool == "Bash":
+        return inp.get("command") or ""
+    if tool in ("Edit", "Write", "MultiEdit", "Read", "NotebookEdit"):
+        return inp.get("file_path") or inp.get("notebook_path") or ""
+    for k in ("url", "query", "pattern", "path", "prompt", "description"):
+        if isinstance(inp.get(k), str):
+            return inp[k]
+    return clip(json.dumps(inp, ensure_ascii=False), 300)
+
+
+def hook():
+    try:
+        data = json.load(sys.stdin)
+    except ValueError:
+        return
+    if data.get("hook_event_name") != "PermissionRequest" or not island_running():
+        return
+    PERMS.mkdir(parents=True, exist_ok=True)
+    rid = uuid.uuid4().hex[:12]
+    req, ans = PERMS / f"{rid}.json", PERMS / f"{rid}.answer"
+
+    def cleanup(*_):
+        req.unlink(missing_ok=True)
+        ans.unlink(missing_ok=True)
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, cleanup)
+    signal.signal(signal.SIGHUP, cleanup)
+    tool = data.get("tool_name") or "Outil"
+    cwd = data.get("cwd") or os.getcwd()
+    info = {
+        "id": rid,
+        "hookPid": os.getpid(),
+        "agentPid": agent_pid(),
+        "session": data.get("session_id") or "",
+        "project": os.path.basename(cwd.rstrip("/")) or "~",
+        "tool": tool,
+        "label": tool_label(tool, data.get("tool_input")).split(" · ")[0],
+        "detail": clip(perm_detail(tool, data.get("tool_input")), 400),
+        "ts": int(time.time() * 1000),
+    }
+    tmp = req.with_suffix(".tmp")
+    tmp.write_text(json.dumps(info, ensure_ascii=False))
+    tmp.rename(req)
+    answer = ""
+    try:
+        end = time.time() + WAIT
+        while time.time() < end:
+            if ans.exists():
+                answer = ans.read_text().strip()
+                break
+            time.sleep(0.15)
+    finally:
+        req.unlink(missing_ok=True)
+        ans.unlink(missing_ok=True)
+    if answer in ("allow", "deny"):
+        decision = {"behavior": answer}
+        if answer == "deny":
+            decision["message"] = "Refusé depuis l'île par l'utilisateur."
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": decision}}))
+    # « terminal » ou pas de réponse : Claude Code pose la question dans le terminal
+
+
+def answer(rid, decision):
+    if not rid.isalnum() or decision not in ("allow", "deny", "terminal"):
+        sys.exit(2)
+    if (PERMS / f"{rid}.json").exists():
+        (PERMS / f"{rid}.answer").write_text(decision)
+
+
+if __name__ == "__main__":
+    cmd = sys.argv[1] if len(sys.argv) > 1 else ""
+    if cmd == "watch":
+        watch()
+    elif cmd == "hook":
+        hook()
+    elif cmd == "answer" and len(sys.argv) == 4:
+        answer(sys.argv[2], sys.argv[3])
+    elif cmd == "once":
+        print(json.dumps(snapshot({}), ensure_ascii=False, indent=2))
+    else:
+        print(__doc__)
+        sys.exit(2)

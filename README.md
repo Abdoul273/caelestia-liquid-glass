@@ -44,6 +44,10 @@ Verre translucide partout, Mission Control, Spotlight, animations fluides façon
   - **Minuteur et chronomètre** : tape `minuteur 5 min` ou `chrono` dans Spotlight (ou `qs -c caelestia ipc call island timer 5m`).
   - **Gestes** : glisser ← → sur la musique pour changer de morceau, ↑ pour chasser une notification.
   - **Étagère** : dépose un fichier sur l'île pour le garder sous la main, reprends-le en le glissant ailleurs.
+  - **Agents IA** (Claude Code, Codex) : l'anneau tourne dans l'île pendant qu'un agent travaille (projet + outil en cours), une page liste tes agents (clic = son terminal), l'île te prévient quand un agent a fini, et les **demandes de permission de Claude Code** s'affichent avec **Autoriser / Refuser**. Pour les permissions, ajoute ce hook dans `~/.claude/settings.json` :
+    ```json
+    "hooks": { "PermissionRequest": [{ "matcher": "*", "hooks": [{ "type": "command", "command": "~/.local/bin/caelestia-agents hook", "timeout": 120 }] }] }
+    ```
 - **Mission Control** (`Super + Tab` ou **3 doigts vers le haut**) : tes fenêtres glissent en grille, tes bureaux s'affichent en haut, et un clic t'y emmène.
 - **Spotlight** (`Super + Espace`) : **lance tes apps** (la meilleure en grand, Entrée pour l'ouvrir), actions du système (verrouiller, veille, éteindre, paramètres, Horloge…), **fichiers** de ton dossier perso, calculs et conversions, puis suggestions Google, fiche Wikipédia et résultats web.
 - **Calculatrice** (`Super + O`) : le résultat s'affiche pendant que tu tapes (`12,5 × 4 + 20 %`), et Entrée le copie.

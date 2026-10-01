@@ -756,6 +756,27 @@ Item {
     property string pomoPhase: "work"
     property int pomoRound: 1
     property string doneTitle: qsTr("Minuteur terminé")
+    // Agent IA qui vient de finir (Claude Code, Codex) : {id, kind, project, title, reply, window}
+    property var agentDone: null
+    Connections {
+        target: Agents
+
+        function onFinished(agent: var): void {
+            // Pas la peine si on regarde déjà son terminal
+            if (agent.window && Hypr.activeToplevel?.address === agent.window)
+                return;
+            root.agentDone = agent;
+            root.flash("agentDone", 7000);
+        }
+        function onBusyChanged(): void {
+            if (Agents.busy && root.pageName === "info")
+                root.pageName = "agents";
+        }
+        function onListChanged(): void {
+            if (Agents.list.length === 0 && root.pageName === "agents")
+                root.pageName = "info";
+        }
+    }
     property string doneSub: ""
     property real now: Date.now()
     readonly property real clockValue: {
@@ -1249,6 +1270,8 @@ Item {
             return "drop";
         if (alarmRinging)
             return "alarm";
+        if (Agents.perm && Island.agents)
+            return "perm";
         if (taskAlert)
             return "taskDue";
         if (pulse === "fileDone" && fileDone)
@@ -1263,6 +1286,8 @@ Item {
             return "toast";
         if (pulse === "done")
             return "done";
+        if (pulse === "agentDone" && agentDone)
+            return "agentDone";
         if (pulse === "bt" && btDevice)
             return "bt";
         if (pulse === "charge")
@@ -1279,22 +1304,22 @@ Item {
     }
 
     // Activités en cours affichables en compact ; celle qu'on a regardée en dernier passe devant
-    readonly property list<string> compactActs: [...(inCall ? ["call"] : []), ...(transfer ? ["transfer"] : []), ...(Recorder.running ? ["record"] : []), ...(clockKind !== "" ? ["clockMini"] : []), ...(hasMedia && playing ? ["media"] : [])]
+    readonly property list<string> compactActs: [...(inCall ? ["call"] : []), ...(transfer ? ["transfer"] : []), ...(Recorder.running ? ["record"] : []), ...(clockKind !== "" ? ["clockMini"] : []), ...(Agents.busy ? ["agentsMini"] : []), ...(hasMedia && playing ? ["media"] : [])]
     readonly property string compactPick: {
-        const fromPage = ({ callFull: "call", transferFull: "transfer", recordFull: "record", clock: "clockMini", player: "media" })[pageName];
+        const fromPage = ({ callFull: "call", transferFull: "transfer", recordFull: "record", clock: "clockMini", agents: "agentsMini", player: "media" })[pageName];
         return fromPage && compactActs.includes(fromPage) ? fromPage : (compactActs[0] ?? "");
     }
     // Les autres activités, en petites icônes au bord de l'île compacte (+ caféine)
     readonly property list<string> otherActs: [...compactActs.filter(a => a !== mode), ...(IdleInhibitor.enabled ? ["caffeine"] : [])]
-    readonly property bool compactActive: mode === "call" || mode === "transfer" || mode === "record" || mode === "clockMini" || mode === "media"
+    readonly property bool compactActive: mode === "call" || mode === "transfer" || mode === "record" || mode === "clockMini" || mode === "agentsMini" || mode === "media"
     readonly property real actsInset: compactActive && otherActs.length > 0 ? otherActs.length * 18 + 12 : 0
 
     function actIcon(a: string): string {
-        return ({ call: callMuted ? "mic_off" : "call", transfer: transfer?.kind === "copy" ? "content_copy" : "download", record: "radio_button_checked", clockMini: "timer", media: "music_note", caffeine: "coffee" })[a] ?? "";
+        return ({ call: callMuted ? "mic_off" : "call", transfer: transfer?.kind === "copy" ? "content_copy" : "download", record: "radio_button_checked", clockMini: "timer", agentsMini: "smart_toy", media: "music_note", caffeine: "coffee" })[a] ?? "";
     }
 
     function actColour(a: string): color {
-        return ({ call: callMuted ? "#ff453a" : root.green, transfer: "#0a84ff", record: "#ff453a", clockMini: "#ff9f0a", media: root.accent, caffeine: root.fg })[a] ?? root.fg;
+        return ({ call: callMuted ? "#ff453a" : root.green, transfer: "#0a84ff", record: "#ff453a", clockMini: "#ff9f0a", agentsMini: Agents.kindColour(Agents.lead?.kind ?? ""), media: root.accent, caffeine: root.fg })[a] ?? root.fg;
     }
 
     readonly property bool notifHasActions: (notif?.actions?.length ?? 0) > 0
@@ -1336,6 +1361,14 @@ Item {
             return Qt.size(pageWidth, 118 + (clockTitleMetrics.advanceWidth > pageWidth - 250 ? 16 : 0) + shelfExtra);
         case "clockMini":
             return Qt.size((clockLabel ? 290 : 230) + actsInset, 40);
+        case "agentsMini":
+            return Qt.size(330 + actsInset, 40);
+        case "agents":
+            return Qt.size(pageWidth, 66 + 52 * Math.min(3, Agents.list.length));
+        case "perm":
+            return Qt.size(Math.max(pageWidth, 600), 148);
+        case "agentDone":
+            return Qt.size(460, 80);
         case "shot":
             return Qt.size(460, 100);
         case "bt":
@@ -1373,7 +1406,7 @@ Item {
 
     property real w: target.width
     property real h: target.height
-    readonly property real radius: Math.min(h / 2, mode === "player" || mode === "info" || mode === "perf" || mode === "notif" || mode === "bt" || mode === "shot" || mode === "clock" || mode === "drop" || mode === "toast" || mode === "done" || mode === "alarm" || mode === "count" || mode === "recordFull" || mode === "callFull" || mode === "transferFull" || mode === "taskDue" || mode === "fileDone" || mode === "caffeine" || mode === "center" || (mode === "charge" && chargePlugged) ? 32 : h / 2)
+    readonly property real radius: Math.min(h / 2, mode === "player" || mode === "info" || mode === "perf" || mode === "notif" || mode === "bt" || mode === "shot" || mode === "clock" || mode === "drop" || mode === "toast" || mode === "done" || mode === "alarm" || mode === "count" || mode === "recordFull" || mode === "callFull" || mode === "transferFull" || mode === "taskDue" || mode === "fileDone" || mode === "caffeine" || mode === "center" || mode === "agents" || mode === "perm" || mode === "agentDone" || (mode === "charge" && chargePlugged) ? 32 : h / 2)
 
     function flash(kind: string, ms: int): void {
         if (!ready)
@@ -1893,7 +1926,7 @@ Item {
 
     // Pages de l'île ouverte : enregistrement et minuteur en cours d'abord (s'il y en a),
     // puis heure/météo ↔ performances du PC ↔ musique (si un lecteur est actif)
-    readonly property list<string> pages: [...(inCall ? ["callFull"] : []), ...(transfer ? ["transferFull"] : []), ...(Recorder.running ? ["recordFull"] : []), ...(clockKind !== "" ? ["clock"] : []), ...(IdleInhibitor.enabled ? ["caffeine"] : []), "info", "perf", ...(hasMedia ? ["player"] : [])]
+    readonly property list<string> pages: [...(inCall ? ["callFull"] : []), ...(transfer ? ["transferFull"] : []), ...(Recorder.running ? ["recordFull"] : []), ...(clockKind !== "" ? ["clock"] : []), ...(IdleInhibitor.enabled ? ["caffeine"] : []), ...(Agents.list.length > 0 ? ["agents"] : []), "info", "perf", ...(hasMedia ? ["player"] : [])]
     // Page retenue par son nom : elle reste la même quand d'autres pages apparaissent ou disparaissent
     property string pageName: "info"
     readonly property int pageIndex: Math.max(0, pages.indexOf(pageName))
@@ -2219,6 +2252,11 @@ Item {
                 root.countLeft = 0;
             } else if (root.mode === "clockMini") {
                 root.togglePause();
+            } else if (root.mode === "agentsMini") {
+                Agents.focus(Agents.lead);
+            } else if (root.mode === "agentDone") {
+                Agents.focusPid(root.agentDone?.id ?? 0);
+                root.dismissCurrent();
             } else if (button === Qt.MiddleButton || root.mode === "media") {
                 root.player?.togglePlaying();
             } else if (root.mode === "idle" || root.mode === "info" || root.mode === "perf") {
@@ -3908,6 +3946,403 @@ Item {
                 font.weight: Font.Bold
                 font.features: {
                     "tnum": 1
+                }
+            }
+        }
+
+        // ── agents IA au travail (compact) : anneau qui tourne, projet, outil en cours ──
+        Face {
+            active: root.mode === "agentsMini"
+            inset: root.actsInset
+
+            readonly property var lead: Agents.lead
+            readonly property color tint: Agents.kindColour(lead?.kind ?? "")
+
+            AgentSpinner {
+                id: amSpin
+
+                anchors.left: parent.left
+                anchors.leftMargin: 16
+                anchors.verticalCenter: parent.verticalCenter
+                tint: parent.tint
+                spinning: root.mode === "agentsMini"
+            }
+
+            StyledText {
+                id: amName
+
+                anchors.left: amSpin.right
+                anchors.leftMargin: 10
+                anchors.verticalCenter: parent.verticalCenter
+                width: Math.min(implicitWidth, 120)
+                elide: Text.ElideRight
+                text: parent.lead?.project ?? ""
+                color: root.fg
+                font.pointSize: 10
+                font.weight: Font.Bold
+            }
+
+            StyledText {
+                anchors.left: amName.right
+                anchors.leftMargin: 8
+                anchors.right: amRight.left
+                anchors.rightMargin: 10
+                anchors.verticalCenter: parent.verticalCenter
+                elide: Text.ElideRight
+                text: parent.lead?.tool || qsTr("réfléchit…")
+                color: root.fgDim
+                font.pointSize: 9
+            }
+
+            StyledText {
+                id: amRight
+
+                anchors.right: parent.right
+                anchors.rightMargin: 18
+                anchors.verticalCenter: parent.verticalCenter
+                text: Agents.working > 1 ? `×${Agents.working}` : Agents.elapsed(parent.lead?.since ?? Agents.now)
+                color: parent.tint
+                font.pointSize: 10
+                font.weight: Font.Bold
+                font.features: {
+                    "tnum": 1
+                }
+            }
+        }
+
+        // ── agents IA : page de l'île ouverte (un agent par ligne, clic = son terminal) ──
+        Face {
+            active: root.mode === "agents"
+            slide: root.pageSlide("agents")
+
+            Row {
+                id: agHead
+
+                anchors.left: parent.left
+                anchors.leftMargin: 26
+                anchors.top: parent.top
+                anchors.topMargin: 18
+                spacing: 8
+
+                MaterialIcon {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "smart_toy"
+                    color: root.accent
+                    fontStyle: Tokens.font.icon.size(16).build()
+                    fill: 1
+                }
+                StyledText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: qsTr("Agents")
+                    color: root.fg
+                    font.pointSize: 11.5
+                    font.weight: Font.Bold
+                }
+                StyledText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: Agents.working > 0 ? qsTr("%1 au travail").arg(Agents.working) : qsTr("en attente")
+                    color: root.fgDim
+                    font.pointSize: 9.5
+                }
+            }
+
+            StyledText {
+                anchors.right: parent.right
+                anchors.rightMargin: 26
+                anchors.verticalCenter: agHead.verticalCenter
+                visible: Agents.list.length > 3
+                text: qsTr("+%1").arg(Agents.list.length - 3)
+                color: root.fgDim
+                font.pointSize: 9.5
+            }
+
+            Column {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: agHead.bottom
+                anchors.topMargin: 10
+                anchors.leftMargin: 14
+                anchors.rightMargin: 14
+
+                Repeater {
+                    model: Agents.list.slice(0, 3)
+
+                    Item {
+                        id: agRow
+
+                        required property var modelData
+                        readonly property bool working: modelData.status === "working"
+                        readonly property bool waiting: modelData.status === "waiting"
+                        readonly property color tint: Agents.kindColour(modelData.kind)
+
+                        width: parent?.width ?? 0
+                        height: 52
+
+                        Rectangle {
+                            anchors.fill: parent
+                            anchors.topMargin: 3
+                            anchors.bottomMargin: 3
+                            radius: 16
+                            color: Qt.alpha(root.fg, agArea.pressed ? 0.14 : agArea.containsMouse ? 0.08 : 0)
+
+                            Behavior on color {
+                                ColorAnimation {
+                                    duration: 120
+                                }
+                            }
+                        }
+
+                        AgentSpinner {
+                            id: agSpin
+
+                            anchors.left: parent.left
+                            anchors.leftMargin: 12
+                            anchors.verticalCenter: parent.verticalCenter
+                            tint: agRow.waiting ? "#ff9f0a" : agRow.working ? agRow.tint : root.green
+                            spinning: agRow.working && root.mode === "agents"
+                            done: !agRow.working && !agRow.waiting
+                            letter: agRow.modelData.kind === "codex" ? "X" : "C"
+                        }
+
+                        Column {
+                            anchors.left: agSpin.right
+                            anchors.leftMargin: 12
+                            anchors.right: agTime.left
+                            anchors.rightMargin: 12
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 1
+
+                            StyledText {
+                                width: parent.width
+                                elide: Text.ElideRight
+                                text: `${agRow.modelData.project}${agRow.modelData.title ? " · " + agRow.modelData.title : ""}`
+                                color: root.fg
+                                font.pointSize: 10
+                                font.weight: Font.DemiBold
+                            }
+                            StyledText {
+                                width: parent.width
+                                elide: Text.ElideRight
+                                text: agRow.waiting ? qsTr("Attend ta réponse") : agRow.working ? (agRow.modelData.tool || qsTr("Réfléchit…")) : (agRow.modelData.reply || qsTr("Prêt"))
+                                color: agRow.waiting ? "#ff9f0a" : root.fgDim
+                                font.pointSize: 9
+                            }
+                        }
+
+                        Column {
+                            id: agTime
+
+                            anchors.right: parent.right
+                            anchors.rightMargin: 14
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            StyledText {
+                                anchors.right: parent.right
+                                text: Agents.elapsed(agRow.modelData.since)
+                                color: agRow.working ? agRow.tint : root.fgDim
+                                font.pointSize: 9.5
+                                font.weight: Font.Bold
+                                font.features: {
+                                    "tnum": 1
+                                }
+                            }
+                            StyledText {
+                                anchors.right: parent.right
+                                visible: agRow.modelData.files > 0
+                                text: qsTr("%n fichier(s)", "", agRow.modelData.files)
+                                color: root.fgDim
+                                font.pointSize: 8
+                            }
+                        }
+
+                        MouseArea {
+                            id: agArea
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: agRow.modelData.window ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            onClicked: Agents.focus(agRow.modelData)
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── un agent demande la permission : Autoriser / Refuser depuis l'île ──
+        Face {
+            id: permFace
+
+            active: root.mode === "perm"
+
+            readonly property var perm: Agents.perm
+            readonly property var agent: Agents.list.find(a => a.id === perm?.agentPid) ?? null
+
+            Rectangle {
+                id: permIcon
+
+                anchors.left: parent.left
+                anchors.leftMargin: 22
+                anchors.top: parent.top
+                anchors.topMargin: 18
+                width: 44
+                height: 44
+                radius: 22
+                color: Qt.alpha("#ff9f0a", 0.2)
+
+                MaterialIcon {
+                    anchors.centerIn: parent
+                    text: "gpp_maybe"
+                    color: "#ff9f0a"
+                    fontStyle: Tokens.font.icon.size(20).build()
+                    fill: 1
+
+                    SequentialAnimation on scale {
+                        running: root.mode === "perm"
+                        loops: Animation.Infinite
+                        NumberAnimation {
+                            to: 1.12
+                            duration: 600
+                            easing.type: Easing.InOutSine
+                        }
+                        NumberAnimation {
+                            to: 1
+                            duration: 600
+                            easing.type: Easing.InOutSine
+                        }
+                    }
+                }
+            }
+
+            Column {
+                anchors.left: permIcon.right
+                anchors.leftMargin: 12
+                anchors.right: permButtons.left
+                anchors.rightMargin: 10
+                anchors.verticalCenter: permIcon.verticalCenter
+                spacing: 1
+
+                StyledText {
+                    width: parent.width
+                    elide: Text.ElideRight
+                    text: permFace.perm?.label ?? ""
+                    color: root.fg
+                    font.pointSize: 11
+                    font.weight: Font.Bold
+                }
+                StyledText {
+                    width: parent.width
+                    elide: Text.ElideRight
+                    text: `${Agents.kindName(permFace.agent?.kind ?? "claude")} · ${permFace.perm?.project ?? ""}` + (Agents.perms.length > 1 ? qsTr(" · encore %1 en attente").arg(Agents.perms.length - 1) : "")
+                    color: root.fgDim
+                    font.pointSize: 9
+                }
+            }
+
+            Row {
+                id: permButtons
+
+                anchors.right: parent.right
+                anchors.rightMargin: 20
+                anchors.verticalCenter: permIcon.verticalCenter
+                spacing: 8
+
+                ShotButton {
+                    icon: "terminal"
+                    tip: qsTr("Répondre dans le terminal")
+                    onClicked: {
+                        const p = permFace.perm;
+                        Agents.answer(p.id, "terminal");
+                        Agents.focusPid(p.agentPid);
+                    }
+                }
+                PillButton {
+                    icon: "block"
+                    label: qsTr("Refuser")
+                    tint: root.red
+                    onClicked: Agents.answer(permFace.perm.id, "deny")
+                }
+                PillButton {
+                    icon: "check"
+                    label: qsTr("Autoriser")
+                    tint: root.green
+                    onClicked: Agents.answer(permFace.perm.id, "allow")
+                }
+            }
+
+            Rectangle {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.leftMargin: 22
+                anchors.rightMargin: 22
+                anchors.bottomMargin: 18
+                height: 54
+                radius: 14
+                color: Qt.alpha(root.fg, 0.07)
+
+                StyledText {
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    verticalAlignment: Text.AlignVCenter
+                    text: permFace.perm?.detail ?? ""
+                    wrapMode: Text.WrapAnywhere
+                    maximumLineCount: 2
+                    elide: Text.ElideRight
+                    color: root.fg
+                    font.family: "monospace"
+                    font.pointSize: 9
+                }
+            }
+        }
+
+        // ── un agent a terminé : projet + début de sa réponse ; clic = son terminal ──
+        Face {
+            active: root.mode === "agentDone"
+
+            readonly property var agent: root.agentDone
+
+            Rectangle {
+                id: adIcon
+
+                anchors.left: parent.left
+                anchors.leftMargin: 20
+                anchors.verticalCenter: parent.verticalCenter
+                width: 42
+                height: 42
+                radius: 21
+                color: Qt.alpha(root.green, 0.2)
+
+                MaterialIcon {
+                    anchors.centerIn: parent
+                    text: "check_circle"
+                    color: root.green
+                    fontStyle: Tokens.font.icon.size(20).build()
+                    fill: 1
+                }
+            }
+
+            Column {
+                anchors.left: adIcon.right
+                anchors.leftMargin: 12
+                anchors.right: parent.right
+                anchors.rightMargin: 24
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 1
+
+                StyledText {
+                    width: parent.width
+                    elide: Text.ElideRight
+                    text: qsTr("%1 a terminé · %2").arg(Agents.kindName(parent.parent.agent?.kind ?? "")).arg(parent.parent.agent?.project ?? "")
+                    color: root.fg
+                    font.pointSize: 11
+                    font.weight: Font.Bold
+                }
+                StyledText {
+                    width: parent.width
+                    elide: Text.ElideRight
+                    text: parent.parent.agent?.reply || parent.parent.agent?.title || ""
+                    color: root.fgDim
+                    font.pointSize: 9
                 }
             }
         }
@@ -6306,6 +6741,126 @@ Item {
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: sb.clicked()
+        }
+    }
+
+    // Pastille d'action avec libellé (Autoriser, Refuser…)
+    component PillButton: Rectangle {
+        id: pill
+
+        property string icon
+        property string label
+        property color tint
+        signal clicked
+
+        width: pillRow.implicitWidth + 26
+        height: 40
+        radius: 20
+        color: pillArea.containsMouse ? Qt.lighter(tint, 1.1) : tint
+        scale: pillArea.pressed ? 0.93 : 1
+
+        Behavior on scale {
+            NumberAnimation {
+                duration: 120
+            }
+        }
+
+        Row {
+            id: pillRow
+
+            anchors.centerIn: parent
+            spacing: 5
+
+            MaterialIcon {
+                anchors.verticalCenter: parent.verticalCenter
+                text: pill.icon
+                color: "white"
+                fontStyle: Tokens.font.icon.size(15).build()
+                fill: 1
+            }
+            StyledText {
+                anchors.verticalCenter: parent.verticalCenter
+                text: pill.label
+                color: "white"
+                font.pointSize: 10
+                font.weight: Font.Bold
+            }
+        }
+
+        MouseArea {
+            id: pillArea
+
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: pill.clicked()
+        }
+    }
+
+    // Pastille d'agent : anneau qui tourne pendant le travail, coche quand c'est fini
+    component AgentSpinner: Item {
+        id: spin
+
+        property color tint
+        property bool spinning
+        property bool done
+        property string letter
+
+        width: 24
+        height: 24
+
+        Rectangle {
+            anchors.fill: parent
+            radius: width / 2
+            color: Qt.alpha(spin.tint, 0.18)
+        }
+
+        Shape {
+            anchors.fill: parent
+            visible: !spin.done
+            preferredRendererType: Shape.CurveRenderer
+
+            ShapePath {
+                strokeWidth: 2.5
+                strokeColor: spin.tint
+                fillColor: "transparent"
+                capStyle: ShapePath.RoundCap
+
+                PathAngleArc {
+                    centerX: 12
+                    centerY: 12
+                    radiusX: 10.5
+                    radiusY: 10.5
+                    startAngle: -90
+                    sweepAngle: spin.spinning ? 110 : 360
+                }
+            }
+
+            RotationAnimation on rotation {
+                running: spin.spinning
+                loops: Animation.Infinite
+                from: 0
+                to: 360
+                duration: 1100
+            }
+        }
+
+        StyledText {
+            anchors.centerIn: parent
+            visible: !spin.done
+            text: spin.letter || "✦"
+            color: spin.tint
+            font.pointSize: spin.letter ? 8.5 : 9
+            font.weight: Font.Black
+        }
+
+        MaterialIcon {
+            anchors.centerIn: parent
+            visible: spin.done
+            text: "check"
+            color: spin.tint
+            fontStyle: Tokens.font.icon.size(14).build()
+            fill: 1
         }
     }
 

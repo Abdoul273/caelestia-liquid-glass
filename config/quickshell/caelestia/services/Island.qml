@@ -34,6 +34,8 @@ Singleton {
     readonly property bool noBar: opts.hideBar
     // Dock qui se cache (bas de l'écran), sans réserver de place aux fenêtres
     readonly property bool dock: opts.dock
+    // Agents IA (Claude Code, Codex) dans l'île : activité, fin de tâche, permissions à valider
+    readonly property bool agents: enabled && opts.agents
 
     function set(key: string, value: var): void {
         opts[key] = value;
@@ -67,6 +69,7 @@ Singleton {
             property bool controlCenter: true
             property bool hideBar: true
             property bool dock: true
+            property bool agents: true
         }
     }
 
