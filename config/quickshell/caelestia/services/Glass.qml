@@ -21,7 +21,7 @@ Singleton {
     readonly property bool lensControls: controls
     // Opacité du verre quand le fond contraste avec le panneau (page blanche derrière un panneau
     // sombre…) : le panneau garde sa couleur, comme sur macOS. Plus bas = plus transparent.
-    readonly property real thickAlpha: Colours.light ? 0.56 : 0.58
+    readonly property real thickAlpha: Colours.light ? 0.44 : 0.45
 
     // Fond des cartes à l'intérieur d'un panneau en verre : voile translucide au lieu d'un aplat
     function tile(original: color): color {
