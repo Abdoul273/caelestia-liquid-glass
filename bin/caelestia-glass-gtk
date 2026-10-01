@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Liquid glass des applis GTK, appliqué tout de suite.
+"""Liquid glass des applis GTK (et Qt/KDE en mode « complet »), appliqué tout de suite.
 
   caelestia-glass-gtk nautilus   verre classique, Nautilus seulement (le compromis)
   caelestia-glass-gtk complet    toutes les applis GTK (Calculatrice, Éditeur, Loupe, Thunar…)
@@ -9,6 +9,10 @@
 Le choix et l'intensité sont dans ~/.config/caelestia/glass.json (clés « gtk » et « density »),
 réglables dans Paramètres → Fond d'écran et style → Liquid glass. Les couleurs viennent du
 gtk.css généré par Caelestia : le verre suit le thème clair/sombre et le fond d'écran.
+
+Applis Qt/KDE (KDE Connect…) : le style Darkly rend le fond translucide quand le schéma de
+couleurs de qtengine a de l'alpha. En mode « complet », on ajoute cet alpha au
+caelestia.colors que Caelestia régénère à chaque changement de thème.
 """
 
 import json
@@ -158,6 +162,62 @@ def update_portal(mode: str, colours: dict, density: float) -> None:
         subprocess.run(["systemctl", "--user", "try-restart", PORTAL_SERVICE], check=False)
 
 
+QT_COLORS = HOME / ".config/qtengine/caelestia.colors"
+DARKLYRC = HOME / ".config/darklyrc"
+# Opacité de base de chaque zone (même échelle que les modèles GTK)
+QT_GLASS = {"Window": 0.55, "View": 0.30, "Header": 0.45, "Header][Inactive": 0.45}
+
+
+def qt_colour(value: str) -> tuple[int, int, int] | None:
+    value = value.strip()
+    if m := re.fullmatch(r"#([0-9a-fA-F]{6})", value):
+        return tuple(int(m.group(1)[i : i + 2], 16) for i in (0, 2, 4))
+    if m := re.fullmatch(r"(\d+),\s*(\d+),\s*(\d+)(?:,\s*\d+)?", value):
+        return tuple(int(x) for x in m.groups())
+    return None
+
+
+def update_qt(mode: str, density: float) -> None:
+    """Ajoute (complet) ou retire (sinon) l'alpha des fonds dans le schéma Qt de Caelestia."""
+    try:
+        text = QT_COLORS.read_text()
+    except OSError:
+        return
+    light = False
+    section = ""
+    out = []
+    for line in text.splitlines():
+        if line.startswith("["):
+            section = line[len("[Colors:") : -1] if line.startswith("[Colors:") else ""
+        key, _, value = line.partition("=")
+        rgb = qt_colour(value) if key in ("BackgroundNormal", "BackgroundAlternate") else None
+        if rgb and section == "Window" and key == "BackgroundNormal":
+            light = luminance(rgb) > 0.5
+        if rgb and section in QT_GLASS:
+            if mode == "complet":
+                base = QT_GLASS[section]
+                if light:
+                    base = min(0.95, base + 0.12)
+                alpha = round(255 * max(0.0, min(1.0, strength(base, density))))
+                line = f"{key}={rgb[0]},{rgb[1]},{rgb[2]},{alpha}"
+            else:
+                line = f"{key}=#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
+        out.append(line)
+    write_if_changed(QT_COLORS, "\n".join(out) + "\n")
+
+    # Menus, barres d'outils et onglets de Darkly : même verre que les fenêtres
+    window = round(100 * strength(QT_GLASS["Window"], density)) if mode == "complet" else 100
+    menu = max(72, round(100 * strength(0.86, density))) if mode == "complet" else 100
+    darkly = (
+        "# Généré par caelestia-glass-gtk — choisir dans Paramètres → Fond d'écran et style → Liquid glass\n"
+        "[Style]\n"
+        f"MenuOpacity={menu}\nMenuBarOpacity={window}\nToolBarOpacity={window}\nTabBarOpacity={window}\n"
+        "TransparentDolphinView=true\n"
+        f"DolphinSidebarOpacity={window}\nDolphinViewOpacity={window}\n"
+    )
+    write_if_changed(DARKLYRC, darkly)
+
+
 def main() -> int:
     args = sys.argv[1:]
     if args and args[0] not in MODES:
@@ -191,6 +251,7 @@ def main() -> int:
             old.unlink()
 
     update_portal(mode, colours, density)
+    update_qt(mode, density)
 
     # Liseré de verre des fenêtres (hypr-user.lua lit glass.json)
     if os.environ.get("HYPRLAND_INSTANCE_SIGNATURE") and args:

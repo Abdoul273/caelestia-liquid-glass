@@ -31,7 +31,7 @@ PACKAGES=(
     hyprsunset                        # éclairage de nuit (sinon filtre d'écran de secours)
     ttf-jetbrains-mono-nerd noto-fonts-emoji
 )
-AUR_PACKAGES=(ttf-rubik-vf)
+AUR_PACKAGES=(ttf-rubik-vf darkly)  # darkly : style Qt capable du verre (KDE Connect…)
 
 # ---------------------------------------------------------------- affichage
 
