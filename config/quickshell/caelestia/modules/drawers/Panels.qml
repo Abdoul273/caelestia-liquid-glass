@@ -44,6 +44,7 @@ Item {
     readonly property alias spotlight: spotlight
     readonly property alias calculator: calculator
     readonly property alias display: display
+    readonly property alias annotate: annotate
     readonly property alias settings: settings
     readonly property alias clock: clock
     readonly property alias keyhelp: keyhelp
@@ -254,6 +255,18 @@ Item {
 
         anchors.horizontalCenter: parent.horizontalCenter
         y: Math.round((parent.height - height) / 2)
+    }
+
+    // Annoter une capture : même goutte de verre
+    SpotlightModule.Annotate {
+        id: annotate
+
+        screen: root.screen
+        screenState: root.screenState
+        island: island
+
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: Math.max(0, Math.round((parent.height - height) / 2))
     }
 
     // Dock : sort du bas de l'écran au survol

@@ -63,6 +63,11 @@ Region {
     }
 
     R {
+        panel: root.panels.annotate
+        width: root.panels.annotate.visible ? panel.width : 0
+    }
+
+    R {
         panel: root.panels.display
         width: root.panels.display.visible ? panel.width : 0
     }

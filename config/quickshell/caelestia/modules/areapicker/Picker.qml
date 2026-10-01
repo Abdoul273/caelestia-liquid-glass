@@ -79,7 +79,7 @@ MouseArea {
                 Quickshell.execDetached(["sh", "-c", "wl-copy --type image/png < " + path]);
                 Quickshell.execDetached(["notify-send", "-a", "caelestia-cli", "-i", path, qsTr("Capture d'écran effectuée"), qsTr("Capture d'écran copiée dans le presse-papiers")]);
             } else {
-                Quickshell.execDetached(["swappy", "-f", path]);
+                Quickshell.execDetached(["qs", "-c", "caelestia", "ipc", "call", "annotate", "open", path]);
             }
             closeAnim.start();
         });

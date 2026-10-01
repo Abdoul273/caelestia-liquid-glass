@@ -24,7 +24,7 @@ Scope {
     }
 
     // Gouttes de verre de l'île (Spotlight, calculatrice, projection, presse-papiers…) : une seule à la fois
-    readonly property var drops: ["spotlight", "calculator", "display", "clipboard", "emoji", "keyhelp", "clock", "settings"]
+    readonly property var drops: ["spotlight", "calculator", "display", "clipboard", "emoji", "keyhelp", "clock", "settings", "annotate"]
     function toggleDrop(kind: string): void {
         if (hasFullscreen)
             return;
@@ -132,6 +132,14 @@ Scope {
         name: "settings"
         description: qsTr("Paramètres (Super + I) : Nexus dans la goutte de verre")
         onPressed: root.toggleDrop("settings")
+    }
+
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
+        name: "annotate"
+        description: qsTr("Annoter une capture : même goutte de verre")
+        onPressed: root.toggleDrop("annotate")
     }
 
     // qmllint disable unresolved-type
@@ -270,6 +278,21 @@ Scope {
         }
 
         target: "nexus"
+    }
+
+    // Éditeur d'annotation des captures (remplace swappy) : annotate open <fichier>
+    IpcHandler {
+        function open(path: string): void {
+            const screenState = ShellState.forActive();
+            screenState.annotatePath = path;
+            if (!screenState.annotate)
+                root.toggleDrop("annotate");
+        }
+        function close(): void {
+            ShellState.forActive().annotate = false;
+        }
+
+        target: "annotate"
     }
 
     IpcHandler {

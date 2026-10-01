@@ -70,7 +70,7 @@ StyledWindow {
     name: "drawers"
     WlrLayershell.exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: (fsTransitionProg > 0 && contentItem.Config.general.showOverFullscreen) || (hasSpecialWorkspace && hasFullscreenOnNormalWs) ? WlrLayer.Overlay : WlrLayer.Top
-    WlrLayershell.keyboardFocus: screenState.launcher || screenState.session || screenState.notesActive || screenState.controlCenter || screenState.spotlight || screenState.calculator || screenState.display || screenState.clipboard || screenState.emoji || screenState.keyhelp || screenState.clock || screenState.settings ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: screenState.launcher || screenState.session || screenState.notesActive || screenState.controlCenter || screenState.spotlight || screenState.calculator || screenState.display || screenState.clipboard || screenState.emoji || screenState.keyhelp || screenState.clock || screenState.settings || screenState.annotate ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
     mask: hasFullscreen ? emptyRegion : regions
 
@@ -117,7 +117,7 @@ StyledWindow {
         active: {
             const s = root.screenState;
             const conf = root.contentItem.Config;
-            if ((s.launcher && conf.launcher.enabled) || (s.session && conf.session.enabled) || (s.sidebar && conf.sidebar.enabled) || s.controlCenter || s.spotlight || s.calculator || s.display || s.clipboard || s.emoji || s.keyhelp || s.clock || s.settings)
+            if ((s.launcher && conf.launcher.enabled) || (s.session && conf.session.enabled) || (s.sidebar && conf.sidebar.enabled) || s.controlCenter || s.spotlight || s.calculator || s.display || s.clipboard || s.emoji || s.keyhelp || s.clock || s.settings || s.annotate)
                 return true;
             if (!conf.dashboard.showOnHover && s.dashboard && conf.dashboard.enabled)
                 return true;
@@ -135,6 +135,7 @@ StyledWindow {
             root.screenState.spotlight = false;
             root.screenState.calculator = false;
             root.screenState.display = false;
+            root.screenState.annotate = false;
             root.screenState.settings = false;
             root.screenState.clock = false;
             root.screenState.keyhelp = false;
@@ -371,6 +372,22 @@ StyledWindow {
             readonly property var gp: panels.settings
 
             panel: panels.settings
+            deformAmount: 0.1
+            visible: gp.visible
+            radius: gp.curR
+            x: gp.curX + bar.implicitWidth
+            implicitWidth: gp.curW
+            y: gp.visible ? gp.curTop + root.borderThickness : -400
+            implicitHeight: gp.visible ? Math.max(0, gp.curBottom - gp.curTop) : 0
+        }
+
+        // Annoter une capture : même goutte de verre
+        PanelBg {
+            id: annotateBg
+
+            readonly property var gp: panels.annotate
+
+            panel: panels.annotate
             deformAmount: 0.1
             visible: gp.visible
             radius: gp.curR
@@ -626,6 +643,9 @@ StyledWindow {
             }
             settings.transform: Matrix4x4 {
                 matrix: settingsBg.deformMatrix
+            }
+            annotate.transform: Matrix4x4 {
+                matrix: annotateBg.deformMatrix
             }
             display.transform: Matrix4x4 {
                 matrix: displayBg.deformMatrix

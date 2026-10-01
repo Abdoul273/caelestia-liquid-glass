@@ -3570,7 +3570,7 @@ Item {
                     icon: "edit"
                     tip: qsTr("Annoter")
                     onClicked: {
-                        Quickshell.execDetached(["swappy", "-f", root.shotPath]);
+                        Quickshell.execDetached(["qs", "-c", "caelestia", "ipc", "call", "annotate", "open", root.shotPath]);
                         root.closeShot();
                     }
                 }

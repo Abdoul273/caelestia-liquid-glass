@@ -1,0 +1,15 @@
+#!/bin/sh
+# Relais Caelestia : « swappy -f <fichier|-> » ouvre l'éditeur d'annotation en liquid glass
+# du shell (qs ipc call annotate open). Si le shell ne tourne pas, ou pour toute autre
+# utilisation, on lance le vrai swappy (/usr/bin/swappy).
+REAL=/usr/bin/swappy
+if [ "$1" = "-f" ] && [ -n "$2" ] && [ $# -eq 2 ] && qs -c caelestia ipc show >/dev/null 2>&1; then
+    file="$2"
+    if [ "$file" = "-" ]; then
+        file="/tmp/caelestia-annotate-src-$(date +%s%N).png"
+        cat > "$file"
+    fi
+    case "$file" in /*) ;; *) file="$PWD/$file" ;; esac
+    exec qs -c caelestia ipc call annotate open "$file"
+fi
+exec "$REAL" "$@"

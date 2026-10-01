@@ -18,6 +18,8 @@ PersistentProperties {
     property bool spotlight
     property bool calculator
     property bool display
+    property bool annotate
+    property string annotatePath
     property bool settings
     property bool clock
     property bool keyhelp
