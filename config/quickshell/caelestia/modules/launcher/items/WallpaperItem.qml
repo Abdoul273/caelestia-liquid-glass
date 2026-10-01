@@ -66,12 +66,24 @@ Item {
 
         CachingImage {
             anchors.fill: parent
-            path: root.modelData.path
+            path: Wallpapers.thumbFor(root.modelData.path)
             smooth: !root.PathView.view.moving
             sourceSize: {
                 const dpr = (QsWindow.window as QsWindow)?.devicePixelRatio ?? 1;
                 return Qt.size(image.implicitWidth * dpr, image.implicitHeight * dpr);
             }
+        }
+
+        // Fond animé : petit badge lecture
+        MaterialIcon {
+            visible: Wallpapers.isVideo(root.modelData.path)
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.margins: Tokens.padding.small
+            text: "play_circle"
+            fill: 1
+            color: "white"
+            fontStyle: Tokens.font.icon.builders.large.build()
         }
     }
 

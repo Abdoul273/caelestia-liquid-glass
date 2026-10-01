@@ -4,9 +4,18 @@
 #   caelestia-animwall <fichier>   met ce fond animé
 #   caelestia-animwall off         revient à l'image fixe seule
 #   caelestia-animwall             affiche le fond animé actuel
+#   caelestia-animwall frames <vidéos...>  crée les miniatures manquantes (utilisé par le shell)
 set -e
 state="${XDG_STATE_HOME:-$HOME/.local/state}/caelestia/wallpaper"
 mkdir -p "$state"
+frames="$HOME/.local/share/caelestia/animated-frames"
+mkdir -p "$frames"
+
+# Image tirée de la vidéo vers 1 s (ou la première si la vidéo est plus courte)
+extract() {
+    ffmpeg -loglevel error -y -ss 1 -i "$1" -frames:v 1 -q:v 2 "$2" 2>/dev/null \
+        && [ -s "$2" ] || ffmpeg -loglevel error -y -i "$1" -frames:v 1 -q:v 2 "$2"
+}
 
 # Passe par le shell s'il tourne (il garde l'état en mémoire), sinon écrit le fichier
 set_animated() {
@@ -18,18 +27,22 @@ case "$1" in
     "")
         cat "$state/animated.txt" 2>/dev/null || echo "(aucun)"
         ;;
+    frames)
+        shift
+        for v in "$@"; do
+            out="$frames/$(basename "${v%.*}").jpg"
+            [ -s "$out" ] || extract "$v" "$out" || true
+        done
+        ;;
     off)
         set_animated ""
         ;;
     *)
         file=$(realpath "$1")
         [ -f "$file" ] || { echo "Fichier introuvable : $1" >&2; exit 1; }
-        # Image fixe pour la batterie (et pour les couleurs du thème) : une image vers 1 s
-        frames="$HOME/.local/share/caelestia/animated-frames"
-        mkdir -p "$frames"
+        # Image fixe pour la batterie (et pour les couleurs du thème)
         still="$frames/$(basename "${file%.*}").jpg"
-        ffmpeg -loglevel error -y -ss 1 -i "$file" -frames:v 1 -q:v 2 "$still" 2>/dev/null \
-            || ffmpeg -loglevel error -y -i "$file" -frames:v 1 -q:v 2 "$still"
+        [ -s "$still" ] || extract "$file" "$still"
         caelestia wallpaper -f "$still"
         set_animated "$file"
         echo "Fond animé : $file (image sur batterie : $still)"

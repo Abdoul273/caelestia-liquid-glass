@@ -21,6 +21,21 @@ Searcher {
     // Fond animé (vidéo ou GIF) joué par-dessus l'image, seulement sur secteur
     readonly property string animatedPath: `${Paths.state}/wallpaper/animated.txt`
     property string animated
+    // Vidéos du dossier : leur miniature (et l'image sur batterie) est une image tirée de la vidéo
+    readonly property string framesDir: `${Quickshell.env("HOME")}/.local/share/caelestia/animated-frames`
+    property int framesVersion // change quand de nouvelles miniatures sont prêtes
+    readonly property string selected: animated || actualCurrent
+
+    function isVideo(path: string): bool {
+        return /\.(mp4|webm|mkv|mov|avi)$/i.test(path);
+    }
+
+    function thumbFor(path: string): string {
+        if (!isVideo(path))
+            return path;
+        const name = path.slice(path.lastIndexOf("/") + 1).replace(/\.[^.]+$/, "");
+        return framesVersion > 0 ? `${framesDir}/${name}.jpg` : "";
+    }
     property string actualCurrent
     property bool previewColourLock
     property bool pendingPreviewClear
@@ -44,13 +59,18 @@ Searcher {
 
     // Choisir une image fixe dans le sélecteur remplace le fond animé
     function setWallpaper(path: string): void {
+        if (isVideo(path)) {
+            // caelestia-animwall tire l'image fixe, la met en fond et lance la vidéo
+            Quickshell.execDetached(["caelestia-animwall", path]);
+            return;
+        }
         setAnimated("");
         actualCurrent = path;
         Quickshell.execDetached(["caelestia", "wallpaper", "-f", path, ...smartArg]);
     }
 
     function preview(path: string): void {
-        previewPath = path;
+        previewPath = thumbFor(path);
         showPreview = true;
 
         if (Colours.scheme === "dynamic")
@@ -70,7 +90,7 @@ Searcher {
             Colours.showPreview = false;
     }
 
-    list: wallpapers.entries
+    list: [...wallpapers.entries, ...videos.entries]
     key: "relativePath"
     useFuzzy: GlobalConfig.launcher.useFuzzy.wallpapers
     extraOpts: useFuzzy ? ({}) : ({
@@ -139,6 +159,24 @@ Searcher {
         recursive: true
         path: Paths.wallsdir
         filter: FileSystemModel.Images
+    }
+
+    FileSystemModel {
+        id: videos
+
+        recursive: true
+        path: Paths.wallsdir
+        filter: FileSystemModel.Files
+        nameFilters: ["*.mp4", "*.webm", "*.mkv", "*.mov", "*.avi"]
+        onEntriesChanged: framesProc.running = true
+    }
+
+    // Crée les miniatures manquantes des vidéos
+    Process {
+        id: framesProc
+
+        command: ["caelestia-animwall", "frames", ...videos.entries.map(v => v.path)]
+        onExited: root.framesVersion++
     }
 
     Process {
