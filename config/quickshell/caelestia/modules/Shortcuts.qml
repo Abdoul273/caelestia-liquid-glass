@@ -24,7 +24,7 @@ Scope {
     }
 
     // Gouttes de verre de l'île (Spotlight, calculatrice, projection, presse-papiers…) : une seule à la fois
-    readonly property var drops: ["spotlight", "calculator", "display", "clipboard", "emoji", "keyhelp", "clock"]
+    readonly property var drops: ["spotlight", "calculator", "display", "clipboard", "emoji", "keyhelp", "clock", "settings"]
     function toggleDrop(kind: string): void {
         if (hasFullscreen)
             return;
@@ -48,7 +48,7 @@ Scope {
         // qmllint enable unresolved-type
         name: "nexus"
         description: qsTr("Ouvrir les paramètres Nexus")
-        onPressed: WindowFactory.create()
+        onPressed: root.toggleDrop("settings")
     }
 
     // qmllint disable unresolved-type
@@ -124,6 +124,14 @@ Scope {
         name: "clock"
         description: qsTr("Horloge (Super + Maj + O) : même goutte de verre")
         onPressed: root.toggleDrop("clock")
+    }
+
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
+        name: "settings"
+        description: qsTr("Paramètres (Super + I) : Nexus dans la goutte de verre")
+        onPressed: root.toggleDrop("settings")
     }
 
     // qmllint disable unresolved-type
@@ -253,6 +261,11 @@ Scope {
 
     IpcHandler {
         function open(): void {
+            const screenState = ShellState.forActive();
+            if (!screenState.settings)
+                root.toggleDrop("settings");
+        }
+        function window(): void {
             WindowFactory.create();
         }
 

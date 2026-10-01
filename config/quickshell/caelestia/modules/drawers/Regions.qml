@@ -58,6 +58,11 @@ Region {
     }
 
     R {
+        panel: root.panels.settings
+        width: root.panels.settings.visible ? panel.width : 0
+    }
+
+    R {
         panel: root.panels.display
         width: root.panels.display.visible ? panel.width : 0
     }
