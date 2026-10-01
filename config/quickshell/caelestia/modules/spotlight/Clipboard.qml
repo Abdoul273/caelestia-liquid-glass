@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.components
+import qs.components.effects
 import qs.services
 
 // Presse-papiers (Super + V) dans le même verre que l'île : une goutte tombe de l'île,
@@ -395,7 +396,7 @@ Item {
                 Repeater {
                     model: root.categories
 
-                    Rectangle {
+                    GlassButton {
                         id: chip
 
                         required property var modelData
@@ -403,15 +404,11 @@ Item {
 
                         width: chipRow.implicitWidth + 24
                         height: 32
-                        radius: 16
-                        color: active ? Qt.alpha(root.accent, 0.25) : chipArea.containsMouse ? Qt.alpha(root.fg, 0.1) : Qt.alpha(root.fg, 0.05)
-                        border.width: 1
-                        border.color: active ? Qt.alpha(root.accent, 0.55) : Qt.alpha(root.fg, 0.07)
-
-                        Behavior on color {
-                            ColorAnimation {
-                                duration: 150
-                            }
+                        tint: active ? Qt.alpha(root.accent, 0.32) : Qt.alpha(root.fg, 0.06)
+                        onClicked: {
+                            root.category = chip.modelData.key;
+                            root.sel = 0;
+                            input.forceActiveFocus();
                         }
 
                         Row {
@@ -433,18 +430,6 @@ Item {
                             }
                         }
 
-                        MouseArea {
-                            id: chipArea
-
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                root.category = chip.modelData.key;
-                                root.sel = 0;
-                                input.forceActiveFocus();
-                            }
-                        }
                     }
                 }
             }
@@ -476,16 +461,14 @@ Item {
                 highlightFollowsCurrentItem: false
                 onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
 
-                highlight: Rectangle {
+                highlight: GlassControl {
                     readonly property Item cur: list.currentItem
 
                     width: list.width
                     y: cur ? cur.y : 0
                     height: cur ? cur.height : 0
-                    radius: 12
-                    color: Qt.alpha(root.accent, Colours.light ? 0.2 : 0.28)
-                    border.width: 1
-                    border.color: Qt.alpha(root.accent, 0.35)
+                    tintColour: Qt.alpha(root.accent, Colours.light ? 0.3 : 0.36)
+                    radius: 13
                     visible: !!cur
 
                     Behavior on y {
@@ -674,7 +657,7 @@ Item {
                             }
                         ]
 
-                        Rectangle {
+                        GlassButton {
                             id: btn
 
                             required property var modelData
@@ -682,8 +665,16 @@ Item {
 
                             width: btnLbl.implicitWidth + 26
                             height: 32
-                            radius: 16
-                            color: main ? (btnArea.containsMouse ? Qt.lighter(root.accent, 1.15) : root.accent) : btnArea.containsMouse ? Qt.alpha(root.fg, 0.12) : Qt.alpha(root.fg, 0.06)
+                            tint: main ? Qt.alpha(root.accent, 0.85) : Qt.alpha(root.fg, 0.08)
+                            onClicked: {
+                                if (btn.modelData.act === "copy")
+                                    root.copyCurrent();
+                                else if (btn.modelData.act === "fav")
+                                    root.favCurrent();
+                                else
+                                    root.deleteCurrent();
+                                input.forceActiveFocus();
+                            }
 
                             Text {
                                 id: btnLbl
@@ -695,22 +686,6 @@ Item {
                                 font.pixelSize: 12
                             }
 
-                            MouseArea {
-                                id: btnArea
-
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    if (btn.modelData.act === "copy")
-                                        root.copyCurrent();
-                                    else if (btn.modelData.act === "fav")
-                                        root.favCurrent();
-                                    else
-                                        root.deleteCurrent();
-                                    input.forceActiveFocus();
-                                }
-                            }
                         }
                     }
                 }

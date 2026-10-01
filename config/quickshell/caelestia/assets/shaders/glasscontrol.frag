@@ -5,6 +5,8 @@
 // relief (biseau arrondi), éclairée par deux lumières, avec halo de Fresnel, franges de
 // couleur sur le bord et lumière concentrée en bas (caustique), comme un vrai verre épais.
 // `lens` = 1 pendant l'appui : le verre devient transparent, seuls les reflets restent.
+// `mouse` (0..1, négatif = absent) : une lumière suit le pointeur sur le verre et allume
+// le bord le plus proche, comme le liquid glass d'iOS 27.
 
 layout(location = 0) in vec2 qt_TexCoord0;
 layout(location = 0) out vec4 fragColor;
@@ -18,6 +20,7 @@ layout(std140, binding = 0) uniform buf {
     float lens;
     float hover;
     float light;
+    vec2 mouse;
 };
 
 float sdRound(vec2 p, vec2 b, float r) {
@@ -81,6 +84,18 @@ void main() {
 
     col = mix(col, vec3(1.0), hover * 0.06);
     a += hover * 0.04;
+
+    // Lumière qui suit le pointeur : tache douce sur le plateau + bord qui s'allume
+    if (mouse.x >= 0.0 && hover > 0.001) {
+        vec2 mp = (mouse - 0.5) * size;
+        float md = length(p - mp);
+        float rad = max(min(size.x, size.y) * 0.9, 18.0);
+        float spot = exp(-(md * md) / (2.0 * rad * rad)) * hover;
+        vec2 toM = normalize(mp - p + vec2(1e-4));
+        float edgeLit = max(dot(dir, toM), 0.0) * fres * exp(-(md * md) / (2.0 * (rad * 1.8) * (rad * 1.8))) * hover;
+        col = mix(col, vec3(1.0), clamp(spot * 0.10 + edgeLit * 0.9, 0.0, 1.0));
+        a += spot * 0.05 + edgeLit * 0.4;
+    }
 
     a = clamp(a, 0.0, 1.0) * aa * qt_Opacity;
     fragColor = vec4(col * a, a);

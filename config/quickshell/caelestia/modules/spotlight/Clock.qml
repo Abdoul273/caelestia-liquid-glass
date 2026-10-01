@@ -5,6 +5,7 @@ import QtQuick.Shapes
 import Quickshell
 import Quickshell.Io
 import qs.components
+import qs.components.effects
 import qs.services
 
 // Horloge façon macOS 27 (Super + Maj + O), dans le même verre que l'île :
@@ -410,35 +411,18 @@ Item {
         }
     }
 
-    // Bouton pilule (gris, orange, vert, rouge)
-    component Pill: Rectangle {
+    // Bouton pilule en liquid glass (gris, orange, vert, rouge)
+    component Pill: GlassButton {
         id: pill
 
         property string text
-        property color tint: Qt.alpha(root.fg, 0.12)
         property color textColour: root.fg
         property bool enabledPill: true
-        signal clicked
 
+        tint: Qt.alpha(root.fg, 0.12)
+        enabled: enabledPill
         width: Math.max(96, lbl.implicitWidth + 36)
         height: 42
-        radius: 21
-        color: pillArea.containsMouse && enabledPill ? Qt.lighter(tint, 1.18) : tint
-        opacity: enabledPill ? 1 : 0.4
-        scale: pillArea.pressed && enabledPill ? 0.94 : 1
-
-        Behavior on scale {
-            NumberAnimation {
-                duration: 200
-                easing.type: Easing.OutBack
-                easing.overshoot: 2
-            }
-        }
-        Behavior on color {
-            ColorAnimation {
-                duration: 150
-            }
-        }
 
         Text {
             id: lbl
@@ -448,16 +432,6 @@ Item {
             color: pill.textColour
             font.pixelSize: 14
             font.weight: Font.DemiBold
-        }
-
-        MouseArea {
-            id: pillArea
-
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: pill.enabledPill ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: if (pill.enabledPill)
-                pill.clicked()
         }
     }
 
@@ -729,7 +703,7 @@ Item {
                     }
                     Pill {
                         height: 36
-                        tint: root.orange
+                        tint: Qt.alpha(root.orange, 0.82)
                         textColour: "white"
                         text: ({
                                 pomoWork: qsTr("Pause"),
@@ -758,15 +732,12 @@ Item {
                     }
                 }
 
-                Rectangle {
+                GlassControl {
                     x: 3 + root.tab * (seg.width - 6) / 4
                     y: 3
                     width: (seg.width - 6) / 4
                     height: seg.height - 6
-                    radius: height / 2
-                    color: Qt.alpha(root.fg, Colours.light ? 0.9 : 0.16)
-                    border.width: 1
-                    border.color: Qt.alpha(root.fg, 0.12)
+                    tintColour: Qt.alpha(root.fg, Colours.light ? 0.75 : 0.16)
 
                     Behavior on x {
                         NumberAnimation {
@@ -940,7 +911,7 @@ Item {
                             Repeater {
                                 model: [1, 3, 5, 10, 15, 20, 25, 30, 45, 60]
 
-                                Rectangle {
+                                GlassButton {
                                     id: chip
 
                                     required property int modelData
@@ -948,10 +919,12 @@ Item {
 
                                     width: 74
                                     height: 30
-                                    radius: 15
-                                    color: active ? Qt.alpha(root.orange, 0.25) : chipArea.containsMouse ? Qt.alpha(root.fg, 0.12) : Qt.alpha(root.fg, 0.06)
-                                    border.width: 1
-                                    border.color: active ? Qt.alpha(root.orange, 0.6) : "transparent"
+                                    tint: active ? Qt.alpha(root.orange, 0.3) : Qt.alpha(root.fg, 0.07)
+                                    onClicked: {
+                                        root.tH = Math.floor(chip.modelData / 60);
+                                        root.tM = chip.modelData % 60;
+                                        root.tS = 0;
+                                    }
 
                                     Text {
                                         anchors.centerIn: parent
@@ -960,18 +933,6 @@ Item {
                                         font.pixelSize: 12
                                     }
 
-                                    MouseArea {
-                                        id: chipArea
-
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            root.tH = Math.floor(chip.modelData / 60);
-                                            root.tM = chip.modelData % 60;
-                                            root.tS = 0;
-                                        }
-                                    }
                                 }
                             }
                         }
@@ -1004,7 +965,7 @@ Item {
                                 onClicked: root.cmd(["addMinute"])
                             }
                             Pill {
-                                tint: root.timerOn && !root.paused ? Qt.alpha(root.orange, 0.25) : root.orange
+                                tint: root.timerOn && !root.paused ? Qt.alpha(root.orange, 0.25) : Qt.alpha(root.orange, 0.82)
                                 textColour: root.timerOn && !root.paused ? root.orange : "white"
                                 text: root.timerOn ? (root.paused ? qsTr("Reprendre") : qsTr("Pause")) : qsTr("Démarrer")
                                 onClicked: root.timerMain()
@@ -1277,15 +1238,19 @@ Item {
                                         Repeater {
                                             model: [-1, 1]
 
-                                            Rectangle {
+                                            GlassButton {
                                                 id: stepBtn
 
                                                 required property int modelData
 
                                                 width: 30
                                                 height: 30
-                                                radius: 15
-                                                color: stepArea.containsMouse ? Qt.alpha(root.fg, 0.16) : Qt.alpha(root.fg, 0.08)
+                                                tint: Qt.alpha(root.fg, 0.1)
+                                                onClicked: {
+                                                    const m = card.modelData;
+                                                    root[m.key] = Math.max(m.lo, Math.min(m.hi, root[m.key] + stepBtn.modelData * m.stepBy));
+                                                    root.savePrefs();
+                                                }
 
                                                 Text {
                                                     anchors.centerIn: parent
@@ -1294,18 +1259,6 @@ Item {
                                                     font.pixelSize: 17
                                                 }
 
-                                                MouseArea {
-                                                    id: stepArea
-
-                                                    anchors.fill: parent
-                                                    hoverEnabled: true
-                                                    cursorShape: Qt.PointingHandCursor
-                                                    onClicked: {
-                                                        const m = card.modelData;
-                                                        root[m.key] = Math.max(m.lo, Math.min(m.hi, root[m.key] + stepBtn.modelData * m.stepBy));
-                                                        root.savePrefs();
-                                                    }
-                                                }
                                             }
                                         }
                                     }
@@ -1324,7 +1277,7 @@ Item {
                                 onClicked: root.cmd(["stop"])
                             }
                             Pill {
-                                tint: root.pomoOn && !root.paused ? Qt.alpha(root.orange, 0.25) : root.orange
+                                tint: root.pomoOn && !root.paused ? Qt.alpha(root.orange, 0.25) : Qt.alpha(root.orange, 0.82)
                                 textColour: root.pomoOn && !root.paused ? root.orange : "white"
                                 text: root.pomoOn ? (root.paused ? qsTr("Reprendre") : qsTr("Pause")) : qsTr("Commencer")
                                 onClicked: root.pomoMain()
@@ -1347,16 +1300,23 @@ Item {
                             anchors.verticalCenter: addBtn.verticalCenter
                         }
 
-                        Rectangle {
+                        GlassButton {
                             id: addBtn
 
                             anchors.right: parent.right
                             anchors.rightMargin: 20
                             width: 36
                             height: 36
-                            radius: 18
-                            color: root.editing ? Qt.alpha(root.orange, 0.3) : addArea.containsMouse ? Qt.alpha(root.orange, 0.85) : root.orange
+                            tint: root.editing ? Qt.alpha(root.orange, 0.3) : Qt.alpha(root.orange, 0.82)
                             rotation: root.editing ? 45 : 0
+                            onClicked: {
+                                if (!root.editing) {
+                                    const d = new Date(root.now + 3600000);
+                                    root.aH = d.getHours();
+                                    root.aM = 0;
+                                }
+                                root.editing = !root.editing;
+                            }
 
                             Behavior on rotation {
                                 NumberAnimation {
@@ -1373,21 +1333,6 @@ Item {
                                 color: root.editing ? root.orange : "white"
                             }
 
-                            MouseArea {
-                                id: addArea
-
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    if (!root.editing) {
-                                        const d = new Date(root.now + 3600000);
-                                        root.aH = d.getHours();
-                                        root.aM = 0;
-                                    }
-                                    root.editing = !root.editing;
-                                }
-                            }
                         }
 
                         // Éditeur (glisse depuis le haut)
@@ -1460,7 +1405,7 @@ Item {
                                         // Lundi → dimanche (jour JavaScript : 0 = dimanche)
                                         model: [[1, "L"], [2, "M"], [3, "M"], [4, "J"], [5, "V"], [6, "S"], [0, "D"]]
 
-                                        Rectangle {
+                                        GlassButton {
                                             id: day
 
                                             required property var modelData
@@ -1468,8 +1413,8 @@ Item {
 
                                             width: 34
                                             height: 34
-                                            radius: 17
-                                            color: on ? root.orange : dayArea.containsMouse ? Qt.alpha(root.fg, 0.14) : Qt.alpha(root.fg, 0.07)
+                                            tint: on ? Qt.alpha(root.orange, 0.82) : Qt.alpha(root.fg, 0.08)
+                                            onClicked: root.aDays = day.on ? root.aDays.filter(d => d !== day.modelData[0]) : [...root.aDays, day.modelData[0]]
 
                                             Text {
                                                 anchors.centerIn: parent
@@ -1479,14 +1424,6 @@ Item {
                                                 font.weight: Font.DemiBold
                                             }
 
-                                            MouseArea {
-                                                id: dayArea
-
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: root.aDays = day.on ? root.aDays.filter(d => d !== day.modelData[0]) : [...root.aDays, day.modelData[0]]
-                                            }
                                         }
                                     }
                                 }
@@ -1494,7 +1431,7 @@ Item {
                                 Pill {
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     height: 38
-                                    tint: root.orange
+                                    tint: Qt.alpha(root.orange, 0.82)
                                     textColour: "white"
                                     text: root.aDays.length ? qsTr("Enregistrer") : qsTr("Enregistrer (une seule fois)")
                                     onClicked: root.addAlarm()
@@ -1583,13 +1520,20 @@ Item {
                                         }
                                     }
 
-                                    Rectangle {
+                                    GlassControl {
                                         x: al.modelData.enabled ? parent.width - width - 3 : 3
                                         anchors.verticalCenter: parent.verticalCenter
-                                        width: 22
+                                        width: knobArea.pressed ? 30 : 22
                                         height: 22
-                                        radius: 11
-                                        color: "white"
+                                        tintColour: Qt.alpha("white", 0.95)
+                                        pressed: knobArea.pressed
+
+                                        Behavior on width {
+                                            NumberAnimation {
+                                                duration: 200
+                                                easing.type: Easing.OutBack
+                                            }
+                                        }
 
                                         Behavior on x {
                                             NumberAnimation {
@@ -1600,6 +1544,8 @@ Item {
                                     }
 
                                     MouseArea {
+                                        id: knobArea
+
                                         anchors.fill: parent
                                         cursorShape: Qt.PointingHandCursor
                                         onClicked: root.saveAlarms(root.alarms.map(a => a.id === al.modelData.id ? Object.assign({}, a, {

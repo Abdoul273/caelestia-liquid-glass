@@ -12,12 +12,15 @@ ShaderEffect {
     property real radius: height / 2
     property bool pressed
     property bool hovered
+    // Position du pointeur (0..1) pour la lumière qui le suit ; x < 0 = pas de pointeur
+    property point pointer: Qt.point(-1, -1)
 
     readonly property vector2d size: Qt.vector2d(width, height)
     readonly property color tint: tintColour
     readonly property real light: Colours.light ? 1.2 : 1
     property real lens: pressed ? 1 : 0
     property real hover: hovered ? 1 : 0
+    readonly property point mouse: pointer
 
     blending: true
     fragmentShader: Qt.resolvedUrl(Quickshell.shellPath("assets/shaders/glasscontrol.frag.qsb"))

@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.components
+import qs.components.effects
 import qs.services
 
 // Emojis (Super + .) dans le même verre que l'île, façon sélecteur de macOS :
@@ -356,11 +357,9 @@ Item {
                 highlightMoveDuration: 120
                 onCurrentIndexChanged: positionViewAtIndex(currentIndex, GridView.Contain)
 
-                highlight: Rectangle {
-                    radius: 10
-                    color: Qt.alpha(root.accent, Colours.light ? 0.22 : 0.3)
-                    border.width: 1
-                    border.color: Qt.alpha(root.accent, 0.4)
+                highlight: GlassControl {
+                    tintColour: Qt.alpha(root.accent, Colours.light ? 0.3 : 0.36)
+                    radius: 13
                 }
 
                 delegate: Item {
@@ -434,7 +433,7 @@ Item {
                 Repeater {
                     model: root.categories
 
-                    Rectangle {
+                    GlassButton {
                         id: cat
 
                         required property var modelData
@@ -442,13 +441,12 @@ Item {
 
                         width: 36
                         height: 32
-                        radius: 10
-                        color: active ? Qt.alpha(root.accent, 0.25) : catArea.containsMouse ? Qt.alpha(root.fg, 0.1) : "transparent"
-
-                        Behavior on color {
-                            ColorAnimation {
-                                duration: 150
-                            }
+                        radius: 12
+                        tint: active ? Qt.alpha(root.accent, 0.32) : Qt.alpha(root.fg, hovered ? 0.07 : 0)
+                        onClicked: {
+                            input.text = "";
+                            root.category = cat.modelData.key;
+                            input.forceActiveFocus();
                         }
 
                         Text {
@@ -459,18 +457,6 @@ Item {
                             color: cat.active ? root.accent : root.fgDim
                         }
 
-                        MouseArea {
-                            id: catArea
-
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                input.text = "";
-                                root.category = cat.modelData.key;
-                                input.forceActiveFocus();
-                            }
-                        }
                     }
                 }
             }

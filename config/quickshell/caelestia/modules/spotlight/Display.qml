@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.components
+import qs.components.effects
 import qs.services
 
 // Projection (Super + P) dans le même verre que l'île : une goutte tombe de l'île et
@@ -303,13 +304,16 @@ Item {
                     }
                 }
 
-                Rectangle {
+                GlassButton {
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
                     width: moreLbl.implicitWidth + 24
                     height: 30
-                    radius: 15
-                    color: moreArea.containsMouse ? Qt.alpha(root.fg, 0.12) : Qt.alpha(root.fg, 0.06)
+                    tint: Qt.alpha(root.fg, 0.08)
+                    onClicked: {
+                        Quickshell.execDetached([root.tool]);
+                        root.close();
+                    }
 
                     Text {
                         id: moreLbl
@@ -320,17 +324,6 @@ Item {
                         font.pixelSize: 12
                     }
 
-                    MouseArea {
-                        id: moreArea
-
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            Quickshell.execDetached([root.tool]);
-                            root.close();
-                        }
-                    }
                 }
             }
 
@@ -345,7 +338,7 @@ Item {
                 Repeater {
                     model: root.modes
 
-                    Rectangle {
+                    GlassButton {
                         id: tile
 
                         required property var modelData
@@ -356,24 +349,21 @@ Item {
 
                         width: 147
                         height: 128
-                        radius: 20
-                        color: active ? Qt.alpha(root.accent, Colours.light ? 0.2 : 0.26) : tileArea.containsMouse && usable ? Qt.alpha(root.fg, 0.1) : Qt.alpha(root.fg, 0.05)
-                        border.width: focused ? 2 : 1
-                        border.color: active ? Qt.alpha(root.accent, 0.7) : focused ? Qt.alpha(root.fg, 0.35) : Qt.alpha(root.fg, 0.08)
-                        opacity: usable ? 1 : 0.4
-                        scale: tileArea.pressed && usable ? 0.95 : 1
+                        radius: 22
+                        tint: active ? Qt.alpha(root.accent, Colours.light ? 0.28 : 0.32) : Qt.alpha(root.fg, focused ? 0.11 : 0.06)
+                        enabled: usable
+                        cursorShape: usable ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        onEntered: root.sel = tile.index
+                        onClicked: root.apply(tile.modelData.key)
 
-                        Behavior on color {
-                            ColorAnimation {
-                                duration: 160
-                            }
-                        }
-                        Behavior on scale {
-                            NumberAnimation {
-                                duration: 220
-                                easing.type: Easing.OutBack
-                                easing.overshoot: 2
-                            }
+                        // Liseré de focus clavier
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 22
+                            color: "transparent"
+                            border.width: 2
+                            border.color: tile.active ? Qt.alpha(root.accent, 0.75) : Qt.alpha(root.fg, 0.3)
+                            visible: tile.focused || tile.active
                         }
 
                         // Petite illustration : portable à gauche, écran externe à droite
@@ -474,15 +464,6 @@ Item {
                             }
                         }
 
-                        MouseArea {
-                            id: tileArea
-
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: tile.usable ? Qt.PointingHandCursor : Qt.ArrowCursor
-                            onEntered: root.sel = tile.index
-                            onClicked: root.apply(tile.modelData.key)
-                        }
                     }
                 }
             }
@@ -505,7 +486,7 @@ Item {
                 Repeater {
                     model: root.positions
 
-                    Rectangle {
+                    GlassButton {
                         id: pos
 
                         required property var modelData
@@ -513,16 +494,8 @@ Item {
 
                         width: 147
                         height: 40
-                        radius: 20
-                        color: active ? Qt.alpha(root.accent, 0.25) : posArea.containsMouse ? Qt.alpha(root.fg, 0.1) : Qt.alpha(root.fg, 0.05)
-                        border.width: 1
-                        border.color: active ? Qt.alpha(root.accent, 0.6) : Qt.alpha(root.fg, 0.08)
-
-                        Behavior on color {
-                            ColorAnimation {
-                                duration: 150
-                            }
-                        }
+                        tint: active ? Qt.alpha(root.accent, 0.32) : Qt.alpha(root.fg, 0.06)
+                        onClicked: root.place(pos.modelData.key)
 
                         Text {
                             anchors.centerIn: parent
@@ -532,14 +505,6 @@ Item {
                             font.pixelSize: 13
                         }
 
-                        MouseArea {
-                            id: posArea
-
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.place(pos.modelData.key)
-                        }
                     }
                 }
             }

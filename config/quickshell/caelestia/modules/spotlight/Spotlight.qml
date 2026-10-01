@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Widgets
 import qs.components
+import qs.components.effects
 import qs.services
 
 // Spotlight façon macOS 27 (Super + Espace), dessiné dans le même verre que l'île :
@@ -375,16 +376,14 @@ Item {
                 onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
 
                 // Pastille de sélection qui glisse d'un résultat à l'autre
-                highlight: Rectangle {
+                highlight: GlassControl {
                     readonly property Item cur: results.currentItem
 
                     width: results.width
                     y: cur ? cur.y + cur.headerH : 0
                     height: cur ? cur.rowH : 0
-                    radius: 12
-                    color: Qt.alpha(root.accent, Colours.light ? 0.2 : 0.28)
-                    border.width: 1
-                    border.color: Qt.alpha(root.accent, 0.35)
+                    tintColour: Qt.alpha(root.accent, Colours.light ? 0.3 : 0.36)
+                    radius: 13
                     visible: !!cur
 
                     Behavior on y {
