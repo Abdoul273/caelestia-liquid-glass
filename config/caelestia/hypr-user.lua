@@ -113,6 +113,19 @@ for _, class in ipairs(glass_apps) do
     })
 end
 
+-- Applis Qt / KDE (KDE Connect, ses transferts et choix de fichier…) : leur style ne
+-- sait pas rendre un fond translucide, c'est donc Hyprland qui baisse l'opacité de
+-- toute la fenêtre (texte compris, d'où 0.86 pour rester lisible) sous le flou.
+-- Suit le réglage « gtk » : désactivé avec « off ».
+if glass_gtk_mode() ~= "off" then
+    hl.window_rule({
+        match        = { class = "org\\.kde\\..*|.*kdeconnect.*|kdeconnectd" },
+        opacity      = "0.86 override 0.8 override",
+        border_size  = 2,
+        border_color = glass_border,
+    })
+end
+
 -- Fenêtres de Caelestia (paramètres, choix de fichier) : taguées « opaque » par
 -- défaut, on les autorise à être translucides
 hl.window_rule({
