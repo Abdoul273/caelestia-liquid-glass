@@ -421,7 +421,7 @@ Item {
                         y: 9
                         text: row.it.section
                         color: root.fgDim
-                        font.pixelSize: 11.5
+                        font.pixelSize: 12
                         font.weight: Font.DemiBold
                     }
 
