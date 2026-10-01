@@ -44,7 +44,7 @@ Item {
         id: glassFrame
 
         anchors.fill: parent
-        layer.enabled: Glass.panels
+        layer.enabled: Glass.panels && !Glass.resetting
         layer.effect: GlassBlob {
             tintColour: root.blobColour
             tintOpacity: Colours.light ? 0.5 : 0.4
