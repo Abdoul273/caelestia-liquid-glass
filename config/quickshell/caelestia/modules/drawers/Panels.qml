@@ -44,6 +44,7 @@ Item {
     readonly property alias spotlight: spotlight
     readonly property alias calculator: calculator
     readonly property alias display: display
+    readonly property alias keyhelp: keyhelp
     readonly property alias emoji: emoji
     readonly property alias clipboard: clipboard
 
@@ -215,6 +216,18 @@ Item {
 
         anchors.horizontalCenter: parent.horizontalCenter
         y: Math.round(parent.height * 0.16)
+    }
+
+    // Raccourcis (Super + H) : recherche façon Spotlight
+    SpotlightModule.KeyHelp {
+        id: keyhelp
+
+        screen: root.screen
+        screenState: root.screenState
+        island: island
+
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: Math.round(parent.height * 0.2)
     }
 
     // Dock : sort du bas de l'écran au survol

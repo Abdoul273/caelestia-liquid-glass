@@ -173,7 +173,7 @@ hl.layer_rule({ match = { namespace = "kitty-quick-access" }, blur = true, ignor
 rebind("SUPER + grave", hl.dsp.exec_cmd("kitten quick-access-terminal"))
 
 rebind("SUPER + SHIFT + O", hl.dsp.exec_cmd(bin .. "caelestia-clock"))
-rebind("SUPER + H", hl.dsp.exec_cmd(bin .. "caelestia-shortcuts"))
+rebind("SUPER + H", hl.dsp.global("caelestia:keyhelp")) -- Raccourcis façon Spotlight dans le verre du shell
 
 
 -- ---------------------------------------------------------------------------

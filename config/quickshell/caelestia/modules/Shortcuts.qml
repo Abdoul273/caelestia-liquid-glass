@@ -24,7 +24,7 @@ Scope {
     }
 
     // Gouttes de verre de l'île (Spotlight, calculatrice, projection, presse-papiers…) : une seule à la fois
-    readonly property var drops: ["spotlight", "calculator", "display", "clipboard", "emoji"]
+    readonly property var drops: ["spotlight", "calculator", "display", "clipboard", "emoji", "keyhelp"]
     function toggleDrop(kind: string): void {
         if (hasFullscreen)
             return;
@@ -108,6 +108,14 @@ Scope {
         name: "emoji"
         description: qsTr("Emojis (Super + .) : même goutte de verre")
         onPressed: root.toggleDrop("emoji")
+    }
+
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
+        name: "keyhelp"
+        description: qsTr("Raccourcis (Super + H) : recherche façon Spotlight")
+        onPressed: root.toggleDrop("keyhelp")
     }
 
     // qmllint disable unresolved-type

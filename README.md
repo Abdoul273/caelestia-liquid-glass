@@ -50,7 +50,7 @@ Verre translucide partout, Mission Control, Spotlight, animations fluides façon
     ```
 - **Mission Control** (`Super + Tab` ou **3 doigts vers le haut**) : tes fenêtres glissent en grille, tes bureaux s'affichent en haut, et un clic t'y emmène.
 - **Spotlight** (`Super + Espace`) : **lance tes apps** (la meilleure en grand, Entrée pour l'ouvrir), actions du système (verrouiller, veille, éteindre, paramètres, Horloge…), **fichiers** de ton dossier perso, calculs et conversions, puis suggestions Google, fiche Wikipédia et résultats web.
-- **Calculatrice** (`Super + O`) : le résultat s'affiche pendant que tu tapes (`12,5 × 4 + 20 %`), et Entrée le copie.
+- **Calculatrice** (`Super + O`) : une seule ligne dans le verre de l'île ; le résultat apparaît en grand pendant que tu tapes (`12,5 × 4 + 20 %`), Entrée le copie, ↑ rappelle l'historique.
 - **Horloge** (`Super + Maj + O`) : minuteur avec anneau, chronomètre à cadran et tours, pomodoro automatique et alarmes. Tout tourne dans la Dynamic Island : le minuteur continue et l'alarme sonne même app fermée.
 - **Aperçu rapide** : dans Nautilus, sélectionne un fichier et appuie sur **Espace**.
 - **Indicateur de bureau** en verre pendant les changements de bureau.
@@ -60,10 +60,10 @@ Verre translucide partout, Mission Control, Spotlight, animations fluides façon
 ### ⌨️ Outils intégrés
 | Outil | Raccourci |
 |---|---|
-| **Tous les raccourcis** (fenêtre de recherche) | `Super + H` |
+| **Tous les raccourcis** (recherche, Entrée les déclenche) | `Super + H` |
 | Presse-papiers (texte, images, liens, favoris) | `Super + V` |
 | Emojis et symboles | `Super + .` |
-| Choix de l'affichage (écran externe, dupliquer…) | `Super + P` |
+| Projection (écran du PC, dupliquer, étendre, deuxième écran) | `Super + P` |
 | Paramètres de Caelestia | `Super + I` |
 
 ### 🎧 Petits plus
@@ -126,7 +126,7 @@ Options :
 
 ## ⌨️ Raccourcis et gestes
 
-Appuie sur **`Super + H`** : une fenêtre en verre liste **tous** les raccourcis du système, avec une recherche.
+Appuie sur **`Super + H`** : une ligne de recherche façon Spotlight tombe de l'île ; tape ce que tu cherches (« capture », « bureau »…), les touches s'affichent, et **Entrée déclenche le raccourci**.
 
 ### Essentiels
 | Raccourci | Action |

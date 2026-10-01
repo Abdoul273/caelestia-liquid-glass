@@ -24,11 +24,11 @@ CSS_FILE = Path.home() / ".config/caelestia-shortcuts/style.css"
 SHORTCUTS = [
     ("Essentiels", "󰌌", [
         ("Super", "Ouvrir le lanceur d'applications (appui seul, puis relâcher)"),
-        ("Super + Espace", "Spotlight : apps (Entrée pour lancer), actions (verrouiller, veille…), fichiers, calculs, conversions, web"),
-        ("Super + O", "Calculatrice (chiffres et opérateurs uniquement)"),
+        ("Super + Espace", "Spotlight dans le verre de l'île : apps, actions, calculs, notes, tâches, fichiers, web"),
+        ("Super + O", "Calculatrice : une ligne, résultat en grand, Entrée copie, ↑ historique"),
         ("Super + Maj + O", "Horloge : minuteur, chrono, pomodoro, alarmes (reliée à la Dynamic Island)"),
         ("Super + Tab", "Mission Control : voir toutes les fenêtres et bureaux"),
-        ("Super + H", "Afficher cette fenêtre des raccourcis"),
+        ("Super + H", "Rechercher un raccourci (Entrée le déclenche)"),
         ("Super + I", "Ouvrir les paramètres de Caelestia"),
         ("Super + Retour arrière", "Menu éteindre / redémarrer / verrouiller"),
         ("Super + L", "Verrouiller l'écran"),
@@ -41,7 +41,7 @@ SHORTCUTS = [
         ("Super + E", "Fichiers (Nautilus)"),
         ("Super + C", "Éditeur de code"),
         ("Ctrl + Alt + V", "Réglages audio (pwvucontrol)"),
-        ("Super + P", "Choisir l'affichage (écran externe, dupliquer…)"),
+        ("Super + P", "Projection : écran du PC, dupliquer, étendre, deuxième écran"),
     ]),
     ("Terminal kitty", "", [
         ("Ctrl + Maj + Alt + P", "Palette : chercher et lancer n'importe quelle action kitty"),
@@ -125,11 +125,11 @@ SHORTCUTS = [
         ("Super + Maj + C", "Pipette : copier une couleur de l'écran"),
     ]),
     ("Presse-papiers et saisie", "󰅌", [
-        ("Super + V", "Historique du presse-papiers"),
+        ("Super + V", "Presse-papiers : recherche, filtres, aperçu, épingler"),
         ("Super + Alt + V", "Supprimer une entrée du presse-papiers"),
         ("Super + Maj + V", "Épingler une entrée du presse-papiers"),
         ("Ctrl + Maj + Alt + V", "Taper le dernier élément copié"),
-        ("Super + .", "Emojis et symboles"),
+        ("Super + .", "Emojis, kaomoji et symboles (insérés dans la fenêtre)"),
     ]),
     ("Média et son", "󰝚", [
         ("Ctrl + Super + Espace | ⏯", "Lecture / pause"),
@@ -353,5 +353,64 @@ class ShortcutsApp(Gtk.Application):
         return False
 
 
+# ---------------------------------------------------------------- shell : liste JSON + touches simulées
+
+KEYCODES = {
+    "super": 125, "ctrl": 29, "maj": 42, "shift": 42, "alt": 56,
+    "espace": 57, "tab": 15, "retour arrière": 14, "entrée": 28, "échap": 1,
+    "←": 105, "→": 106, "↑": 103, "↓": 108, "page↑": 104, "page↓": 109,
+    ",": 51, ".": 52, "`": 41, "−": 12, "-": 12, "=": 13, "\\": 43,
+    "impr. écran": 99, "f12": 88,
+}
+KEYCODES.update({c: code for c, code in zip("qwertyuiop", range(16, 26))})
+KEYCODES.update({c: code for c, code in zip("asdfghjkl", range(30, 39))})
+KEYCODES.update({c: code for c, code in zip("zxcvbnm", range(44, 51))})
+KEYCODES.update({str(d): 2 + (d - 1) % 10 for d in range(1, 10)})
+KEYCODES["0"] = 11
+
+
+def key_codes(keys: str) -> list[int] | None:
+    """« Super + Maj + S » → codes evdev, ou None si ce n'est pas une combinaison simple."""
+    first = keys.split("|")[0].strip()
+    if any(w in first.lower() for w in ("…", "puis", "clic", "molette", "doigt", "touche", "souris", "glisser", "survol")):
+        return None
+    codes = []
+    for part in [p.strip().lower() for p in first.split("+")]:
+        if part in ("← → ↑ ↓",) or not part:
+            return None
+        if part not in KEYCODES:
+            return None
+        codes.append(KEYCODES[part])
+    return codes or None
+
+
+def dump_json() -> int:
+    import json
+    out = []
+    for cat, icon, rows in SHORTCUTS:
+        for keys, desc in rows:
+            out.append({"cat": cat, "icon": icon, "keys": keys, "desc": desc,
+                        "run": key_codes(keys) is not None and keys != "Super + H"})
+    print(json.dumps(out, ensure_ascii=False))
+    return 0
+
+
+def press(keys: str) -> int:
+    """Rejoue la combinaison avec ydotool, une fois le panneau refermé."""
+    import subprocess
+    import time
+    codes = key_codes(keys)
+    if not codes:
+        return 1
+    time.sleep(0.3)
+    seq = [f"{c}:1" for c in codes] + [f"{c}:0" for c in reversed(codes)]
+    subprocess.run(["ydotool", "key", *seq], check=False)
+    return 0
+
+
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "--json":
+        raise SystemExit(dump_json())
+    if len(sys.argv) > 2 and sys.argv[1] == "--press":
+        raise SystemExit(press(sys.argv[2]))
     raise SystemExit(ShortcutsApp().run([sys.argv[0]]))

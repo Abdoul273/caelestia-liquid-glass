@@ -70,7 +70,7 @@ StyledWindow {
     name: "drawers"
     WlrLayershell.exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: (fsTransitionProg > 0 && contentItem.Config.general.showOverFullscreen) || (hasSpecialWorkspace && hasFullscreenOnNormalWs) ? WlrLayer.Overlay : WlrLayer.Top
-    WlrLayershell.keyboardFocus: screenState.launcher || screenState.session || screenState.notesActive || screenState.controlCenter || screenState.spotlight || screenState.calculator || screenState.display || screenState.clipboard || screenState.emoji ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: screenState.launcher || screenState.session || screenState.notesActive || screenState.controlCenter || screenState.spotlight || screenState.calculator || screenState.display || screenState.clipboard || screenState.emoji || screenState.keyhelp ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
     mask: hasFullscreen ? emptyRegion : regions
 
@@ -117,7 +117,7 @@ StyledWindow {
         active: {
             const s = root.screenState;
             const conf = root.contentItem.Config;
-            if ((s.launcher && conf.launcher.enabled) || (s.session && conf.session.enabled) || (s.sidebar && conf.sidebar.enabled) || s.controlCenter || s.spotlight || s.calculator || s.display || s.clipboard || s.emoji)
+            if ((s.launcher && conf.launcher.enabled) || (s.session && conf.session.enabled) || (s.sidebar && conf.sidebar.enabled) || s.controlCenter || s.spotlight || s.calculator || s.display || s.clipboard || s.emoji || s.keyhelp)
                 return true;
             if (!conf.dashboard.showOnHover && s.dashboard && conf.dashboard.enabled)
                 return true;
@@ -135,6 +135,7 @@ StyledWindow {
             root.screenState.spotlight = false;
             root.screenState.calculator = false;
             root.screenState.display = false;
+            root.screenState.keyhelp = false;
             root.screenState.emoji = false;
             root.screenState.clipboard = false;
             panels.popouts.hasCurrent = false;
@@ -320,6 +321,22 @@ StyledWindow {
             readonly property var gp: panels.emoji
 
             panel: panels.emoji
+            deformAmount: 0.1
+            visible: gp.visible
+            radius: gp.curR
+            x: gp.curX + bar.implicitWidth
+            implicitWidth: gp.curW
+            y: gp.visible ? gp.curTop + root.borderThickness : -400
+            implicitHeight: gp.visible ? Math.max(0, gp.curBottom - gp.curTop) : 0
+        }
+
+        // Raccourcis (Super + H) : recherche façon Spotlight
+        PanelBg {
+            id: keyhelpBg
+
+            readonly property var gp: panels.keyhelp
+
+            panel: panels.keyhelp
             deformAmount: 0.1
             visible: gp.visible
             radius: gp.curR
@@ -566,6 +583,9 @@ StyledWindow {
             }
             emoji.transform: Matrix4x4 {
                 matrix: emojiBg.deformMatrix
+            }
+            keyhelp.transform: Matrix4x4 {
+                matrix: keyhelpBg.deformMatrix
             }
             display.transform: Matrix4x4 {
                 matrix: displayBg.deformMatrix
