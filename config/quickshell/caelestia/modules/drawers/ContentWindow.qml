@@ -416,6 +416,59 @@ StyledWindow {
         textureSize: Qt.size(Math.round(width / 4), Math.round(height / 4))
     }
 
+    // Verre « eau » : image de ce qu'il y a derrière le verre, refaite à chaque image —
+    // fond d'écran + fenêtres du bureau actif capturées en direct (les flottantes au-dessus).
+    Item {
+        id: behindScene
+
+        anchors.fill: parent
+        visible: false
+
+        Image {
+            anchors.fill: parent
+            asynchronous: true
+            cache: false
+            fillMode: Image.PreserveAspectCrop
+            sourceSize: Qt.size(width, height)
+            source: Glass.water && Wallpapers.current ? `file://${Wallpapers.current}` : ""
+        }
+
+        Repeater {
+            model: {
+                if (!Glass.water || !root.monitor || root.hasFullscreen)
+                    return [];
+                const wins = [...(root.monitor.activeWorkspace?.toplevels.values ?? [])];
+                const special = root.monitor.lastIpcObject.specialWorkspace?.name;
+                if (special)
+                    wins.push(...(Hypr.workspaces.values.find(ws => ws.name === special)?.toplevels.values ?? []));
+                return wins.filter(w => w.wayland).sort((a, b) => (a.lastIpcObject.floating ? 1 : 0) - (b.lastIpcObject.floating ? 1 : 0));
+            }
+
+            ScreencopyView {
+                required property var modelData
+                readonly property var ipc: modelData.lastIpcObject
+
+                x: (ipc.at?.[0] ?? 0) - root.monitor.x
+                y: (ipc.at?.[1] ?? 0) - root.monitor.y
+                width: ipc.size?.[0] ?? 0
+                height: ipc.size?.[1] ?? 0
+                captureSource: modelData.wayland // qmllint disable unresolved-type
+                live: true
+            }
+        }
+    }
+
+    ShaderEffectSource {
+        id: behindSceneTex
+
+        anchors.fill: parent
+        sourceItem: Glass.water ? behindScene : null
+        hideSource: true
+        live: true
+        visible: false
+        smooth: true
+    }
+
     // Cadre, barre, sidebar et utilitaires en liquid glass
     Component {
         id: glassBlobEffect
@@ -426,10 +479,16 @@ StyledWindow {
             readonly property real refraction: wallpaperImg.status === Image.Ready ? 1 : 0
             readonly property var wallpaper: wallpaperTex
             readonly property var windows: windowMaskTex
+            // Uniformes du style « eau »
+            readonly property var scene: behindSceneTex
+            readonly property real hasScene: Glass.water ? 1 : 0
+            readonly property real lensWidth: 30
+            readonly property real lensDepth: 34
+            readonly property real frost: 1.2
 
             readonly property vector2d texel: Qt.vector2d(1 / Math.max(1, width), 1 / Math.max(1, height))
             readonly property vector3d tint: Qt.vector3d(root.surfaceColour.r, root.surfaceColour.g, root.surfaceColour.b)
-            readonly property real tintAlpha: Glass.ios ? (Colours.light ? 0.3 : 0.24) : Colours.light ? 0.56 : 0.46
+            readonly property real tintAlpha: Glass.water ? (Colours.light ? 0.1 : 0.12) : Glass.ios ? (Colours.light ? 0.3 : 0.24) : Colours.light ? 0.56 : 0.46
             readonly property real light: Colours.light ? 1.2 : 1
             readonly property real shadowStrength: 0.17 * Math.max(0, root.shadowOpacity) / 0.7
             readonly property point mouse: Qt.point(interactions.mouseX / Math.max(1, width), interactions.mouseY / Math.max(1, height))
@@ -442,7 +501,7 @@ StyledWindow {
                 }
             }
 
-            fragmentShader: Qt.resolvedUrl(Quickshell.shellPath(Glass.ios ? "assets/shaders/liquidios.frag.qsb" : "assets/shaders/glassblob.frag.qsb"))
+            fragmentShader: Qt.resolvedUrl(Quickshell.shellPath(Glass.water ? "assets/shaders/liquidwater.frag.qsb" : Glass.ios ? "assets/shaders/liquidios.frag.qsb" : "assets/shaders/glassblob.frag.qsb"))
         }
     }
 

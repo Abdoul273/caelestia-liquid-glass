@@ -11,10 +11,14 @@ Singleton {
     id: root
 
     readonly property bool panels: true
-    // Rendu du verre : "ios" = liquid glass façon iOS 26/27 (verre clair, réfraction, franges
-    // de couleur, épaisseur) ; "classic" = le verre précédent (teinte + flou + liseré).
-    readonly property string style: "ios"
-    readonly property bool ios: panels && style === "ios"
+    // Rendu du verre :
+    //  "water"   = liquid glass façon macOS 26/27 : on voit vraiment à travers (fond d'écran ET
+    //              fenêtres capturées en direct), courbé comme de l'eau sur les bords ;
+    //  "ios"     = version précédente (réfraction du fond d'écran seulement, flou de Hyprland ailleurs) ;
+    //  "classic" = teinte + flou + liseré.
+    readonly property string style: "water"
+    readonly property bool water: panels && style === "water"
+    readonly property bool ios: panels && (style === "ios" || style === "water")
     // Boutons et interrupteurs façon macOS (reflet, liseré, curseur lentille). false = style d'origine.
     readonly property bool controls: panels
     // Contrôles en verre bombé (shader glasscontrol) au lieu des simples dégradés. false = version d'avant.
