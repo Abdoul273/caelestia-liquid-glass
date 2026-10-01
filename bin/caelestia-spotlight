@@ -809,6 +809,7 @@ class Spotlight(Gtk.Application):
     def build(self) -> None:
         calc = self.mode == "calc"
         self.window = Gtk.ApplicationWindow(application=self)
+        self.window.add_css_class("caelestia-tool")  # exclu du verre GTK générique
         self.window.set_title("Calculatrice" if calc else "Recherche")
         self.window.set_default_size(560 if calc else 720, 380 if calc else 640)
         self.window.set_resizable(False)
@@ -1520,6 +1521,7 @@ class Calculator(Gtk.Application):
 
     def build(self) -> None:
         self.window = Gtk.ApplicationWindow(application=self)
+        self.window.add_css_class("caelestia-tool")  # exclu du verre GTK générique
         self.window.set_title("Calculatrice")
         self.window.set_default_size(380, 640)
         self.window.set_resizable(False)

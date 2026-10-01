@@ -25,7 +25,7 @@ Verre translucide partout, Mission Control, Spotlight, animations fluides façon
 - **Deux shaders écrits sur mesure** (biseau éclairé, légère aberration chromatique, reflet spéculaire), le flou venant de Hyprland.
 - **Notifications en verre**, avec une arrivée en douceur.
 - **Écran de connexion façon macOS** (SDDM) : ton fond d'écran avec une grande horloge, puis, à la première touche, un flou, ta photo et un champ de mot de passe en verre. Le fond d'écran et la photo se synchronisent tout seuls avec ton bureau.
-- **kitty, Nautilus et les outils en verre** : fond translucide et flouté, **texte toujours net**, et le même liseré de verre sur le bord des fenêtres.
+- **kitty, les applis GTK et les outils en verre** : Nautilus, Calculatrice, Éditeur de texte, Loupe, pavucontrol, Thunar, sélecteur de fichiers… fond translucide et flouté, **texte toujours net**, barre latérale flottante façon Finder et le même liseré de verre sur le bord des fenêtres.
 - **kitty survitaminé** : barre d'onglets en pilules (icône du programme, disposition, batterie, heure), terminal déroulant (``Super + ` ``), splits au clavier, recherche floue dans l'historique, sortie de la dernière commande, hints (liens, chemins, `fichier:ligne` → nvim), diffusion dans tous les panneaux, sessions, notification quand une longue commande finit, palette de commandes (`Ctrl + Maj + Alt + P`).
 - **Prompt Starship en capsules** : distribution + utilisateur, dossier, git, langages, durée, erreurs et heure dans des capsules Catppuccin Mocha reliées par une ligne.
 - **Les couleurs suivent ton fond d'écran** : tout est régénéré automatiquement à chaque changement de thème.
@@ -201,7 +201,7 @@ Non. Les shaders ne calculent presque rien en dehors des bords du verre. Mesuré
 **Ma version de caelestia-shell est différente.**
 Liquid Glass remplace le shell de Caelestia par une version modifiée, prévue pour `caelestia-shell` 2.3. Avec une autre version, l'installateur te prévient avant de continuer. En cas de problème, `./uninstall` remet tout comme avant.
 
-**Le verre de Nautilus a disparu après un changement de fond d'écran.**
+**Le verre des applis GTK (Nautilus…) a disparu après un changement de fond d'écran.**
 Un petit service le remet automatiquement. Vérifie qu'il est actif : `systemctl --user status caelestia-glass-gtk.path`.
 
 **Comment retirer l'écran de démarrage ?**

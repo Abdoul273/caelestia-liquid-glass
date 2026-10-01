@@ -212,6 +212,7 @@ class ShortcutsApp(Gtk.Application):
 
     def build(self) -> None:
         self.window = Gtk.ApplicationWindow(application=self)
+        self.window.add_css_class("caelestia-tool")  # exclu du verre GTK générique
         self.window.set_title("Raccourcis")
         self.window.set_default_size(1120, 760)
         self.window.connect("close-request", self.on_close)

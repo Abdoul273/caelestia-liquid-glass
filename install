@@ -299,11 +299,10 @@ install_files() {
     ok "Prompt Starship (capsules Catppuccin Mocha)"
 
     install_item config/gtk-4.0/liquid-glass.css "$HOME/.config/gtk-4.0/liquid-glass.css"
-    backup_path "$HOME/.config/gtk-3.0/liquid-glass.css"
-    run mkdir -p "$HOME/.config/gtk-3.0"
-    run ln -sf "$HOME/.config/gtk-4.0/liquid-glass.css" "$HOME/.config/gtk-3.0/liquid-glass.css"
-    record "$HOME/.config/gtk-3.0/liquid-glass.css"
-    ok "Nautilus en verre"
+    # Ancienne version : lien vers le fichier GTK 4 (cp écrirait à travers)
+    [[ -L $HOME/.config/gtk-3.0/liquid-glass.css ]] && run rm -f "$HOME/.config/gtk-3.0/liquid-glass.css"
+    install_item config/gtk-3.0/liquid-glass.css "$HOME/.config/gtk-3.0/liquid-glass.css"
+    ok "Applis GTK en verre (Nautilus, Calculatrice, Éditeur de texte, Loupe, Thunar…)"
 
     for unit in "$REPO_DIR"/config/systemd/user/*; do
         install_item "config/systemd/user/$(basename "$unit")" "$HOME/.config/systemd/user/$(basename "$unit")"

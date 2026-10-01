@@ -1,11 +1,16 @@
-/* Liquid glass pour Nautilus — retirer la ligne « @import "liquid-glass.css"; »
- * de gtk.css (et du modèle Caelestia) pour revenir en arrière.
+/* Liquid glass pour les applis GTK 4 / libadwaita (Nautilus, Calculatrice,
+ * Éditeur de texte, Loupe, pavucontrol, sélecteur de fichiers…).
+ * Retirer la ligne « @import "liquid-glass.css"; » de gtk.css (et du modèle
+ * Caelestia) pour revenir en arrière.
  * Le flou vient de Hyprland ; ici on rend seulement les fonds translucides,
- * le texte et les icônes restent nets. Tout est limité à .nautilus-window. */
+ * le texte et les icônes restent nets. Les outils Caelestia (classe
+ * .caelestia-tool) gardent leur propre style. */
 
-/* Verre de base : libadwaita 1.6+ tire ses fonds de variables CSS, on les rend translucides */
-window.nautilus-window {
-  --window-bg-color: alpha(#131317, 0.46);
+/* ---------------------------------------------------------------------------
+ *  Verre de base : libadwaita 1.6+ tire ses fonds de variables CSS
+ * ------------------------------------------------------------------------- */
+window.background:not(.caelestia-tool) {
+  --window-bg-color: alpha(#131317, 0.50);
   --view-bg-color: transparent;
   --headerbar-bg-color: transparent;
   --headerbar-backdrop-color: transparent;
@@ -14,103 +19,197 @@ window.nautilus-window {
   --sidebar-backdrop-color: transparent;
   --sidebar-shade-color: alpha(white, 0.06);
   --secondary-sidebar-bg-color: transparent;
+  --secondary-sidebar-backdrop-color: transparent;
   --card-bg-color: alpha(white, 0.05);
-  background-color: alpha(@window_bg_color, 0.46);
+  --card-shade-color: alpha(black, 0.18);
+  --thumbnail-bg-color: alpha(white, 0.06);
+  --dialog-bg-color: alpha(#1a1a20, 0.90);
+  --popover-bg-color: alpha(#1c1c22, 0.86);
+  background-color: alpha(@window_bg_color, 0.50);
   /* Voile lumineux en haut, comme une lentille éclairée d'en haut */
   background-image: linear-gradient(to bottom, alpha(white, 0.06), alpha(white, 0.015) 35%, transparent 70%);
 }
 
-/* Barre latérale : la plus transparente, comme le Finder */
-window.nautilus-window .sidebar-pane,
-window.nautilus-window .sidebar-pane toolbarview,
-window.nautilus-window .sidebar-pane headerbar,
-window.nautilus-window .navigation-sidebar,
-window.nautilus-window placessidebar,
-window.nautilus-window placessidebar list {
-  background-color: transparent;
-  background-image: none;
-  box-shadow: none;
+/* Fenêtres sans barre latérale : un peu plus teintées pour la lecture */
+window.background.dialog:not(.caelestia-tool),
+window.background.messagedialog:not(.caelestia-tool) {
+  background-color: alpha(@window_bg_color, 0.78);
 }
 
-/* Zone des fichiers : une plaque de verre un peu plus teintée pour la lisibilité */
-window.nautilus-window .content-pane,
-window.nautilus-window .content-pane > toolbarview {
-  background-color: alpha(@view_bg_color, 0.38);
-  background-image: none;
-}
-
-window.nautilus-window .view,
-window.nautilus-window gridview,
-window.nautilus-window columnview,
-window.nautilus-window columnview > listview,
-window.nautilus-window listview,
-window.nautilus-window scrolledwindow,
-window.nautilus-window viewport,
-window.nautilus-window .nautilus-list-view,
-window.nautilus-window .nautilus-grid-view {
+/* Fonds intérieurs : on laisse passer le verre */
+window.background:not(.caelestia-tool) toolbarview,
+window.background:not(.caelestia-tool) scrolledwindow,
+window.background:not(.caelestia-tool) viewport,
+window.background:not(.caelestia-tool) .view:not(textview):not(text),
+window.background:not(.caelestia-tool) gridview,
+window.background:not(.caelestia-tool) columnview,
+window.background:not(.caelestia-tool) columnview > listview,
+window.background:not(.caelestia-tool) listview,
+window.background:not(.caelestia-tool) .navigation-sidebar,
+window.background:not(.caelestia-tool) .sidebar-pane,
+window.background:not(.caelestia-tool) .content-pane {
   background-color: transparent;
   background-image: none;
 }
 
 /* Barre du haut fondue dans le verre, avec un fin liseré lumineux en bas */
-window.nautilus-window headerbar,
-window.nautilus-window .top-bar {
+window.background:not(.caelestia-tool) headerbar,
+window.background:not(.caelestia-tool) .top-bar {
   background-color: transparent;
   background-image: none;
   box-shadow: inset 0 -1px alpha(white, 0.06);
 }
-
-/* Séparateur entre la barre latérale et les fichiers : un trait de lumière */
-window.nautilus-window .content-pane {
-  box-shadow: inset 1px 0 alpha(white, 0.07);
+window.background:not(.caelestia-tool) .sidebar-pane headerbar,
+window.background:not(.caelestia-tool) toolbarview > .top-bar headerbar,
+window.background:not(.caelestia-tool) toolbarview.undershoot-top > .top-bar headerbar {
+  box-shadow: none;
 }
 
-/* Barre de chemin et recherche : petites plaques de verre */
-window.nautilus-window .path-bar-box,
-window.nautilus-window .nautilus-path-bar,
-window.nautilus-window headerbar entry,
-window.nautilus-window searchbar entry {
-  background-color: alpha(white, 0.06);
-  box-shadow: inset 0 1px alpha(white, 0.08);
+/* ---------------------------------------------------------------------------
+ *  Barre latérale flottante, façon Finder (macOS Tahoe)
+ * ------------------------------------------------------------------------- */
+window.background:not(.caelestia-tool) .sidebar-pane {
+  margin: 8px 0 8px 8px;
+  border-radius: 18px;
+  background-color: alpha(white, 0.045);
+  background-image: linear-gradient(to bottom, alpha(white, 0.05), transparent 40%);
+  box-shadow:
+    inset 0 1px alpha(white, 0.14),
+    inset 0 0 0 1px alpha(white, 0.06),
+    0 6px 20px alpha(black, 0.22);
+}
+window.background:not(.caelestia-tool) .sidebar-pane:dir(rtl) {
+  margin: 8px 8px 8px 0;
+}
+/* Pas de trait de séparation : la barre flotte au-dessus du contenu */
+window.background:not(.caelestia-tool) .content-pane {
+  box-shadow: none;
+}
+window.background:not(.caelestia-tool) .sidebar-pane .navigation-sidebar {
+  padding: 2px 6px;
+}
+
+/* Lignes de barre latérale : survol et sélection en verre */
+window.background:not(.caelestia-tool) .navigation-sidebar > row {
   border-radius: 10px;
-}
-
-/* Lignes de la barre latérale : survol et sélection en verre */
-window.nautilus-window .navigation-sidebar row {
-  border-radius: 9px;
+  margin: 1px 0;
   transition: background-color 180ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
-
-window.nautilus-window .navigation-sidebar row:hover {
-  background-color: alpha(white, 0.06);
+window.background:not(.caelestia-tool) .navigation-sidebar > row:hover {
+  background-color: alpha(white, 0.07);
+}
+window.background:not(.caelestia-tool) .navigation-sidebar > row:selected {
+  background-color: alpha(@accent_bg_color, 0.24);
+  box-shadow: inset 0 1px alpha(white, 0.12);
 }
 
-window.nautilus-window .navigation-sidebar row:selected {
-  background-color: alpha(@accent_bg_color, 0.22);
+/* ---------------------------------------------------------------------------
+ *  Contrôles : petites plaques de verre
+ * ------------------------------------------------------------------------- */
+window.background:not(.caelestia-tool) entry,
+window.background:not(.caelestia-tool) spinbutton,
+window.background:not(.caelestia-tool) dropdown > button,
+window.background:not(.caelestia-tool) .path-bar-box,
+window.background:not(.caelestia-tool) .nautilus-path-bar {
+  background-color: alpha(white, 0.07);
+  box-shadow: inset 0 1px alpha(white, 0.09);
+  border-radius: 10px;
+}
+window.background:not(.caelestia-tool) entry:focus-within {
+  background-color: alpha(white, 0.10);
+}
+
+/* Boutons pleins (pas les boutons « plats » des barres) */
+window.background:not(.caelestia-tool) button:not(.flat):not(.suggested-action):not(.destructive-action):not(.circular):not(.image-button):not(.toggle):not(.link) {
+  background-color: alpha(white, 0.08);
   box-shadow: inset 0 1px alpha(white, 0.10);
 }
+window.background:not(.caelestia-tool) button:not(.flat):not(.suggested-action):not(.destructive-action):not(.circular):not(.image-button):not(.toggle):not(.link):hover {
+  background-color: alpha(white, 0.12);
+}
+window.background:not(.caelestia-tool) button.suggested-action,
+window.background:not(.caelestia-tool) button.destructive-action {
+  box-shadow: inset 0 1px alpha(white, 0.22);
+}
 
-/* Fichiers : survol et sélection en verre */
-window.nautilus-window gridview > child,
-window.nautilus-window columnview row {
+/* Cartes et listes encadrées (préférences, pavucontrol…) */
+window.background:not(.caelestia-tool) .card,
+window.background:not(.caelestia-tool) list.boxed-list,
+window.background:not(.caelestia-tool) .boxed-list {
+  background-color: alpha(white, 0.05);
+  box-shadow: inset 0 1px alpha(white, 0.08), inset 0 0 0 1px alpha(white, 0.04);
+  border-radius: 14px;
+}
+
+/* Zones de texte (Éditeur de texte…) : légère teinte pour la lisibilité */
+window.background:not(.caelestia-tool) textview,
+window.background:not(.caelestia-tool) textview > text {
+  background-color: alpha(black, 0.16);
+}
+window.background:not(.caelestia-tool) textview > border,
+window.background:not(.caelestia-tool) textview > gutter,
+window.background:not(.caelestia-tool) textview.sourceview > border,
+window.background:not(.caelestia-tool) textview .line-numbers {
+  background-color: transparent;
+}
+
+/* Barres d'onglets et de recherche */
+window.background:not(.caelestia-tool) tabbar .box,
+window.background:not(.caelestia-tool) searchbar > revealer > box {
+  background-color: transparent;
+  box-shadow: inset 0 -1px alpha(white, 0.06);
+}
+
+/* ---------------------------------------------------------------------------
+ *  Fichiers (Nautilus et sélecteur de fichiers) : survol et sélection en verre
+ * ------------------------------------------------------------------------- */
+window.background:not(.caelestia-tool) gridview > child,
+window.background:not(.caelestia-tool) columnview row {
   border-radius: 12px;
   transition: background-color 180ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
-
-window.nautilus-window gridview > child:hover,
-window.nautilus-window columnview row:hover {
+window.background:not(.caelestia-tool) gridview > child:hover,
+window.background:not(.caelestia-tool) columnview row:hover {
   background-color: alpha(white, 0.05);
 }
-
-window.nautilus-window gridview > child:selected,
-window.nautilus-window columnview row:selected {
+window.background:not(.caelestia-tool) gridview > child:selected,
+window.background:not(.caelestia-tool) columnview row:selected {
   background-color: alpha(@accent_bg_color, 0.20);
   box-shadow: inset 0 1px alpha(white, 0.10);
 }
 
-/* Menus et popups : verre plus dense pour rester lisibles */
-window.nautilus-window popover > contents,
-window.nautilus-window popover > arrow {
-  background-color: alpha(@popover_bg_color, 0.82);
-  box-shadow: inset 0 1px alpha(white, 0.08), 0 8px 24px alpha(black, 0.30);
+/* ---------------------------------------------------------------------------
+ *  Menus, popups et boîtes de dialogue : verre plus dense pour rester lisibles
+ * ------------------------------------------------------------------------- */
+popover.background > contents,
+popover.background > arrow,
+popover.menu > contents {
+  background-color: alpha(#1c1c22, 0.86);
+  box-shadow: inset 0 1px alpha(white, 0.10), inset 0 0 0 1px alpha(white, 0.05), 0 10px 30px alpha(black, 0.35);
+  border-radius: 14px;
+}
+popover.menu modelbutton,
+popover.menu row {
+  border-radius: 8px;
+}
+
+window.background:not(.caelestia-tool) dialog.floating sheet,
+window.background:not(.caelestia-tool) dialog.alert sheet,
+window.background:not(.caelestia-tool) floating-sheet > sheet {
+  box-shadow: inset 0 1px alpha(white, 0.14), inset 0 0 0 1px alpha(white, 0.06), 0 16px 48px alpha(black, 0.45);
+  border-radius: 20px;
+}
+
+/* Bulles d'aide */
+tooltip.background {
+  background-color: alpha(#1c1c22, 0.88);
+  box-shadow: inset 0 1px alpha(white, 0.10);
+  border-radius: 9px;
+}
+
+/* Toasts (« Fichier supprimé — Annuler ») */
+toast {
+  background-color: alpha(#26262e, 0.88);
+  box-shadow: inset 0 1px alpha(white, 0.12), 0 8px 24px alpha(black, 0.35);
+  border-radius: 14px;
 }

@@ -1,5 +1,5 @@
 [Unit]
-Description=Caelestia Liquid Glass : réactive le verre de Nautilus après un changement de thème
+Description=Caelestia Liquid Glass : réactive le verre des applis GTK après un changement de thème
 
 [Service]
 Type=oneshot

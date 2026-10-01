@@ -306,6 +306,7 @@ class ClockApp(Gtk.Application):
 
     def build(self) -> None:
         self.window = Gtk.ApplicationWindow(application=self, title="Horloge")
+        self.window.add_css_class("caelestia-tool")  # exclu du verre GTK générique
         self.window.set_default_size(440, 700)
         self.window.set_resizable(False)
         keys = Gtk.EventControllerKey()

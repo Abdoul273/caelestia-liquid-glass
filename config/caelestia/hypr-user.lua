@@ -83,7 +83,9 @@ hl.config({
 -- Texte toujours net : c'est l'application qui gère la transparence de son fond
 local glass_apps = {
     "kitty",
-    "org.gnome.Nautilus",
+    -- Applis GTK (Nautilus, Calculatrice, Éditeur de texte, Loupe, pavucontrol,
+    -- Thunar, sélecteur de fichiers…) : verre fourni par ~/.config/gtk-4.0/liquid-glass.css
+    "org\\.gnome\\..*|org\\.pulseaudio\\.pavucontrol|com\\.saivert\\.pwvucontrol|re\\.fossplant\\.songrec|[Tt]hunar|xdg-desktop-portal-gtk|zenity",
     "caelestia-(clipboard|display|emoji)-pro|io.caelestia.(ClipboardPro|DisplayPro|EmojiPro)",
 }
 for _, class in ipairs(glass_apps) do

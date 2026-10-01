@@ -185,6 +185,7 @@ class ClipboardApp(Gtk.Application):
     def build_window(self) -> None:
         self.load_css()
         self.window = Gtk.ApplicationWindow(application=self)
+        self.window.add_css_class("caelestia-tool")  # exclu du verre GTK générique
         self.window.set_title("Caelestia Clipboard Pro")
         self.window.set_default_size(1120, 700)
         self.window.set_size_request(820, 520)

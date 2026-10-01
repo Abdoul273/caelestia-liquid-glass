@@ -1,0 +1,45 @@
+/* Liquid glass pour les applis GTK 3 — limité à Thunar : Chromium et Electron
+ * lisent les couleurs GTK 3 et ne doivent pas devenir translucides.
+ * Retirer la ligne « @import "liquid-glass.css"; » de gtk.css pour revenir en arrière.
+ * Le flou vient de Hyprland. */
+
+.thunar.background {
+  background-color: alpha(#131317, 0.50);
+  background-image: linear-gradient(to bottom, alpha(white, 0.06), alpha(white, 0.015) 35%, transparent 70%);
+}
+
+.thunar .view,
+.thunar scrolledwindow,
+.thunar viewport,
+.thunar .titlebar,
+.thunar headerbar,
+.thunar toolbar {
+  background-color: transparent;
+  background-image: none;
+}
+
+/* Barre latérale flottante, comme dans les applis GTK 4 */
+.thunar .sidebar {
+  background-color: alpha(white, 0.045);
+  border-radius: 18px;
+  margin: 8px;
+  box-shadow: inset 0 1px alpha(white, 0.14), inset 0 0 0 1px alpha(white, 0.06);
+}
+.thunar .sidebar .view:selected {
+  background-color: alpha(@accent_bg_color, 0.24);
+  border-radius: 10px;
+}
+
+/* Barre de chemin et barre d'état en verre */
+.thunar .location-button.path-bar-button:not(:checked),
+.thunar statusbar {
+  background-color: alpha(white, 0.07);
+  box-shadow: inset 0 1px alpha(white, 0.09);
+}
+
+/* Menus et bulles : verre dense */
+.thunar menu,
+.thunar .menu,
+.thunar popover {
+  background-color: alpha(#1c1c22, 0.88);
+}
