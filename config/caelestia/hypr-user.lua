@@ -165,7 +165,7 @@ hl.window_rule({
 
 rebind("SUPER + V", hl.dsp.exec_cmd(bin .. "caelestia-clipboard-pro"))
 rebind("SUPER + Period", hl.dsp.exec_cmd(bin .. "caelestia-emoji-pro"))
-rebind("SUPER + P", hl.dsp.exec_cmd(bin .. "caelestia-display-pro"))
+rebind("SUPER + P", hl.dsp.global("caelestia:display")) -- Projection dans le verre du shell
 rebind("SUPER + Space", hl.dsp.global("caelestia:spotlight")) -- Spotlight dans le verre du shell
 rebind("SUPER + O", hl.dsp.global("caelestia:calculator")) -- Calculatrice dans le verre du shell
 -- Terminal kitty déroulant (Super + `) : réglages dans ~/.config/kitty/quick-access-terminal.conf
