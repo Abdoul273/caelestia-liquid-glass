@@ -1,0 +1,116 @@
+/* Liquid glass « classique » : Nautilus seulement (le bon compromis).
+ * Choisi dans Paramètres → Fond d'écran et style → Applis GTK, ou
+ * « caelestia-glass-gtk nautilus|complet|off ».
+ * Le flou vient de Hyprland ; le texte et les icônes restent nets. */
+
+/* Verre de base : libadwaita 1.6+ tire ses fonds de variables CSS, on les rend translucides */
+window.nautilus-window {
+  --window-bg-color: alpha(#131317, 0.46);
+  --view-bg-color: transparent;
+  --headerbar-bg-color: transparent;
+  --headerbar-backdrop-color: transparent;
+  --headerbar-shade-color: alpha(white, 0.05);
+  --sidebar-bg-color: transparent;
+  --sidebar-backdrop-color: transparent;
+  --sidebar-shade-color: alpha(white, 0.06);
+  --secondary-sidebar-bg-color: transparent;
+  --card-bg-color: alpha(white, 0.05);
+  background-color: alpha(@window_bg_color, 0.46);
+  /* Voile lumineux en haut, comme une lentille éclairée d'en haut */
+  background-image: linear-gradient(to bottom, alpha(white, 0.06), alpha(white, 0.015) 35%, transparent 70%);
+}
+
+/* Barre latérale : la plus transparente, comme le Finder */
+window.nautilus-window .sidebar-pane,
+window.nautilus-window .sidebar-pane toolbarview,
+window.nautilus-window .sidebar-pane headerbar,
+window.nautilus-window .navigation-sidebar,
+window.nautilus-window placessidebar,
+window.nautilus-window placessidebar list {
+  background-color: transparent;
+  background-image: none;
+  box-shadow: none;
+}
+
+/* Zone des fichiers : une plaque de verre un peu plus teintée pour la lisibilité */
+window.nautilus-window .content-pane,
+window.nautilus-window .content-pane > toolbarview {
+  background-color: alpha(@view_bg_color, 0.38);
+  background-image: none;
+}
+
+window.nautilus-window .view,
+window.nautilus-window gridview,
+window.nautilus-window columnview,
+window.nautilus-window columnview > listview,
+window.nautilus-window listview,
+window.nautilus-window scrolledwindow,
+window.nautilus-window viewport,
+window.nautilus-window .nautilus-list-view,
+window.nautilus-window .nautilus-grid-view {
+  background-color: transparent;
+  background-image: none;
+}
+
+/* Barre du haut fondue dans le verre, avec un fin liseré lumineux en bas */
+window.nautilus-window headerbar,
+window.nautilus-window .top-bar {
+  background-color: transparent;
+  background-image: none;
+  box-shadow: inset 0 -1px alpha(white, 0.06);
+}
+
+/* Séparateur entre la barre latérale et les fichiers : un trait de lumière */
+window.nautilus-window .content-pane {
+  box-shadow: inset 1px 0 alpha(white, 0.07);
+}
+
+/* Barre de chemin et recherche : petites plaques de verre */
+window.nautilus-window .path-bar-box,
+window.nautilus-window .nautilus-path-bar,
+window.nautilus-window headerbar entry,
+window.nautilus-window searchbar entry {
+  background-color: alpha(white, 0.06);
+  box-shadow: inset 0 1px alpha(white, 0.08);
+  border-radius: 10px;
+}
+
+/* Lignes de la barre latérale : survol et sélection en verre */
+window.nautilus-window .navigation-sidebar row {
+  border-radius: 9px;
+  transition: background-color 180ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+window.nautilus-window .navigation-sidebar row:hover {
+  background-color: alpha(white, 0.06);
+}
+
+window.nautilus-window .navigation-sidebar row:selected {
+  background-color: alpha(@accent_bg_color, 0.22);
+  box-shadow: inset 0 1px alpha(white, 0.10);
+}
+
+/* Fichiers : survol et sélection en verre */
+window.nautilus-window gridview > child,
+window.nautilus-window columnview row {
+  border-radius: 12px;
+  transition: background-color 180ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+window.nautilus-window gridview > child:hover,
+window.nautilus-window columnview row:hover {
+  background-color: alpha(white, 0.05);
+}
+
+window.nautilus-window gridview > child:selected,
+window.nautilus-window columnview row:selected {
+  background-color: alpha(@accent_bg_color, 0.20);
+  box-shadow: inset 0 1px alpha(white, 0.10);
+}
+
+/* Menus et popups : verre plus dense pour rester lisibles */
+window.nautilus-window popover > contents,
+window.nautilus-window popover > arrow {
+  background-color: alpha(@popover_bg_color, 0.82);
+  box-shadow: inset 0 1px alpha(white, 0.08), 0 8px 24px alpha(black, 0.30);
+}

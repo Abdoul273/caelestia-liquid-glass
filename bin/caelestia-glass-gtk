@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# Choisit le liquid glass des applis GTK, appliqué tout de suite :
+#   caelestia-glass-gtk nautilus   verre classique, Nautilus seulement (le compromis)
+#   caelestia-glass-gtk complet    toutes les applis GTK (Calculatrice, Éditeur, Loupe, Thunar…)
+#   caelestia-glass-gtk off        aucune appli GTK en verre
+#   caelestia-glass-gtk            réapplique le choix enregistré
+# Le choix est enregistré dans ~/.config/caelestia/glass.json (clé « gtk »), que lisent
+# aussi le shell (Paramètres → Fond d'écran et style) et hypr-user.lua (liseré des fenêtres).
+set -euo pipefail
+
+conf="$HOME/.config/caelestia/glass.json"
+mode=${1:-}
+
+if [[ -z $mode ]]; then
+    mode=$(grep -o '"gtk"[[:space:]]*:[[:space:]]*"[a-z]*"' "$conf" 2>/dev/null | grep -o '[a-z]*"$' | tr -d '"') || true
+    mode=${mode:-nautilus}
+fi
+
+case $mode in
+    nautilus | complet | off) ;;
+    *)
+        echo "Usage : caelestia-glass-gtk [nautilus|complet|off]" >&2
+        exit 1
+        ;;
+esac
+
+# Enregistre le choix sans toucher aux autres clés
+if [[ $# -gt 0 ]]; then
+    mkdir -p "$(dirname "$conf")"
+    python3 - "$conf" "$mode" <<'EOF'
+import json, sys, os
+path, mode = sys.argv[1], sys.argv[2]
+try:
+    data = json.load(open(path))
+except Exception:
+    data = {}
+if data.get("gtk") != mode:
+    data["gtk"] = mode
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(data, f, indent=4)
+        f.write("\n")
+    os.replace(tmp, path)
+EOF
+fi
+
+# Fichier importé en fin de gtk.css : pointe vers la variante choisie
+write_import() {
+    local dir=$1 variant=$2 dest="$1/liquid-glass.css" content
+    mkdir -p "$dir"
+    if [[ -n $variant && -f $dir/liquid-glass-$variant.css ]]; then
+        content="/* Généré par caelestia-glass-gtk ($mode) — ne pas modifier, choisir dans les Paramètres */
+@import \"liquid-glass-$variant.css\";"
+    else
+        content="/* Généré par caelestia-glass-gtk ($mode) — pas de verre ici */"
+    fi
+    [[ -f $dest && ! -L $dest && $(<"$dest") == "$content" ]] && return 1
+    rm -f "$dest"
+    printf '%s\n' "$content" >"$dest"
+}
+
+changed=0
+case $mode in
+    nautilus) v4=nautilus v3= ;;
+    complet) v4=complet v3=complet ;;
+    off) v4= v3= ;;
+esac
+write_import "$HOME/.config/gtk-4.0" "$v4" && changed=1
+write_import "$HOME/.config/gtk-3.0" "$v3" && changed=1
+
+# Liseré de verre des fenêtres (hypr-user.lua lit glass.json)
+if [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]]; then
+    hyprctl reload >/dev/null 2>&1 || true
+fi
+
+# Les applis GTK ouvertes relisent leur style quand le thème change : on le bascule
+# un instant puis on le remet (comme le fait un changement de thème Caelestia)
+if [[ $changed == 1 ]] && command -v dconf >/dev/null; then
+    key=/org/gnome/desktop/interface/gtk-theme
+    theme=$(dconf read "$key" 2>/dev/null || true)
+    theme=${theme:-"'adw-gtk3-dark'"}
+    dconf write "$key" "'Adwaita'" 2>/dev/null || true
+    sleep 0.4
+    dconf write "$key" "$theme" 2>/dev/null || true
+fi
+
+echo "Liquid glass des applis GTK : $mode"

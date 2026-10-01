@@ -83,11 +83,27 @@ hl.config({
 -- Texte toujours net : c'est l'application qui gère la transparence de son fond
 local glass_apps = {
     "kitty",
-    -- Applis GTK (Nautilus, Calculatrice, Éditeur de texte, Loupe, pavucontrol,
-    -- Thunar, sélecteur de fichiers…) : verre fourni par ~/.config/gtk-4.0/liquid-glass.css
-    "org\\.gnome\\..*|org\\.pulseaudio\\.pavucontrol|com\\.saivert\\.pwvucontrol|re\\.fossplant\\.songrec|[Tt]hunar|xdg-desktop-portal-gtk|zenity",
     "caelestia-(clipboard|display|emoji)-pro|io.caelestia.(ClipboardPro|DisplayPro|EmojiPro)",
 }
+
+-- Applis GTK en verre, au choix dans Paramètres → Fond d'écran et style
+-- (~/.config/caelestia/glass.json, clé « gtk ») : nautilus | complet | off
+local function glass_gtk_mode()
+    local f = io.open(home .. "/.config/caelestia/glass.json", "r")
+    if not f then
+        return "nautilus"
+    end
+    local mode = f:read("a"):match('"gtk"%s*:%s*"(%a+)"')
+    f:close()
+    return mode or "nautilus"
+end
+local glass_gtk_classes = ({
+    nautilus = "org\\.gnome\\.Nautilus",
+    complet  = "org\\.gnome\\..*|org\\.pulseaudio\\.pavucontrol|com\\.saivert\\.pwvucontrol|re\\.fossplant\\.songrec|[Tt]hunar|xdg-desktop-portal-gtk|zenity",
+})[glass_gtk_mode()]
+if glass_gtk_classes then
+    table.insert(glass_apps, glass_gtk_classes)
+end
 for _, class in ipairs(glass_apps) do
     hl.window_rule({
         match        = { class = class },

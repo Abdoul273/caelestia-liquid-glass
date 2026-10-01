@@ -1,10 +1,8 @@
-/* Liquid glass pour les applis GTK 4 / libadwaita (Nautilus, Calculatrice,
- * Éditeur de texte, Loupe, pavucontrol, sélecteur de fichiers…).
- * Retirer la ligne « @import "liquid-glass.css"; » de gtk.css (et du modèle
- * Caelestia) pour revenir en arrière.
- * Le flou vient de Hyprland ; ici on rend seulement les fonds translucides,
- * le texte et les icônes restent nets. Les outils Caelestia (classe
- * .caelestia-tool) gardent leur propre style. */
+/* Liquid glass « complet » : toutes les applis GTK 4 / libadwaita.
+ * Choisi dans Paramètres → Fond d'écran et style → Applis GTK, ou
+ * « caelestia-glass-gtk nautilus|complet|off ».
+ * Le flou vient de Hyprland ; le texte et les icônes restent nets. Les outils
+ * Caelestia (classe .caelestia-tool) gardent leur propre style. */
 
 /* ---------------------------------------------------------------------------
  *  Verre de base : libadwaita 1.6+ tire ses fonds de variables CSS

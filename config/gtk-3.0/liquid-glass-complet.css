@@ -1,6 +1,6 @@
 /* Liquid glass pour les applis GTK 3 — limité à Thunar : Chromium et Electron
  * lisent les couleurs GTK 3 et ne doivent pas devenir translucides.
- * Retirer la ligne « @import "liquid-glass.css"; » de gtk.css pour revenir en arrière.
+ * Choisi avec « caelestia-glass-gtk complet » (Paramètres → Applis GTK).
  * Le flou vient de Hyprland. */
 
 .thunar.background {

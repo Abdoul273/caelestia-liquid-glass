@@ -164,9 +164,12 @@ Appuie sur **`Super + H`** : une ligne de recherche façon Spotlight tombe de l'
 
 **Façon macOS** : Paramètres (`Super + I`) → **Façon macOS** — un interrupteur pour chaque fonction (Dynamic Island, notifications et messages dans l'île, bureaux, paroles, micro/caméra, date/heure et batterie au repos, bord haut, Centre de contrôle, barre de gauche, Dock). Tout s'applique immédiatement ; réglages dans `~/.config/caelestia/island.json`.
 
+**Liquid glass** : Paramètres (`Super + I`) → **Fond d'écran et style** → **Liquid glass** — appliqué immédiatement, enregistré dans `~/.config/caelestia/glass.json` :
+- **Style du verre** : *Classique* (verre teinté et flouté, le compromis, par défaut), *Verre plein* (verre clair façon iOS 26) ou *Désactivé* (panneaux opaques, les notifications restent en verre) ;
+- **Applis GTK en verre** : *Nautilus* (par défaut), *Toutes* (Calculatrice, Éditeur de texte, Loupe, Thunar…) ou *Aucune*. En terminal : `caelestia-glass-gtk nautilus|complet|off`.
+
 | Tu veux… | Où |
 |---|---|
-| Retirer le verre des panneaux (les notifications restent en verre) | `~/.config/quickshell/caelestia/services/Glass.qml` → `panels: false` |
 | Revenir aux animations d'origine de Caelestia | `~/.config/quickshell/caelestia/services/Motion.qml` → `enabled: false` |
 | Changer d'applis par défaut, de raccourcis, d'espacement | `~/.config/caelestia/hypr-vars.lua` |
 | Ajouter tes propres réglages Hyprland | à la fin de `~/.config/caelestia/hypr-user.lua` |

@@ -13,6 +13,38 @@ import qs.modules.nexus.common
 PageBase {
     id: root
 
+    // Liquid glass : clés de glass.json, dans le même ordre que les menus
+    readonly property list<string> shellModes: ["classic", "ios", "off"]
+    readonly property list<MenuItem> shellItems: [
+        MenuItem {
+            text: qsTr("Classique")
+            icon: "blur_on"
+        },
+        MenuItem {
+            text: qsTr("Verre plein")
+            icon: "water_drop"
+        },
+        MenuItem {
+            text: qsTr("Désactivé")
+            icon: "block"
+        }
+    ]
+    readonly property list<string> gtkModes: ["nautilus", "complet", "off"]
+    readonly property list<MenuItem> gtkItems: [
+        MenuItem {
+            text: qsTr("Nautilus")
+            icon: "folder"
+        },
+        MenuItem {
+            text: qsTr("Toutes")
+            icon: "apps"
+        },
+        MenuItem {
+            text: qsTr("Aucune")
+            icon: "block"
+        }
+    ]
+
     title: qsTr("Fond d'écran et style")
 
     ColumnLayout {
@@ -193,6 +225,40 @@ PageBase {
             text: qsTr("Thème sombre")
             checked: !Colours.light
             onToggled: Colours.setMode(checked ? "dark" : "light")
+        }
+
+        SectionHeader {
+            text: qsTr("Liquid glass")
+        }
+
+        SelectRow {
+            Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
+
+            first: true
+            label: qsTr("Style du verre")
+            subtext: ({
+                    classic: qsTr("Verre teinté et flouté : le bon compromis"),
+                    ios: qsTr("Verre clair façon iOS 26 : on voit le fond à travers"),
+                    off: qsTr("Panneaux opaques de Caelestia (les notifications restent en verre)")
+                })[Glass.shellMode] ?? ""
+            menuItems: root.shellItems
+            active: root.shellItems[Math.max(0, root.shellModes.indexOf(Glass.shellMode))]
+            onSelected: item => Glass.set("shell", root.shellModes[root.shellItems.indexOf(item)])
+        }
+
+        SelectRow {
+            Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
+
+            last: true
+            label: qsTr("Applis GTK en verre")
+            subtext: ({
+                    nautilus: qsTr("Seulement Nautilus, les autres applis restent opaques"),
+                    complet: qsTr("Nautilus, Calculatrice, Éditeur de texte, Loupe, Thunar…"),
+                    off: qsTr("Aucune : style GTK normal")
+                })[Glass.gtkMode] ?? ""
+            menuItems: root.gtkItems
+            active: root.gtkItems[Math.max(0, root.gtkModes.indexOf(Glass.gtkMode))]
+            onSelected: item => Glass.set("gtk", root.gtkModes[root.gtkItems.indexOf(item)])
         }
     }
 }
