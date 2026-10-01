@@ -15,6 +15,12 @@ Singleton {
     // de couleur, épaisseur) ; "classic" = le verre précédent (teinte + flou + liseré).
     readonly property string style: "ios"
     readonly property bool ios: panels && style === "ios"
+    // Verre plein façon iOS 26 / macOS 27 : tout l'intérieur des panneaux posés sur le bureau
+    // montre le fond net à travers une lentille (et plus seulement les bords). false = flou d'avant.
+    readonly property bool clear: ios
+    // Le verre montre aussi le fond animé (2ᵉ lecture de la vidéo, sur secteur seulement :
+    // environ 15 % d'un cœur de plus). false = le verre montre l'image fixe de la vidéo.
+    readonly property bool clearVideo: clear
     // Boutons et interrupteurs façon macOS (reflet, liseré, curseur lentille). false = style d'origine.
     readonly property bool controls: panels
     // Contrôles en verre bombé (shader glasscontrol) au lieu des simples dégradés. false = version d'avant.

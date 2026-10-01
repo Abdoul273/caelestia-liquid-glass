@@ -1,6 +1,7 @@
 #version 440
 
 // Liquid glass façon iOS 26/27 pour une forme quelconque (cadre, barre, panneaux).
+// Avec clearGlass, tout le corps posé sur le bureau est une lentille nette (pas seulement le bord).
 // Différences avec glassblob.frag (style « classique ») :
 //  - verre bien plus clair (peu de teinte) : on voit vraiment ce qu'il y a derrière ;
 //  - réfraction : près des bords, le fond d'écran est dévié comme à travers une lentille
@@ -27,6 +28,8 @@ layout(std140, binding = 0) uniform buf {
     float refraction; // 0 = pas de réfraction
     float thickAlpha; // opacité du verre « épais » quand le fond risque de noyer le contenu
     float unknownBg;  // 1 = on ne sait pas ce qu'il y a derrière (fenêtre flottante) : verre épais
+    float clearGlass; // 1 = tout le corps est une lentille nette (iOS 26 / macOS 27), 0 = flou de Hyprland
+    float clearVeil;  // voile de lisibilité posé sur le fond net
 };
 
 layout(binding = 1) uniform sampler2D source;
@@ -121,6 +124,40 @@ void main() {
     // ─── Réfraction du fond d'écran dans le biseau : cadre, barre, et tout panneau posé
     //     sur le bureau (aucune fenêtre dessous, sinon on garde le flou de Hyprland)
     float zoneMask = max(frameMask, 1.0 - overWin);
+
+    // ─── Corps de la lentille : sur le bureau, tout l'intérieur du verre montre le fond
+    //     NET (pas le flou épais), grossi et courbé sur ~44 px près du bord comme une
+    //     goutte d'eau, avec un voile juste assez dense pour que le texte reste lisible.
+    float body = zoneMask * clearGlass;
+    if (body > 0.002) {
+        vec2 gBig = vec2(0.0);
+        float avgBig = 1.0;
+        float q0 = texture(source, uv + vec2(44.0, 0.0) * texel).a;
+        float q1 = texture(source, uv - vec2(44.0, 0.0) * texel).a;
+        float q2 = texture(source, uv + vec2(0.0, 44.0) * texel).a;
+        float q3 = texture(source, uv - vec2(0.0, 44.0) * texel).a;
+        if (min(min(q0, q1), min(q2, q3)) < 0.996)
+            avgBig = ring(uv, 44.0, 12, gBig);
+        float dome = clamp((1.0 - avgBig) * 2.0, 0.0, 1.0); // 1 au bord, 0 à ~44 px
+        vec2 nBig = length(gBig) > 1e-4 ? normalize(gBig) : vec2(0.0);
+        // Le bord « aspire » l'image depuis l'intérieur : loupe douce, centre intact
+        vec2 duv = uv - nBig * pow(dome, 2.0) * 20.0 * texel;
+        // Très léger adoucissement (le fond reste net, juste moins granuleux)
+        vec2 o = 1.2 * texel;
+        vec3 bg = texture(wallpaper, duv).rgb * 0.4
+                + texture(wallpaper, duv + vec2(o.x, o.y)).rgb * 0.15
+                + texture(wallpaper, duv + vec2(-o.x, o.y)).rgb * 0.15
+                + texture(wallpaper, duv + vec2(o.x, -o.y)).rgb * 0.15
+                + texture(wallpaper, duv + vec2(-o.x, -o.y)).rgb * 0.15;
+        // Le verre ravive un peu les couleurs qu'il laisse passer
+        float bl = dot(bg, vec3(0.299, 0.587, 0.114));
+        bg = mix(vec3(bl), bg, 1.15);
+        // Voile : plus dense si le fond contraste avec le panneau (lune, page blanche…)
+        float veil = mix(clearVeil, max(thickAlpha + 0.08, clearVeil), thick);
+        vec3 glassCol = mix(bg, tint, veil);
+        col = mix(col, glassCol, body);
+        a = mix(a, 1.0, body);
+    }
     float lens = pow(bevel, 1.6) * refraction * zoneMask;
     if (lens > 0.002) {
         // La lentille « aspire » l'image depuis l'intérieur : effet de loupe sur les bords

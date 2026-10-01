@@ -3,9 +3,11 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Effects
+import QtMultimedia
 import QtQuick.Shapes
 import Quickshell
 import Quickshell.Hyprland
+import Quickshell.Services.UPower
 import Quickshell.Wayland
 import Caelestia.Blobs
 import Caelestia.Config
@@ -495,23 +497,47 @@ StyledWindow {
         }
     }
 
-    // Fond d'écran lu par le verre « iOS » pour la réfraction (demi-résolution : léger en mémoire)
-    Image {
-        id: wallpaperImg
+    // Fond d'écran lu par le verre « iOS » pour la réfraction (demi-résolution : léger en mémoire).
+    // Image fixe + fond animé (sur secteur seulement, comme le fond lui-même) par-dessus.
+    Item {
+        id: wallpaperSrc
 
         anchors.fill: parent
-        asynchronous: true
-        cache: false
-        fillMode: Image.PreserveAspectCrop
-        sourceSize: Qt.size(Math.round(width / 2), Math.round(height / 2))
-        source: Glass.ios && Wallpapers.current ? `file://${Wallpapers.current}` : ""
+
+        Image {
+            id: wallpaperImg
+
+            anchors.fill: parent
+            asynchronous: true
+            cache: false
+            fillMode: Image.PreserveAspectCrop
+            sourceSize: Qt.size(Math.round(width / 2), Math.round(height / 2))
+            source: Glass.ios && Wallpapers.current ? `file://${Wallpapers.current}` : ""
+        }
+
+        Loader {
+            id: wallpaperVid
+
+            readonly property bool ready: status === Loader.Ready && item.playbackState === MediaPlayer.PlayingState && item.hasVideo
+
+            anchors.fill: parent
+            active: Glass.clearVideo && Wallpapers.isVideo(Wallpapers.animated) && !UPower.onBattery && !Wallpapers.showPreview
+
+            sourceComponent: Video {
+                source: "file://" + Wallpapers.animated
+                fillMode: VideoOutput.PreserveAspectCrop
+                loops: MediaPlayer.Infinite
+                muted: true
+                autoPlay: true
+            }
+        }
     }
 
     ShaderEffectSource {
         id: wallpaperTex
 
         anchors.fill: parent
-        sourceItem: wallpaperImg
+        sourceItem: wallpaperSrc
         hideSource: true
         live: false
         visible: false
@@ -523,6 +549,24 @@ StyledWindow {
             function onStatusChanged(): void {
                 if (wallpaperImg.status === Image.Ready)
                     wallpaperTex.scheduleUpdate();
+            }
+        }
+
+        // Fond animé vu à travers le verre : 12 images/s suffisent (flou + lentille) et
+        // coûtent bien moins que de recalculer le verre à chaque image de la vidéo
+        Timer {
+            running: wallpaperVid.ready
+            repeat: true
+            interval: 83
+            onTriggered: wallpaperTex.scheduleUpdate()
+        }
+
+        // Retour à l'image fixe (débranché) : la texture ne doit pas garder la dernière image vidéo
+        Connections {
+            target: wallpaperVid
+
+            function onReadyChanged(): void {
+                wallpaperTex.scheduleUpdate();
             }
         }
     }
@@ -579,6 +623,8 @@ StyledWindow {
             readonly property real refraction: wallpaperImg.status === Image.Ready ? 1 : 0
             readonly property real thickAlpha: Glass.thickAlpha
             readonly property real unknownBg: 0
+            readonly property real clearGlass: Glass.clear ? 1 : 0
+            readonly property real clearVeil: Colours.light ? 0.46 : 0.4
             readonly property var wallpaper: wallpaperTex
             readonly property var windows: windowMaskTex
 
