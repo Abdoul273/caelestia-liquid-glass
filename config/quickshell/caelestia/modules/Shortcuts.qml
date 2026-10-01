@@ -23,6 +23,24 @@ Scope {
         screenState.dashboard = !wasOpen;
     }
 
+    // Gouttes de verre de l'île (Spotlight, calculatrice, projection, presse-papiers…) : une seule à la fois
+    readonly property var drops: ["spotlight", "calculator", "display", "clipboard", "emoji"]
+    function toggleDrop(kind: string): void {
+        if (hasFullscreen)
+            return;
+        const screenState = ShellState.forActive();
+        const open = !screenState[kind];
+        if (open) {
+            screenState.controlCenter = false;
+            screenState.launcher = false;
+            screenState.dashboard = false;
+            for (const d of drops)
+                if (d !== kind && d in screenState)
+                    screenState[d] = false;
+        }
+        screenState[kind] = open;
+    }
+
     readonly property bool hasFullscreen: Hypr.focusedWorkspace?.toplevels.values.some(t => t.lastIpcObject.fullscreen > 1) ?? false
 
     // qmllint disable unresolved-type
@@ -73,20 +91,23 @@ Scope {
         // qmllint enable unresolved-type
         name: "spotlight"
         description: qsTr("Ouvrir/Fermer Spotlight")
-        onPressed: {
-            if (root.hasFullscreen)
-                return;
-            const screenState = ShellState.forActive();
-            const open = !screenState.spotlight;
-            if (open) {
-                screenState.controlCenter = false;
-                screenState.launcher = false;
-                screenState.dashboard = false;
-                screenState.calculator = false;
-                screenState.display = false;
-            }
-            screenState.spotlight = open;
-        }
+        onPressed: root.toggleDrop("spotlight")
+    }
+
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
+        name: "clipboard"
+        description: qsTr("Presse-papiers (Super + V) : même goutte de verre")
+        onPressed: root.toggleDrop("clipboard")
+    }
+
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
+        name: "emoji"
+        description: qsTr("Emojis (Super + .) : même goutte de verre")
+        onPressed: root.toggleDrop("emoji")
     }
 
     // qmllint disable unresolved-type
@@ -94,20 +115,7 @@ Scope {
         // qmllint enable unresolved-type
         name: "display"
         description: qsTr("Ouvrir/Fermer la projection (choix de l'écran)")
-        onPressed: {
-            if (root.hasFullscreen)
-                return;
-            const screenState = ShellState.forActive();
-            const open = !screenState.display;
-            if (open) {
-                screenState.controlCenter = false;
-                screenState.launcher = false;
-                screenState.dashboard = false;
-                screenState.spotlight = false;
-                screenState.calculator = false;
-            }
-            screenState.display = open;
-        }
+        onPressed: root.toggleDrop("display")
     }
 
     // qmllint disable unresolved-type
@@ -115,20 +123,7 @@ Scope {
         // qmllint enable unresolved-type
         name: "calculator"
         description: qsTr("Ouvrir/Fermer la calculatrice")
-        onPressed: {
-            if (root.hasFullscreen)
-                return;
-            const screenState = ShellState.forActive();
-            const open = !screenState.calculator;
-            if (open) {
-                screenState.controlCenter = false;
-                screenState.launcher = false;
-                screenState.dashboard = false;
-                screenState.spotlight = false;
-                screenState.display = false;
-            }
-            screenState.calculator = open;
-        }
+        onPressed: root.toggleDrop("calculator")
     }
 
     // qmllint disable unresolved-type

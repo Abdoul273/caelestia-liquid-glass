@@ -18,6 +18,8 @@ PersistentProperties {
     property bool spotlight
     property bool calculator
     property bool display
+    property bool emoji
+    property bool clipboard
 
     // Dashboard state
     property int dashboardTab

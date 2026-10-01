@@ -38,6 +38,16 @@ Region {
     }
 
     R {
+        panel: root.panels.clipboard
+        width: root.panels.clipboard.visible ? panel.width : 0
+    }
+
+    R {
+        panel: root.panels.emoji
+        width: root.panels.emoji.visible ? panel.width : 0
+    }
+
+    R {
         panel: root.panels.display
         width: root.panels.display.visible ? panel.width : 0
     }

@@ -163,8 +163,8 @@ hl.window_rule({
     animation    = "popin 90%",
 })
 
-rebind("SUPER + V", hl.dsp.exec_cmd(bin .. "caelestia-clipboard-pro"))
-rebind("SUPER + Period", hl.dsp.exec_cmd(bin .. "caelestia-emoji-pro"))
+rebind("SUPER + V", hl.dsp.global("caelestia:clipboard")) -- Presse-papiers dans le verre du shell
+rebind("SUPER + Period", hl.dsp.global("caelestia:emoji")) -- Emojis dans le verre du shell
 rebind("SUPER + P", hl.dsp.global("caelestia:display")) -- Projection dans le verre du shell
 rebind("SUPER + Space", hl.dsp.global("caelestia:spotlight")) -- Spotlight dans le verre du shell
 rebind("SUPER + O", hl.dsp.global("caelestia:calculator")) -- Calculatrice dans le verre du shell

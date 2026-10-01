@@ -590,7 +590,51 @@ class EmojiApp(Gtk.Application):
         return False
 
 
+# ---------------------------------------------------------------- mode serveur (emojis du shell)
+
+def serve() -> int:
+    """Lignes JSON : {"seq", "q", "cat"} → {"stage":"emojis", "items":[[glyphe, nom], …]} ;
+    {"pick": glyphe, "paste": bool} copie (et colle), retient dans les récents."""
+    state = load_state()
+    recents = [str(x) for x in state.get("recents", []) if x]
+    favorites = [str(x) for x in state.get("favorites", []) if x]
+    items = load_items(set(favorites))
+    by_glyph = {i.glyph: i for i in items}
+
+    def emit(obj: dict) -> None:
+        sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
+        sys.stdout.flush()
+
+    for line in sys.stdin:
+        try:
+            msg = json.loads(line)
+        except ValueError:
+            continue
+        if "pick" in msg:
+            glyph = str(msg["pick"])
+            if copy_glyph(glyph):
+                recents = ([glyph] + [g for g in recents if g != glyph])[:MAX_RECENTS]
+                save_state({"recents": recents, "favorites": favorites})
+                if msg.get("paste", True):
+                    schedule_paste()
+            continue
+        query = str(msg.get("q", "")).strip().casefold()
+        cat = str(msg.get("cat", "smileys"))
+        if query:
+            pool = [i for i in items if query in i.search]
+        elif cat == "recents":
+            pool = [by_glyph[g] for g in recents if g in by_glyph]
+        else:
+            pool = [i for i in items if i.category == cat]
+        total = len(pool)
+        emit({"stage": "emojis", "seq": msg.get("seq", 0), "total": total, "hasRecents": bool(recents),
+              "items": [[i.glyph, i.label] for i in pool[:MAX_VISIBLE]]})
+    return 0
+
+
 def main() -> int:
+    if len(sys.argv) > 1 and sys.argv[1] == "serve":
+        return serve()
     GLib.set_prgname("caelestia-emoji-pro")
     return EmojiApp().run()
 

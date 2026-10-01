@@ -70,7 +70,7 @@ StyledWindow {
     name: "drawers"
     WlrLayershell.exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: (fsTransitionProg > 0 && contentItem.Config.general.showOverFullscreen) || (hasSpecialWorkspace && hasFullscreenOnNormalWs) ? WlrLayer.Overlay : WlrLayer.Top
-    WlrLayershell.keyboardFocus: screenState.launcher || screenState.session || screenState.notesActive || screenState.controlCenter || screenState.spotlight || screenState.calculator || screenState.display ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: screenState.launcher || screenState.session || screenState.notesActive || screenState.controlCenter || screenState.spotlight || screenState.calculator || screenState.display || screenState.clipboard || screenState.emoji ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
     mask: hasFullscreen ? emptyRegion : regions
 
@@ -117,7 +117,7 @@ StyledWindow {
         active: {
             const s = root.screenState;
             const conf = root.contentItem.Config;
-            if ((s.launcher && conf.launcher.enabled) || (s.session && conf.session.enabled) || (s.sidebar && conf.sidebar.enabled) || s.controlCenter || s.spotlight || s.calculator || s.display)
+            if ((s.launcher && conf.launcher.enabled) || (s.session && conf.session.enabled) || (s.sidebar && conf.sidebar.enabled) || s.controlCenter || s.spotlight || s.calculator || s.display || s.clipboard || s.emoji)
                 return true;
             if (!conf.dashboard.showOnHover && s.dashboard && conf.dashboard.enabled)
                 return true;
@@ -135,6 +135,8 @@ StyledWindow {
             root.screenState.spotlight = false;
             root.screenState.calculator = false;
             root.screenState.display = false;
+            root.screenState.emoji = false;
+            root.screenState.clipboard = false;
             panels.popouts.hasCurrent = false;
             bar.closeTray();
         }
@@ -293,6 +295,38 @@ StyledWindow {
             implicitWidth: dp.curW
             y: dp.visible ? dp.curTop + root.borderThickness : -400
             implicitHeight: dp.visible ? Math.max(0, dp.curBottom - dp.curTop) : 0
+        }
+
+        // Presse-papiers (Super + V) : même goutte de verre
+        PanelBg {
+            id: clipboardBg
+
+            readonly property var gp: panels.clipboard
+
+            panel: panels.clipboard
+            deformAmount: 0.1
+            visible: gp.visible
+            radius: gp.curR
+            x: gp.curX + bar.implicitWidth
+            implicitWidth: gp.curW
+            y: gp.visible ? gp.curTop + root.borderThickness : -400
+            implicitHeight: gp.visible ? Math.max(0, gp.curBottom - gp.curTop) : 0
+        }
+
+        // Emojis (Super + .) : même goutte de verre
+        PanelBg {
+            id: emojiBg
+
+            readonly property var gp: panels.emoji
+
+            panel: panels.emoji
+            deformAmount: 0.1
+            visible: gp.visible
+            radius: gp.curR
+            x: gp.curX + bar.implicitWidth
+            implicitWidth: gp.curW
+            y: gp.visible ? gp.curTop + root.borderThickness : -400
+            implicitHeight: gp.visible ? Math.max(0, gp.curBottom - gp.curTop) : 0
         }
 
         // Dock : même verre ; replié, le rectangle descend bien sous l'écran (aucune bosse)
@@ -526,6 +560,12 @@ StyledWindow {
             dock.fullscreen: root.hasFullscreen
             controlCenter.transform: Matrix4x4 {
                 matrix: ccBg.deformMatrix
+            }
+            clipboard.transform: Matrix4x4 {
+                matrix: clipboardBg.deformMatrix
+            }
+            emoji.transform: Matrix4x4 {
+                matrix: emojiBg.deformMatrix
             }
             display.transform: Matrix4x4 {
                 matrix: displayBg.deformMatrix

@@ -44,6 +44,8 @@ Item {
     readonly property alias spotlight: spotlight
     readonly property alias calculator: calculator
     readonly property alias display: display
+    readonly property alias emoji: emoji
+    readonly property alias clipboard: clipboard
 
     anchors.fill: parent
     anchors.margins: borderThickness
@@ -189,6 +191,30 @@ Item {
 
         anchors.horizontalCenter: parent.horizontalCenter
         y: Math.round(parent.height * 0.2)
+    }
+
+    // Presse-papiers (Super + V) : même goutte de verre
+    SpotlightModule.Clipboard {
+        id: clipboard
+
+        screen: root.screen
+        screenState: root.screenState
+        island: island
+
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: Math.round(parent.height * 0.16)
+    }
+
+    // Emojis (Super + .) : même goutte de verre
+    SpotlightModule.Emoji {
+        id: emoji
+
+        screen: root.screen
+        screenState: root.screenState
+        island: island
+
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: Math.round(parent.height * 0.16)
     }
 
     // Dock : sort du bas de l'écran au survol

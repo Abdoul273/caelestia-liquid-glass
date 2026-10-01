@@ -851,6 +851,159 @@ class ClipboardApp(Gtk.Application):
         return False
 
 
+# ---------------------------------------------------------------- mode serveur (presse-papiers du shell)
+
+CACHE_DIR = Path.home() / ".cache/caelestia-clipboard-pro"
+
+
+def serve() -> int:
+    """Lignes JSON sur stdin/stdout pour le panneau du shell :
+    {"list"} · {"preview": id, "seq"} · {"copy": id} · {"delete": id} · {"fav": id} · {"wipe"}."""
+    import sys
+
+    def load_favs() -> dict:
+        try:
+            data = json.loads(INDEX_FILE.read_text())
+            return data if isinstance(data, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def save_favs(favs: dict) -> None:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        INDEX_FILE.write_text(json.dumps(favs, ensure_ascii=False, indent=2))
+
+    items: dict[str, ClipboardItem] = {}
+    favs = load_favs()
+
+    def emit(obj: dict) -> None:
+        sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
+        sys.stdout.flush()
+
+    def data_of(item: ClipboardItem) -> bytes:
+        if item.data:
+            return item.data
+        if item.stored_only and item.digest:
+            try:
+                item.data = (FAV_DIR / f"{item.digest}.bin").read_bytes()
+            except OSError:
+                item.data = b""
+        elif item.raw:
+            item.data = decode_entry(item.raw)
+        if item.data:
+            item.digest = hashlib.sha256(item.data).hexdigest()
+            if item.kind in {"text", "link", "file"}:
+                item.kind, item.mime = classify(item.preview, item.data)
+        return item.data or b""
+
+    def load() -> None:
+        nonlocal favs
+        favs = load_favs()
+        items.clear()
+        output = command_bytes(["cliphist", "list"]).decode("utf-8", "replace")
+        by_preview = {str(m.get("preview", "")): d for d, m in favs.items() if m.get("preview")}
+        seen = set()
+        for raw in output.splitlines()[:MAX_ITEMS]:
+            if "\t" not in raw:
+                continue
+            item_id, preview = raw.split("\t", 1)
+            kind, mime = classify(preview)
+            digest = by_preview.get(preview, "")
+            seen.add(preview)
+            items[item_id] = ClipboardItem(item_id=item_id, raw=raw, preview=preview, kind=kind, mime=mime,
+                                           digest=digest, favorite=bool(digest))
+        # Les favoris restent disponibles même quand cliphist les a oubliés
+        for digest, meta in favs.items():
+            preview = str(meta.get("preview", "Favori"))
+            if preview in seen or not (FAV_DIR / f"{digest}.bin").exists():
+                continue
+            items["fav:" + digest] = ClipboardItem(item_id="fav:" + digest, raw="", preview=preview,
+                                                   kind=meta.get("kind", "text"), mime=meta.get("mime", "text/plain"),
+                                                   digest=digest, favorite=True, stored_only=True)
+
+    def send_list(message: str = "") -> None:
+        load()
+        emit({"stage": "list", "message": message, "items": [
+            {"id": i.item_id, "kind": i.kind, "title": i.title, "sub": i.subtitle, "fav": i.favorite, "stored": i.stored_only}
+            for i in items.values()]})
+
+    for line in sys.stdin:
+        try:
+            msg = json.loads(line)
+        except ValueError:
+            continue
+        try:
+            if "list" in msg:
+                send_list()
+            elif "preview" in msg:
+                item = items.get(str(msg["preview"]))
+                if item is None:
+                    continue
+                data = data_of(item)
+                out = {"stage": "preview", "seq": msg.get("seq", 0), "id": item.item_id, "kind": item.kind}
+                if item.kind == "image" and data:
+                    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                    ext = next((e for e, m in IMAGE_MIMES.items() if m == item.mime), "png")
+                    path = CACHE_DIR / f"{item.digest}.{ext}"
+                    if not path.exists():
+                        path.write_bytes(data)
+                    out["image"] = str(path)
+                    out["info"] = item.subtitle
+                else:
+                    text = data.decode("utf-8", "replace") if data else item.preview
+                    lines = max(1, len(text.splitlines()))
+                    out["text"] = text[:6000]
+                    out["info"] = f"{len(text)} caractères · {lines} ligne{'s' if lines != 1 else ''}"
+                emit(out)
+            elif "copy" in msg:
+                item = items.get(str(msg["copy"]))
+                data = data_of(item) if item else b""
+                ok = False
+                if data:
+                    try:
+                        subprocess.Popen(["wl-copy", "--type", item.mime], stdin=subprocess.PIPE,
+                                         start_new_session=True).communicate(data, timeout=5)
+                        ok = True
+                    except (OSError, subprocess.TimeoutExpired):
+                        pass
+                emit({"stage": "copied", "ok": ok})
+            elif "delete" in msg:
+                item = items.get(str(msg["delete"]))
+                if item and item.raw:
+                    command_bytes(["cliphist", "delete"], (item.raw + "\n").encode())
+                elif item and item.favorite:
+                    favs.pop(item.digest, None)
+                    save_favs(favs)
+                send_list("Élément supprimé")
+            elif "fav" in msg:
+                item = items.get(str(msg["fav"]))
+                if item is None:
+                    continue
+                data = data_of(item)
+                if item.favorite:
+                    favs.pop(item.digest, None)
+                    try:
+                        (FAV_DIR / f"{item.digest}.bin").unlink()
+                    except OSError:
+                        pass
+                    save_favs(favs)
+                    send_list("Retiré des favoris")
+                elif data:
+                    FAV_DIR.mkdir(parents=True, exist_ok=True)
+                    (FAV_DIR / f"{item.digest}.bin").write_bytes(data)
+                    favs[item.digest] = {"kind": item.kind, "mime": item.mime, "preview": item.preview}
+                    save_favs(favs)
+                    send_list("Ajouté aux favoris")
+            elif "wipe" in msg:
+                command_bytes(["cliphist", "wipe"])
+                send_list("Historique vidé · favoris conservés")
+        except Exception as exc:  # le serveur ne doit jamais tomber
+            emit({"stage": "error", "message": str(exc)})
+    return 0
+
+
 if __name__ == "__main__":
+    import sys as _sys
+    if len(_sys.argv) > 1 and _sys.argv[1] == "serve":
+        raise SystemExit(serve())
     GLib.set_prgname("caelestia-clipboard-pro")
     raise SystemExit(ClipboardApp().run())
