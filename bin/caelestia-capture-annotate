@@ -1,0 +1,12 @@
+#!/bin/sh
+# Super + Impr. écran : capture l'écran actif et l'ouvre directement dans l'éditeur
+# d'annotation en liquid glass du shell (repli : swappy si le shell ne tourne pas).
+mon=$(hyprctl -j monitors | jq -r '.[] | select(.focused) | .name')
+file="/tmp/caelestia-capture-$(date +%s%N).png"
+grim ${mon:+-o "$mon"} "$file" || exit 1
+command -v pw-play >/dev/null && [ -f /usr/share/sounds/freedesktop/stereo/camera-shutter.oga ] \
+    && pw-play /usr/share/sounds/freedesktop/stereo/camera-shutter.oga &
+if qs -c caelestia ipc show >/dev/null 2>&1; then
+    exec qs -c caelestia ipc call annotate open "$file"
+fi
+exec /usr/bin/swappy -f "$file"

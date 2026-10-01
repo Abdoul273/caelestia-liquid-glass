@@ -115,6 +115,7 @@ SHORTCUTS = [
     ]),
     ("Captures et enregistrement", "󰄀", [
         ("Impr. écran", "Capture de tout l'écran"),
+        ("Super + Impr. écran", "Capture de l'écran actif à annoter"),
         ("Super + Maj + S", "Capture d'une zone (écran figé)"),
         ("Super + Maj + Alt + S", "Capture d'une zone"),
         ("Ctrl + Alt + R", "Enregistrer l'écran"),
