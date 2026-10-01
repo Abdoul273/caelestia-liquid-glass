@@ -87,6 +87,9 @@ def read_proc(pid):
     return {"pid": pid, "ppid": int(rest[1]), "comm": comm, "start": int(rest[19])}
 
 
+BACKGROUND = {"app-server", "mcp-server", "mcp", "login", "logout", "update", "completion", "doctor", "daemon"}
+
+
 def agent_of(p):
     comm = p["comm"].lower()
     try:
@@ -94,10 +97,14 @@ def agent_of(p):
     except OSError:
         exe = ""
     try:
-        argv0 = Path(f"/proc/{p['pid']}/cmdline").read_bytes().split(b"\0")[0].decode(errors="replace")
+        argv = [a.decode(errors="replace") for a in Path(f"/proc/{p['pid']}/cmdline").read_bytes().split(b"\0") if a]
     except OSError:
-        argv0 = ""
+        argv = []
+    argv0 = argv[0] if argv else ""
     names = {comm, os.path.basename(exe).lower(), os.path.basename(argv0).lower()}
+    # démons et outils de fond (codex app-server, serveurs MCP…) : pas des sessions
+    if BACKGROUND & set(argv[1:3]):
+        return None
     if "claude" in names or "/claude/versions/" in exe:
         return "claude"
     if "codex" in names:
