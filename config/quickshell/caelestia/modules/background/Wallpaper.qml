@@ -1,6 +1,8 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtMultimedia
+import Quickshell.Services.UPower
 import Caelestia.Config
 import qs.components
 import qs.components.filedialog
@@ -97,6 +99,56 @@ Item {
                     }
                 }
             }
+        }
+    }
+
+    // Fond animé : seulement sur secteur. Sur batterie le Loader se vide
+    // (lecteur et décodeur libérés) et l'image fixe en dessous reprend la main.
+    Loader {
+        id: animated
+
+        readonly property string path: Wallpapers.animated
+        readonly property bool isVideo: /\.(mp4|webm|mkv|mov|avi)$/i.test(path)
+
+        anchors.fill: parent
+        z: 1
+        active: path !== "" && !UPower.onBattery && !Wallpapers.showPreview
+        opacity: status === Loader.Ready && item?.ready ? 1 : 0
+
+        Behavior on opacity {
+            Anim {
+                type: Anim.SlowEffects
+            }
+        }
+
+        sourceComponent: isVideo ? videoComp : gifComp
+    }
+
+    Component {
+        id: videoComp
+
+        Video {
+            readonly property bool ready: playbackState === MediaPlayer.PlayingState && hasVideo
+
+            source: "file://" + animated.path
+            fillMode: VideoOutput.PreserveAspectCrop
+            loops: MediaPlayer.Infinite
+            muted: true
+            autoPlay: true
+        }
+    }
+
+    Component {
+        id: gifComp
+
+        AnimatedImage {
+            readonly property bool ready: status === AnimatedImage.Ready
+
+            source: "file://" + animated.path
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            cache: false
+            playing: true
         }
     }
 

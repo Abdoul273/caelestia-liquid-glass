@@ -18,6 +18,9 @@ Searcher {
     property bool showPreview: false
     readonly property string current: showPreview ? previewPath : actualCurrent
     property string previewPath
+    // Fond animé (vidéo ou GIF) joué par-dessus l'image, seulement sur secteur
+    readonly property string animatedPath: `${Paths.state}/wallpaper/animated.txt`
+    property string animated
     property string actualCurrent
     property bool previewColourLock
     property bool pendingPreviewClear
@@ -79,7 +82,26 @@ Searcher {
             return root.list.map(w => w.path).join("\n");
         }
 
+        function setAnimated(path: string): void {
+            animatedView.setText(path);
+        }
+
+        function getAnimated(): string {
+            return root.animated;
+        }
+
         target: "wallpaper"
+    }
+
+    FileView {
+        id: animatedView
+
+        path: root.animatedPath
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+        onLoaded: root.animated = text().trim()
+        onLoadFailed: root.animated = ""
     }
 
     FileView {

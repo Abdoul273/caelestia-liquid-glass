@@ -1,0 +1,31 @@
+#!/bin/sh
+# Fond d'écran animé (vidéo ou GIF) : joué seulement sur secteur.
+# Sur batterie, le shell l'arrête et affiche l'image fixe (une image tirée de la vidéo).
+#   caelestia-animwall <fichier>   met ce fond animé
+#   caelestia-animwall off         revient à l'image fixe seule
+#   caelestia-animwall             affiche le fond animé actuel
+set -e
+state="${XDG_STATE_HOME:-$HOME/.local/state}/caelestia/wallpaper"
+mkdir -p "$state"
+
+case "$1" in
+    "")
+        cat "$state/animated.txt" 2>/dev/null || echo "(aucun)"
+        ;;
+    off)
+        : > "$state/animated.txt"
+        ;;
+    *)
+        file=$(realpath "$1")
+        [ -f "$file" ] || { echo "Fichier introuvable : $1" >&2; exit 1; }
+        # Image fixe pour la batterie (et pour les couleurs du thème) : une image vers 1 s
+        frames="$HOME/.local/share/caelestia/animated-frames"
+        mkdir -p "$frames"
+        still="$frames/$(basename "${file%.*}").jpg"
+        ffmpeg -loglevel error -y -ss 1 -i "$file" -frames:v 1 -q:v 2 "$still" 2>/dev/null \
+            || ffmpeg -loglevel error -y -i "$file" -frames:v 1 -q:v 2 "$still"
+        caelestia wallpaper -f "$still"
+        printf '%s\n' "$file" > "$state/animated.txt"
+        echo "Fond animé : $file (image sur batterie : $still)"
+        ;;
+esac
