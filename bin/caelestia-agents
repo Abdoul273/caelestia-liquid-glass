@@ -262,6 +262,29 @@ def codex_files():
     return [(f, f.stat().st_mtime) for d in days for f in d.glob("rollout-*.jsonl")]
 
 
+_BUSY = {}
+
+
+def codex_busy(path):
+    """Début/fin de tâche hors de la fin lue (gros prompt système) : chercher dans tout le fichier."""
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return None
+    hit = _BUSY.get(path)
+    if hit and hit[0] == size:
+        return hit[1]
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return None
+    start = data.rfind(b'"type":"task_started"')
+    end = max(data.rfind(b'"type":"task_complete"'), data.rfind(b'"type":"turn_aborted"'))
+    busy = None if start < 0 and end < 0 else start > end
+    _BUSY[path] = (size, busy)
+    return busy
+
+
 def codex_summary(path, titles):
     meta = (first_line(path) or {}).get("payload") or {}
     s = {"title": clip(titles.get(meta.get("id"), ""), 60), "tool": "", "reply": "", "prompt": "",
@@ -367,6 +390,8 @@ def snapshot(state):
                 if m.get("cwd") == cwd and (best is None or mt > best[1]):
                     best = (f, mt)
             s = codex_summary(best[0], titles) if best else {"title": "", "tool": "", "reply": "", "prompt": "", "files": [], "model": "", "busy": None}
+            if s.get("busy") is None and best:
+                s["busy"] = codex_busy(best[0])
             if s.get("busy") is not None:
                 status = "working" if s["busy"] else "idle"
             elif best and time.time() - best[1] < 8:
