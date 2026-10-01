@@ -172,7 +172,7 @@ rebind("SUPER + O", hl.dsp.global("caelestia:calculator")) -- Calculatrice dans 
 hl.layer_rule({ match = { namespace = "kitty-quick-access" }, blur = true, ignore_alpha = 0, animation = "slide top" })
 rebind("SUPER + grave", hl.dsp.exec_cmd("kitten quick-access-terminal"))
 
-rebind("SUPER + SHIFT + O", hl.dsp.exec_cmd(bin .. "caelestia-clock"))
+rebind("SUPER + SHIFT + O", hl.dsp.global("caelestia:clock")) -- Horloge dans le verre du shell
 rebind("SUPER + H", hl.dsp.global("caelestia:keyhelp")) -- Raccourcis façon Spotlight dans le verre du shell
 
 

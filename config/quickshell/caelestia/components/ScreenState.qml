@@ -18,6 +18,7 @@ PersistentProperties {
     property bool spotlight
     property bool calculator
     property bool display
+    property bool clock
     property bool keyhelp
     property bool emoji
     property bool clipboard

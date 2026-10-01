@@ -44,6 +44,7 @@ Item {
     readonly property alias spotlight: spotlight
     readonly property alias calculator: calculator
     readonly property alias display: display
+    readonly property alias clock: clock
     readonly property alias keyhelp: keyhelp
     readonly property alias emoji: emoji
     readonly property alias clipboard: clipboard
@@ -228,6 +229,18 @@ Item {
 
         anchors.horizontalCenter: parent.horizontalCenter
         y: Math.round(parent.height * 0.2)
+    }
+
+    // Horloge (Super + Maj + O) : même goutte de verre
+    SpotlightModule.Clock {
+        id: clock
+
+        screen: root.screen
+        screenState: root.screenState
+        island: island
+
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: Math.round(parent.height * 0.1)
     }
 
     // Dock : sort du bas de l'écran au survol

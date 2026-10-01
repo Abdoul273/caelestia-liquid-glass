@@ -53,6 +53,11 @@ Region {
     }
 
     R {
+        panel: root.panels.clock
+        width: root.panels.clock.visible ? panel.width : 0
+    }
+
+    R {
         panel: root.panels.display
         width: root.panels.display.visible ? panel.width : 0
     }

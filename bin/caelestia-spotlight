@@ -487,7 +487,7 @@ def clock_command(text: str) -> tuple[list[str], str] | None:
     """« minuteur 5 min », « timer 1h30 », « chrono », « stop minuteur » → commande de la Dynamic Island."""
     app = {"horloge": "timer", "alarme": "alarms", "alarmes": "alarms", "réveil": "alarms", "pomodoro": "pomodoro"}.get(text.strip().lower())
     if app:
-        return [str(Path.home() / ".local/bin/caelestia-clock"), app], "Ouvrir l'Horloge"
+        return ["hyprctl", "dispatch", 'hl.dsp.global("caelestia:clock")'], "Ouvrir l'Horloge"
     m = CLOCK_RE.match(text.strip())
     if not m:
         return None
@@ -498,7 +498,7 @@ def clock_command(text: str) -> tuple[list[str], str] | None:
     if word.startswith("chrono") or word == "stopwatch":
         return base + ["stopwatch"], "Lancer le chronomètre dans l'île"
     if not re.search(r"\d", rest):
-        return [str(Path.home() / ".local/bin/caelestia-clock"), "timer"], "Ouvrir l'Horloge (minuteur)"
+        return ["hyprctl", "dispatch", 'hl.dsp.global("caelestia:clock")'], "Ouvrir l'Horloge (minuteur)"
     return base + ["timer", rest], f"Lancer un minuteur de {rest} dans l'île"
 
 
@@ -568,7 +568,7 @@ ACTIONS = [
     ("Éteindre", "eteindre shutdown arreter poweroff", "󰐥", ["systemctl", "poweroff"]),
     ("Se déconnecter", "deconnecter logout session", "󰍃", [BIN + "caelestia-logout"]),
     ("Paramètres de Caelestia", "parametres reglages settings nexus preferences", "󰒓", ["qs", "-c", "caelestia", "ipc", "call", "nexus", "open"]),
-    ("Horloge", "horloge minuteur chrono alarme pomodoro reveil", "󰔛", [BIN + "caelestia-clock"]),
+    ("Horloge", "horloge minuteur chrono alarme pomodoro reveil", "󰔛", ["hyprctl", "dispatch", 'hl.dsp.global("caelestia:clock")']),
     ("Calculatrice", "calculatrice calcul", "󰃬", [BIN + "caelestia-spotlight", "calc"]),
     ("Capture d'écran", "capture ecran screenshot", "󰹑", ["qs", "-c", "caelestia", "ipc", "call", "picker", "open"]),
     ("Mission Control", "mission control fenetres bureaux", "󰕰", ["qs", "-c", "caelestia", "ipc", "call", "missioncontrol", "open"]),
