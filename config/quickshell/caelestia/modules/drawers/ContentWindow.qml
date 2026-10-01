@@ -467,6 +467,9 @@ StyledWindow {
         live: true
         visible: false
         smooth: true
+        mipmap: true
+        // Demi-résolution : de toute façon floutée, et deux fois moins de travail
+        textureSize: Qt.size(Math.round(width / 2), Math.round(height / 2))
     }
 
     // Cadre, barre, sidebar et utilitaires en liquid glass
@@ -484,11 +487,12 @@ StyledWindow {
             readonly property real hasScene: Glass.water ? 1 : 0
             readonly property real lensWidth: 30
             readonly property real lensDepth: 34
-            readonly property real frost: 1.2
+            readonly property real frost: 3.2
+            readonly property real calm: 0.55
 
             readonly property vector2d texel: Qt.vector2d(1 / Math.max(1, width), 1 / Math.max(1, height))
             readonly property vector3d tint: Qt.vector3d(root.surfaceColour.r, root.surfaceColour.g, root.surfaceColour.b)
-            readonly property real tintAlpha: Glass.water ? (Colours.light ? 0.1 : 0.12) : Glass.ios ? (Colours.light ? 0.3 : 0.24) : Colours.light ? 0.56 : 0.46
+            readonly property real tintAlpha: Glass.water ? (Colours.light ? 0.42 : 0.4) : Glass.ios ? (Colours.light ? 0.3 : 0.24) : Colours.light ? 0.56 : 0.46
             readonly property real light: Colours.light ? 1.2 : 1
             readonly property real shadowStrength: 0.17 * Math.max(0, root.shadowOpacity) / 0.7
             readonly property point mouse: Qt.point(interactions.mouseX / Math.max(1, width), interactions.mouseY / Math.max(1, height))

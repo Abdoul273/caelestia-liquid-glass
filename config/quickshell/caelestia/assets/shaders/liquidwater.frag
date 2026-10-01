@@ -25,7 +25,8 @@ layout(std140, binding = 0) uniform buf {
     float hasScene;
     float lensWidth;   // largeur de la zone courbée (px)
     float lensDepth;   // déplacement maximal de l'image au bord (px)
-    float frost;       // adoucissement du centre (px), 0 = parfaitement net
+    float frost;       // flou de l'arrière-plan (niveau de mipmap, ~3-4 = verre dépoli de macOS)
+    float calm;        // 0..1 : atténue le contraste de ce qui est derrière pour garder le texte lisible
 };
 
 layout(binding = 1) uniform sampler2D source; // la forme (opaque)
@@ -53,13 +54,14 @@ float edgeDistance(float coverage, float R) {
     return R * cos(PI * (1.0 - clamp(coverage, 0.5, 1.0)));
 }
 
-vec3 sampleScene(vec2 uv, float soft) {
-    vec3 c = texture(scene, uv).rgb * 0.4;
-    vec2 o = soft * texel;
-    c += texture(scene, uv + vec2(o.x, o.y)).rgb * 0.15;
-    c += texture(scene, uv + vec2(-o.x, o.y)).rgb * 0.15;
-    c += texture(scene, uv + vec2(o.x, -o.y)).rgb * 0.15;
-    c += texture(scene, uv + vec2(-o.x, -o.y)).rgb * 0.15;
+// Flou large et bon marché : disque de 9 points pris dans un niveau de mipmap réduit
+vec3 sampleScene(vec2 uv, float lod) {
+    vec2 o = exp2(lod) * 1.6 * texel;
+    vec3 c = textureLod(scene, uv, lod).rgb * 0.2;
+    for (int i = 0; i < 8; i++) {
+        float ang = PI2 * (float(i) + 0.25) / 8.0;
+        c += textureLod(scene, uv + vec2(cos(ang), sin(ang)) * o, lod).rgb * 0.1;
+    }
     return c;
 }
 
@@ -120,17 +122,19 @@ void main() {
     if (hasScene > 0.5) {
         // ─── Réfraction : le bord « aspire » l'image depuis l'intérieur et la courbe
         vec2 disp = -n * slope * lensDepth * texel;
-        float soft = frost + slope * 3.0;
-        float spread = 0.10 + 0.22 * slope; // dispersion plus marquée là où ça courbe
+        float lod = frost;
+        float spread = 0.06 + 0.12 * slope; // dispersion, seulement là où ça courbe
         vec3 refr;
-        refr.r = sampleScene(uv + disp * (1.0 + spread), soft).r;
-        refr.g = sampleScene(uv + disp, soft).g;
-        refr.b = sampleScene(uv + disp * (1.0 - spread), soft).b;
+        refr.r = sampleScene(uv + disp * (1.0 + spread), lod).r;
+        refr.g = sampleScene(uv + disp, lod).g;
+        refr.b = sampleScene(uv + disp * (1.0 - spread), lod).b;
 
-        // Le verre avive un peu ce qu'il laisse passer, surtout dans la partie bombée
+        // Lisibilité : on écrase les contrastes de l'arrière-plan vers sa teinte moyenne
+        // (comme le verre de macOS), un peu moins sur le bord pour garder l'effet de lentille
+        vec3 avg = textureLod(scene, uv, frost + 3.0).rgb;
+        refr = mix(refr, avg, calm * (1.0 - 0.5 * bevel));
         float luma = dot(refr, vec3(0.299, 0.587, 0.114));
-        refr = mix(vec3(luma), refr, 1.12 + 0.18 * bevel);
-        refr *= 1.03 + 0.06 * bevel;
+        refr = mix(vec3(luma), refr, 1.1);
 
         col = mix(refr, tint, tintAlpha);
         a = 1.0;
