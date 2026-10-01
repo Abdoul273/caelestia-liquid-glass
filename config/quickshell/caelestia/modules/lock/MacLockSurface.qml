@@ -751,7 +751,18 @@ WlSessionLockSurface {
                         width: 28
                         height: 28
                         radius: 14
-                        color: enterArea.containsMouse ? Qt.rgba(1, 1, 1, 0.34) : Qt.rgba(1, 1, 1, 0.22)
+                        color: "transparent"
+                        // Verre liquide (iOS 27) sous le contenu
+                        GlassControl {
+                            anchors.fill: parent
+                            radius: parent.radius
+                            bevel: parent.height > 60 ? 16 : 0
+                            tintColour: enterArea.containsMouse ? Qt.rgba(1, 1, 1, 0.34) : Qt.rgba(1, 1, 1, 0.22)
+                            visible: tintColour.a > 0.01
+                            pressed: enterArea.pressed
+                            hovered: enterArea.containsMouse
+                            pointer: enterArea.containsMouse ? Qt.point(enterArea.mouseX / Math.max(1, width), enterArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
+                        }
                         opacity: root.pam.buffer.length > 0 && !root.pam.passwd.active ? 1 : 0
                         scale: opacity > 0 ? (enterArea.pressed ? 0.9 : 1) : 0.6
 
@@ -921,7 +932,18 @@ WlSessionLockSurface {
         width: big ? 38 : 32
         height: width
         radius: width / 2
-        color: rbArea.containsMouse ? Qt.rgba(1, 1, 1, 0.2) : "transparent"
+        color: "transparent"
+        // Verre liquide (iOS 27) sous le contenu
+        GlassControl {
+            anchors.fill: parent
+            radius: parent.radius
+            bevel: parent.height > 60 ? 16 : 0
+            tintColour: rbArea.containsMouse ? Qt.rgba(1, 1, 1, 0.2) : "transparent"
+            visible: tintColour.a > 0.01
+            pressed: rbArea.pressed
+            hovered: rbArea.containsMouse
+            pointer: rbArea.containsMouse ? Qt.point(rbArea.mouseX / Math.max(1, width), rbArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
+        }
         opacity: enabled ? 1 : 0.4
         scale: rbArea.pressed ? 0.9 : 1
 

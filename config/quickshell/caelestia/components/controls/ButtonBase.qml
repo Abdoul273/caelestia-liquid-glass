@@ -73,11 +73,29 @@ StyledRect {
     readonly property bool glass: Glass.controls && type !== ButtonBase.Text
     readonly property bool lens: glass && Glass.lensControls
 
-    scale: glass && pressed ? 0.96 : 1
+    // Effet « gelée » façon iOS 27 : le bouton en verre gonfle à l'appui puis rebondit
+    property real jellyX: !lens ? (glass && pressed ? 0.96 : 1) : pressed ? 1.07 : hovered ? 1.02 : 1
+    property real jellyY: !lens ? (glass && pressed ? 0.96 : 1) : pressed ? 1.04 : hovered ? 1.02 : 1
 
-    Behavior on scale {
-        Anim {
-            type: Anim.FastSpatial
+    transform: Scale {
+        origin.x: root.width / 2
+        origin.y: root.height / 2
+        xScale: root.jellyX
+        yScale: root.jellyY
+    }
+
+    Behavior on jellyX {
+        SpringAnimation {
+            spring: 5
+            damping: 0.24
+            epsilon: 0.002
+        }
+    }
+    Behavior on jellyY {
+        SpringAnimation {
+            spring: 5
+            damping: 0.32
+            epsilon: 0.002
         }
     }
 
@@ -89,6 +107,7 @@ StyledRect {
         tintColour: root.baseColour
         pressed: root.pressed
         hovered: root.hovered
+        pointer: root.hovered ? Qt.point(stateLayer.mouseX / Math.max(1, root.width), stateLayer.mouseY / Math.max(1, root.height)) : Qt.point(-1, -1)
     }
 
     Rectangle {

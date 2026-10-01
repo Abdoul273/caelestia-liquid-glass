@@ -11,6 +11,7 @@ Item {
     default property alias contentData: inner.data
     property color tint: Qt.alpha(Colours.palette.m3onSurface, 0.1)
     property real radius: height / 2
+    property real bevel: 0
     property bool jelly: true
     property alias cursorShape: area.cursorShape
     property alias hoverEnabled: area.hoverEnabled
@@ -58,6 +59,7 @@ Item {
         anchors.fill: parent
         tintColour: root.tint
         radius: root.radius
+        bevel: root.bevel
         pressed: root.pressed
         hovered: root.hovered
         pointer: root.hovered ? Qt.point(area.mouseX / Math.max(1, root.width), area.mouseY / Math.max(1, root.height)) : Qt.point(-1, -1)

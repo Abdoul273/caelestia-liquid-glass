@@ -7,6 +7,7 @@ import Quickshell.Io
 import Quickshell.Widgets
 import Caelestia.Config
 import qs.components
+import qs.components.effects
 import qs.services
 
 // Dock façon macOS, pensé pour le tiling : il ne réserve aucune place à l'écran.
@@ -826,7 +827,18 @@ Item {
         width: Math.max(170, ceLbl.implicitWidth + 28)
         height: 34
         radius: 10
-        color: ceArea.containsMouse ? Qt.alpha(Colours.palette.m3onSurface, 0.1) : "transparent"
+        color: "transparent"
+        // Verre liquide (iOS 27) sous le contenu
+        GlassControl {
+            anchors.fill: parent
+            radius: parent.radius
+            bevel: parent.height > 60 ? 16 : 0
+            tintColour: ceArea.containsMouse ? Qt.alpha(Colours.palette.m3onSurface, 0.1) : "transparent"
+            visible: tintColour.a > 0.01
+            pressed: ceArea.pressed
+            hovered: ceArea.containsMouse
+            pointer: ceArea.containsMouse ? Qt.point(ceArea.mouseX / Math.max(1, width), ceArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
+        }
 
         StyledText {
             id: ceLbl

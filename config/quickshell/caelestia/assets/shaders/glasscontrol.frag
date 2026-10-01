@@ -21,6 +21,7 @@ layout(std140, binding = 0) uniform buf {
     float hover;
     float light;
     vec2 mouse;
+    float bevel; // largeur du biseau en px (0 = automatique, pour les petits contrôles)
 };
 
 float sdRound(vec2 p, vec2 b, float r) {
@@ -46,7 +47,7 @@ void main() {
     vec2 dir = length(g) > 1e-5 ? normalize(g) : vec2(0.0);
 
     // Biseau arrondi : 0 au bord, 1 sur le plateau
-    float bw = max(2.0, min(size.x, size.y) * 0.42);
+    float bw = bevel > 0.0 ? bevel : max(2.0, min(size.x, size.y) * 0.42);
     float t = clamp(-d / bw, 0.0, 1.0);
     float s = 1.0 - t;
     float slope = min(s / max(sqrt(max(1.0 - s * s, 0.0)), 0.12), 5.0);

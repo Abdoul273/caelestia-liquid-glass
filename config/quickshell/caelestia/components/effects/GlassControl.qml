@@ -14,6 +14,8 @@ ShaderEffect {
     property bool hovered
     // Position du pointeur (0..1) pour la lumière qui le suit ; x < 0 = pas de pointeur
     property point pointer: Qt.point(-1, -1)
+    // Largeur du biseau (px) : 0 = automatique ; ~14 pour les grandes cartes (sinon effet coussin)
+    property real bevel: 0
 
     readonly property vector2d size: Qt.vector2d(width, height)
     readonly property color tint: tintColour

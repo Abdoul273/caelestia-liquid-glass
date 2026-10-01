@@ -14,6 +14,7 @@ import Caelestia.Config
 import Caelestia.Internal
 import Caelestia.Services
 import qs.components
+import qs.components.effects
 import qs.services
 
 // Dynamic Island façon macOS, dessinée dans le même verre que le cadre (PanelBg dans
@@ -3024,7 +3025,18 @@ Item {
                     width: tdDoneRow.implicitWidth + 26
                     height: 40
                     radius: 20
-                    color: tdDoneArea.containsMouse ? Qt.lighter(root.green, 1.1) : root.green
+                    color: "transparent"
+                    // Verre liquide (iOS 27) sous le contenu
+                    GlassControl {
+                        anchors.fill: parent
+                        radius: parent.radius
+                        bevel: parent.height > 60 ? 16 : 0
+                        tintColour: tdDoneArea.containsMouse ? Qt.lighter(root.green, 1.1) : root.green
+                        visible: tintColour.a > 0.01
+                        pressed: tdDoneArea.pressed
+                        hovered: tdDoneArea.containsMouse
+                        pointer: tdDoneArea.containsMouse ? Qt.point(tdDoneArea.mouseX / Math.max(1, width), tdDoneArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
+                    }
                     scale: tdDoneArea.pressed ? 0.93 : 1
 
                     Behavior on scale {
@@ -3220,7 +3232,18 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 height: gaugeArea.pressed ? 26 : 22
                 radius: height / 2
-                color: root.fgFaint
+                color: "transparent"
+                // Verre liquide (iOS 27) sous le contenu
+                GlassControl {
+                    anchors.fill: parent
+                    radius: parent.radius
+                    bevel: parent.height > 60 ? 16 : 0
+                    tintColour: root.fgFaint
+                    visible: tintColour.a > 0.01
+                    pressed: gaugeArea.pressed
+                    hovered: gaugeArea.containsMouse
+                    pointer: gaugeArea.containsMouse ? Qt.point(gaugeArea.mouseX / Math.max(1, width), gaugeArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
+                }
                 clip: true
 
                 Behavior on height {
@@ -4076,7 +4099,18 @@ Item {
                     width: cleanRow.implicitWidth + 20
                     height: 26
                     radius: 13
-                    color: Qt.alpha(root.fg, cleanArea.pressed ? 0.2 : cleanArea.containsMouse ? 0.14 : 0.08)
+                    color: "transparent"
+                    // Verre liquide (iOS 27) sous le contenu
+                    GlassControl {
+                        anchors.fill: parent
+                        radius: parent.radius
+                        bevel: parent.height > 60 ? 16 : 0
+                        tintColour: Qt.alpha(root.fg, cleanArea.pressed ? 0.2 : cleanArea.containsMouse ? 0.14 : 0.08)
+                        visible: tintColour.a > 0.01
+                        pressed: cleanArea.pressed
+                        hovered: cleanArea.containsMouse
+                        pointer: cleanArea.containsMouse ? Qt.point(cleanArea.mouseX / Math.max(1, width), cleanArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
+                    }
                     scale: cleanArea.pressed ? 0.94 : 1
 
                     Behavior on scale {
@@ -4754,7 +4788,18 @@ Item {
                     width: 44
                     height: 44
                     radius: 22
-                    color: Qt.alpha(root.fg, plusArea.pressed ? 0.26 : plusArea.containsMouse ? 0.2 : 0.12)
+                    color: "transparent"
+                    // Verre liquide (iOS 27) sous le contenu
+                    GlassControl {
+                        anchors.fill: parent
+                        radius: parent.radius
+                        bevel: parent.height > 60 ? 16 : 0
+                        tintColour: Qt.alpha(root.fg, plusArea.pressed ? 0.26 : plusArea.containsMouse ? 0.2 : 0.12)
+                        visible: tintColour.a > 0.01
+                        pressed: plusArea.pressed
+                        hovered: plusArea.containsMouse
+                        pointer: plusArea.containsMouse ? Qt.point(plusArea.mouseX / Math.max(1, width), plusArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
+                    }
                     scale: plusArea.pressed ? 0.92 : 1
 
                     StyledText {
@@ -4777,7 +4822,18 @@ Item {
                     width: snoozeLbl.implicitWidth + 30
                     height: 44
                     radius: 22
-                    color: Qt.alpha(root.fg, snoozeArea.pressed ? 0.26 : snoozeArea.containsMouse ? 0.2 : 0.12)
+                    color: "transparent"
+                    // Verre liquide (iOS 27) sous le contenu
+                    GlassControl {
+                        anchors.fill: parent
+                        radius: parent.radius
+                        bevel: parent.height > 60 ? 16 : 0
+                        tintColour: Qt.alpha(root.fg, snoozeArea.pressed ? 0.26 : snoozeArea.containsMouse ? 0.2 : 0.12)
+                        visible: tintColour.a > 0.01
+                        pressed: snoozeArea.pressed
+                        hovered: snoozeArea.containsMouse
+                        pointer: snoozeArea.containsMouse ? Qt.point(snoozeArea.mouseX / Math.max(1, width), snoozeArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
+                    }
                     scale: snoozeArea.pressed ? 0.94 : 1
 
                     StyledText {
@@ -4803,7 +4859,18 @@ Item {
                     width: stopRow.implicitWidth + 32
                     height: 44
                     radius: 22
-                    color: stopArea.containsMouse ? Qt.lighter(ringFace.tint, 1.12) : ringFace.tint
+                    color: "transparent"
+                    // Verre liquide (iOS 27) sous le contenu
+                    GlassControl {
+                        anchors.fill: parent
+                        radius: parent.radius
+                        bevel: parent.height > 60 ? 16 : 0
+                        tintColour: stopArea.containsMouse ? Qt.lighter(ringFace.tint, 1.12) : ringFace.tint
+                        visible: tintColour.a > 0.01
+                        pressed: stopArea.pressed
+                        hovered: stopArea.containsMouse
+                        pointer: stopArea.containsMouse ? Qt.point(stopArea.mouseX / Math.max(1, width), stopArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
+                    }
                     scale: stopArea.pressed ? 0.94 : 1
 
                     Behavior on scale {
@@ -4885,7 +4952,18 @@ Item {
                         width: 34
                         height: 34
                         radius: 17
-                        color: Notifs.dnd ? root.accent : Qt.alpha(root.fg, dndArea.containsMouse ? 0.16 : 0.1)
+                        color: "transparent"
+                        // Verre liquide (iOS 27) sous le contenu
+                        GlassControl {
+                            anchors.fill: parent
+                            radius: parent.radius
+                            bevel: parent.height > 60 ? 16 : 0
+                            tintColour: Notifs.dnd ? root.accent : Qt.alpha(root.fg, dndArea.containsMouse ? 0.16 : 0.1)
+                            visible: tintColour.a > 0.01
+                            pressed: dndArea.pressed
+                            hovered: dndArea.containsMouse
+                            pointer: dndArea.containsMouse ? Qt.point(dndArea.mouseX / Math.max(1, width), dndArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
+                        }
 
                         MaterialIcon {
                             anchors.centerIn: parent
@@ -4910,7 +4988,18 @@ Item {
                         width: clearLbl.implicitWidth + 26
                         height: 34
                         radius: 17
-                        color: Qt.alpha(root.fg, clearArea.containsMouse ? 0.16 : 0.1)
+                        color: "transparent"
+                        // Verre liquide (iOS 27) sous le contenu
+                        GlassControl {
+                            anchors.fill: parent
+                            radius: parent.radius
+                            bevel: parent.height > 60 ? 16 : 0
+                            tintColour: Qt.alpha(root.fg, clearArea.containsMouse ? 0.16 : 0.1)
+                            visible: tintColour.a > 0.01
+                            pressed: clearArea.pressed
+                            hovered: clearArea.containsMouse
+                            pointer: clearArea.containsMouse ? Qt.point(clearArea.mouseX / Math.max(1, width), clearArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
+                        }
 
                         StyledText {
                             id: clearLbl
@@ -5180,7 +5269,18 @@ Item {
                         height: 22
                         radius: 11
                         opacity: cardArea.containsMouse || xArea.containsMouse ? 1 : 0
-                        color: Qt.alpha(root.fg, xArea.containsMouse ? 0.22 : 0.13)
+                        color: "transparent"
+                        // Verre liquide (iOS 27) sous le contenu
+                        GlassControl {
+                            anchors.fill: parent
+                            radius: parent.radius
+                            bevel: parent.height > 60 ? 16 : 0
+                            tintColour: Qt.alpha(root.fg, xArea.containsMouse ? 0.22 : 0.13)
+                            visible: tintColour.a > 0.01
+                            pressed: xArea.pressed
+                            hovered: xArea.containsMouse
+                            pointer: xArea.containsMouse ? Qt.point(xArea.mouseX / Math.max(1, width), xArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
+                        }
 
                         Behavior on opacity {
                             NumberAnimation {
@@ -5297,7 +5397,18 @@ Item {
                     width: 40
                     height: 40
                     radius: 20
-                    color: stopRecArea.containsMouse ? Qt.lighter("#ff453a", 1.1) : "#ff453a"
+                    color: "transparent"
+                    // Verre liquide (iOS 27) sous le contenu
+                    GlassControl {
+                        anchors.fill: parent
+                        radius: parent.radius
+                        bevel: parent.height > 60 ? 16 : 0
+                        tintColour: stopRecArea.containsMouse ? Qt.lighter("#ff453a", 1.1) : "#ff453a"
+                        visible: tintColour.a > 0.01
+                        pressed: stopRecArea.pressed
+                        hovered: stopRecArea.containsMouse
+                        pointer: stopRecArea.containsMouse ? Qt.point(stopRecArea.mouseX / Math.max(1, width), stopRecArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
+                    }
                     scale: stopRecArea.pressed ? 0.9 : 1
 
                     Rectangle {
@@ -5398,7 +5509,18 @@ Item {
                     width: 40
                     height: 40
                     radius: 20
-                    color: root.callMuted ? root.red : Qt.alpha(Colours.palette.m3onSurface, callMicArea.pressed ? 0.24 : callMicArea.containsMouse ? 0.17 : 0.1)
+                    color: "transparent"
+                    // Verre liquide (iOS 27) sous le contenu
+                    GlassControl {
+                        anchors.fill: parent
+                        radius: parent.radius
+                        bevel: parent.height > 60 ? 16 : 0
+                        tintColour: root.callMuted ? root.red : Qt.alpha(Colours.palette.m3onSurface, callMicArea.pressed ? 0.24 : callMicArea.containsMouse ? 0.17 : 0.1)
+                        visible: tintColour.a > 0.01
+                        pressed: callMicArea.pressed
+                        hovered: callMicArea.containsMouse
+                        pointer: callMicArea.containsMouse ? Qt.point(callMicArea.mouseX / Math.max(1, width), callMicArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
+                    }
                     scale: callMicArea.pressed ? 0.9 : 1
 
                     Behavior on color {
@@ -5660,7 +5782,18 @@ Item {
                         width: Math.min(150, Math.max(90, actLbl.implicitWidth + 28))
                         height: 30
                         radius: 15
-                        color: actArea.containsMouse ? Qt.alpha(root.fg, 0.2) : Qt.alpha(root.fg, 0.1)
+                        color: "transparent"
+                        // Verre liquide (iOS 27) sous le contenu
+                        GlassControl {
+                            anchors.fill: parent
+                            radius: parent.radius
+                            bevel: parent.height > 60 ? 16 : 0
+                            tintColour: actArea.containsMouse ? Qt.alpha(root.fg, 0.2) : Qt.alpha(root.fg, 0.1)
+                            visible: tintColour.a > 0.01
+                            pressed: actArea.pressed
+                            hovered: actArea.containsMouse
+                            pointer: actArea.containsMouse ? Qt.point(actArea.mouseX / Math.max(1, width), actArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
+                        }
 
                         StyledText {
                             id: actLbl
@@ -6796,7 +6929,18 @@ Item {
         width: 40
         height: 40
         radius: 20
-        color: Qt.alpha(Colours.palette.m3onSurface, sbArea.pressed ? 0.24 : sbArea.containsMouse ? 0.17 : 0.1)
+        color: "transparent"
+        // Verre liquide (iOS 27) sous le contenu
+        GlassControl {
+            anchors.fill: parent
+            radius: parent.radius
+            bevel: parent.height > 60 ? 16 : 0
+            tintColour: Qt.alpha(Colours.palette.m3onSurface, sbArea.pressed ? 0.24 : sbArea.containsMouse ? 0.17 : 0.1)
+            visible: tintColour.a > 0.01
+            pressed: sbArea.pressed
+            hovered: sbArea.containsMouse
+            pointer: sbArea.containsMouse ? Qt.point(sbArea.mouseX / Math.max(1, width), sbArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
+        }
         scale: sbArea.pressed ? 0.9 : 1
 
         Behavior on scale {
@@ -6836,7 +6980,18 @@ Item {
         width: pillRow.implicitWidth + 26
         height: 40
         radius: 20
-        color: pillArea.containsMouse ? Qt.lighter(tint, 1.1) : tint
+        color: "transparent"
+        // Verre liquide (iOS 27) sous le contenu
+        GlassControl {
+            anchors.fill: parent
+            radius: parent.radius
+            bevel: parent.height > 60 ? 16 : 0
+            tintColour: pillArea.containsMouse ? Qt.lighter(tint, 1.1) : tint
+            visible: tintColour.a > 0.01
+            pressed: pillArea.pressed
+            hovered: pillArea.containsMouse
+            pointer: pillArea.containsMouse ? Qt.point(pillArea.mouseX / Math.max(1, width), pillArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
+        }
         scale: pillArea.pressed ? 0.93 : 1
 
         Behavior on scale {
@@ -6955,15 +7110,25 @@ Item {
         height: width
         opacity: enabled ? 1 : 0.35
 
-        Rectangle {
+        // Verre liquide (iOS 27) : la lentille apparaît au survol et gonfle à l'appui
+        GlassControl {
             anchors.fill: parent
-            radius: width / 2
-            color: Colours.palette.m3onSurface
-            opacity: area.pressed ? 0.18 : area.containsMouse ? 0.1 : 0
+            tintColour: Qt.alpha(Colours.palette.m3onSurface, area.pressed ? 0.16 : 0.08)
+            pressed: area.pressed
+            hovered: area.containsMouse
+            pointer: area.containsMouse ? Qt.point(area.mouseX / Math.max(1, width), area.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
+            opacity: area.pressed || area.containsMouse ? 1 : 0
+            scale: area.pressed ? 1.1 : 1
 
             Behavior on opacity {
                 NumberAnimation {
-                    duration: 120
+                    duration: 140
+                }
+            }
+            Behavior on scale {
+                SpringAnimation {
+                    spring: 5
+                    damping: 0.26
                 }
             }
         }
