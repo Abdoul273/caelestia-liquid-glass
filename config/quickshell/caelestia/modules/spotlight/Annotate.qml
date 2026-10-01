@@ -185,7 +185,8 @@ Item {
     }
 
     visible: morph > 0.001
-    implicitWidth: Math.max(860, imgW * view + 36)
+    // Assez large pour que les deux barres ne se chevauchent jamais
+    implicitWidth: Math.max(toolbar.width + actions.width + 56, imgW * view + 36)
     implicitHeight: barH + imgH * view + 18 + 40
 
     Behavior on morph {
@@ -234,14 +235,23 @@ Item {
         width: 40
         height: 40
         radius: 13
-        tint: on ? Qt.alpha(root.accent, 0.4) : Qt.alpha(root.fg, 0.07)
+        tint: on ? Qt.alpha(root.accent, 0.6) : Qt.alpha(root.fg, 0.16)
+
+        // Liseré pour bien détacher chaque bouton du verre du panneau
+        Rectangle {
+            anchors.fill: parent
+            radius: tb.radius
+            color: "transparent"
+            border.width: 1
+            border.color: tb.on ? Qt.alpha(root.accent, 0.9) : Qt.alpha(root.fg, tb.hovered ? 0.35 : 0.2)
+        }
 
         Text {
             anchors.centerIn: parent
             text: tb.glyph
             font.family: root.glyphFont
             font.pixelSize: 18
-            color: tb.on ? root.fg : Qt.alpha(root.fg, 0.8)
+            color: tb.on ? Colours.palette.m3onPrimary : root.fg
         }
     }
 
@@ -318,7 +328,7 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     width: 1
                     height: 26
-                    color: root.fgFaint
+                    color: Qt.alpha(root.fg, 0.25)
                 }
 
                 // Couleurs : pastilles de verre teintées
@@ -361,44 +371,34 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     width: 1
                     height: 26
-                    color: root.fgFaint
+                    color: Qt.alpha(root.fg, 0.25)
                 }
 
                 // Épaisseur (ou taille du texte)
-                GlassButton {
+                ToolBtn {
                     anchors.verticalCenter: parent.verticalCenter
-                    width: 30
-                    height: 30
+                    width: 34
+                    height: 34
+                    radius: 11
+                    glyph: "󰍴"
                     onClicked: root.tool === "text" ? root.textSize = Math.max(10, root.textSize - 2) : root.lineSize = Math.max(1, root.lineSize - 1)
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "−"
-                        color: root.fg
-                        font.pixelSize: 16
-                    }
                 }
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
-                    width: 34
+                    width: 30
                     horizontalAlignment: Text.AlignHCenter
                     text: root.tool === "text" ? root.textSize : root.lineSize
                     color: root.fg
                     font.pixelSize: 14
                     font.weight: Font.DemiBold
                 }
-                GlassButton {
+                ToolBtn {
                     anchors.verticalCenter: parent.verticalCenter
-                    width: 30
-                    height: 30
+                    width: 34
+                    height: 34
+                    radius: 11
+                    glyph: "󰐕"
                     onClicked: root.tool === "text" ? root.textSize = Math.min(96, root.textSize + 2) : root.lineSize = Math.min(40, root.lineSize + 1)
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "+"
-                        color: root.fg
-                        font.pixelSize: 16
-                    }
                 }
 
                 ToolBtn {
@@ -410,6 +410,8 @@ Item {
             }
 
             Row {
+                id: actions
+
                 anchors.right: parent.right
                 anchors.rightMargin: 16
                 height: root.barH
