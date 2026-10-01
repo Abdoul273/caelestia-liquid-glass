@@ -164,7 +164,7 @@ StyledWindow {
         anchors.fill: parent
         opacity: Glass.panels ? 1 : root.surfaceColour.a
         layer.enabled: true
-        layer.effect: Glass.panels && !Glass.resetting ? glassBlobEffect : shadowEffect
+        layer.effect: Glass.panels ? glassBlobEffect : shadowEffect
 
         BlobGroup {
             id: blobGroup

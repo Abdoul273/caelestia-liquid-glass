@@ -19,15 +19,6 @@ Singleton {
     // de couleur, épaisseur) ; "classic" = le verre précédent (teinte + flou + liseré).
     readonly property string style: opts.shell === "ios" ? "ios" : "classic"
     readonly property string shellMode: opts.shell
-    // Vrai le temps d'un instant quand le style change : les calques en verre retirent leur
-    // effet puis le recréent, sinon le shader déjà construit garde l'ancien branchement
-    // (textures du fond et des fenêtres) et le cadre s'affiche de travers.
-    property bool resetting: false
-
-    onStyleChanged: {
-        resetting = true;
-        Qt.callLater(() => resetting = false);
-    }
     readonly property string gtkMode: opts.gtk
     readonly property bool ios: panels && style === "ios"
     // Verre plein façon iOS 26 / macOS 27 : tout l'intérieur des panneaux posés sur le bureau

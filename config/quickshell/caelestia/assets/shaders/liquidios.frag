@@ -128,9 +128,7 @@ void main() {
     // ─── Corps de la lentille : sur le bureau, tout l'intérieur du verre montre le fond
     //     NET (pas le flou épais), grossi et courbé sur ~44 px près du bord comme une
     //     goutte d'eau, avec un voile juste assez dense pour que le texte reste lisible.
-    // Le cadre (bande fine autour de l'écran) garde le verre teinté et flouté : une lentille
-    // nette sur quelques px n'y montrerait que des morceaux de fond étirés
-    float body = zoneMask * clearGlass * (1.0 - frameMask);
+    float body = zoneMask * clearGlass;
     if (body > 0.002) {
         vec2 gBig = vec2(0.0);
         float avgBig = 1.0;
@@ -144,9 +142,7 @@ void main() {
         vec2 nBig = length(gBig) > 1e-4 ? normalize(gBig) : vec2(0.0);
         // Le bord « aspire » l'image depuis l'intérieur, comme une goutte d'eau : forte
         // loupe tout près du bord, centre intact, couleurs légèrement séparées
-        // Sur le cadre (quelques px de large), la loupe irait chercher le fond 34 px plus loin
-        // et afficherait des morceaux décalés : on garde le fond presque aligné
-        float bend = pow(dome, 1.7) * (1.0 - 0.85 * frameMask);
+        float bend = pow(dome, 1.7);
         vec2 duv = uv - nBig * bend * 34.0 * texel;
         vec2 cshift = -nBig * bend * 3.0 * texel;
         // Très léger adoucissement (le fond reste net, juste moins granuleux)
@@ -171,7 +167,7 @@ void main() {
     float lens = pow(bevel, 1.6) * refraction * zoneMask;
     if (lens > 0.002) {
         // La lentille « aspire » l'image depuis l'intérieur : effet de loupe sur les bords
-        vec2 disp = -n * lens * mix(26.0, 5.0, frameMask) * texel;
+        vec2 disp = -n * lens * 26.0 * texel;
         vec3 refr;
         refr.r = texture(wallpaper, uv + disp * 1.12).r;
         refr.g = texture(wallpaper, uv + disp).g;
