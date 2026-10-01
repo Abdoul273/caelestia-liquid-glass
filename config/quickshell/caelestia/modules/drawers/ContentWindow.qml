@@ -70,7 +70,7 @@ StyledWindow {
     name: "drawers"
     WlrLayershell.exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: (fsTransitionProg > 0 && contentItem.Config.general.showOverFullscreen) || (hasSpecialWorkspace && hasFullscreenOnNormalWs) ? WlrLayer.Overlay : WlrLayer.Top
-    WlrLayershell.keyboardFocus: screenState.launcher || screenState.session || screenState.notesActive || screenState.controlCenter || screenState.spotlight || screenState.calculator ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: screenState.launcher || screenState.session || screenState.notesActive || screenState.controlCenter || screenState.spotlight || screenState.calculator || screenState.display ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
     mask: hasFullscreen ? emptyRegion : regions
 
@@ -117,7 +117,7 @@ StyledWindow {
         active: {
             const s = root.screenState;
             const conf = root.contentItem.Config;
-            if ((s.launcher && conf.launcher.enabled) || (s.session && conf.session.enabled) || (s.sidebar && conf.sidebar.enabled) || s.controlCenter || s.spotlight || s.calculator)
+            if ((s.launcher && conf.launcher.enabled) || (s.session && conf.session.enabled) || (s.sidebar && conf.sidebar.enabled) || s.controlCenter || s.spotlight || s.calculator || s.display)
                 return true;
             if (!conf.dashboard.showOnHover && s.dashboard && conf.dashboard.enabled)
                 return true;
@@ -134,6 +134,7 @@ StyledWindow {
             root.screenState.controlCenter = false;
             root.screenState.spotlight = false;
             root.screenState.calculator = false;
+            root.screenState.display = false;
             panels.popouts.hasCurrent = false;
             bar.closeTray();
         }
@@ -276,6 +277,22 @@ StyledWindow {
             implicitWidth: cp.curW
             y: cp.visible ? cp.curTop + root.borderThickness : -400
             implicitHeight: cp.visible ? Math.max(0, cp.curBottom - cp.curTop) : 0
+        }
+
+        // Projection : même goutte
+        PanelBg {
+            id: displayBg
+
+            readonly property var dp: panels.display
+
+            panel: panels.display
+            deformAmount: 0.1
+            visible: dp.visible
+            radius: dp.curR
+            x: dp.curX + bar.implicitWidth
+            implicitWidth: dp.curW
+            y: dp.visible ? dp.curTop + root.borderThickness : -400
+            implicitHeight: dp.visible ? Math.max(0, dp.curBottom - dp.curTop) : 0
         }
 
         // Dock : même verre ; replié, le rectangle descend bien sous l'écran (aucune bosse)
@@ -509,6 +526,9 @@ StyledWindow {
             dock.fullscreen: root.hasFullscreen
             controlCenter.transform: Matrix4x4 {
                 matrix: ccBg.deformMatrix
+            }
+            display.transform: Matrix4x4 {
+                matrix: displayBg.deformMatrix
             }
             calculator.transform: Matrix4x4 {
                 matrix: calcBg.deformMatrix

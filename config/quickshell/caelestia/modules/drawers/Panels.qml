@@ -43,6 +43,7 @@ Item {
     readonly property alias dock: dock
     readonly property alias spotlight: spotlight
     readonly property alias calculator: calculator
+    readonly property alias display: display
 
     anchors.fill: parent
     anchors.margins: borderThickness
@@ -169,6 +170,18 @@ Item {
     // Calculatrice : une ligne comme Spotlight, à la même place
     SpotlightModule.Calculator {
         id: calculator
+
+        screen: root.screen
+        screenState: root.screenState
+        island: island
+
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: Math.round(parent.height * 0.2)
+    }
+
+    // Projection (Super + P) : même goutte, les 4 modes en une rangée
+    SpotlightModule.Display {
+        id: display
 
         screen: root.screen
         screenState: root.screenState

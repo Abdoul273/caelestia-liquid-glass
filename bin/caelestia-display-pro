@@ -906,11 +906,32 @@ class DisplayApp(Gtk.Application):
 def cli_status() -> int:
     """État pour le Centre de contrôle : mode actuel et écrans externes branchés (JSON)."""
     outputs = detect_outputs()
+    saved = load_state()
+    position = saved.get("position")
+    if position not in POSITIONS:
+        position = guess_position(pick_internal(outputs), pick_external(outputs, str(saved.get("external") or "")))
     print(json.dumps({
         "mode": detect_mode(outputs),
+        "position": position,
         "externals": [{"name": o.name, "title": o.title, "subtitle": o.subtitle} for o in externals(outputs, True)],
     }, ensure_ascii=False))
     return 0
+
+
+def cli_position(position: str) -> int:
+    """Place l'écran externe (mode Étendre) sans ouvrir la fenêtre."""
+    if position not in POSITIONS:
+        print(json.dumps({"ok": False, "message": f"position inconnue : {position}"}, ensure_ascii=False))
+        return 2
+    outputs = detect_outputs()
+    if not externals(outputs, connected_only=True):
+        print(json.dumps({"ok": False, "message": "Aucun second écran branché"}, ensure_ascii=False))
+        return 1
+    state = dict(load_state())
+    state["position"] = position
+    ok, msg = apply_layout("extend", outputs, state)
+    print(json.dumps({"ok": ok, "message": msg}, ensure_ascii=False))
+    return 0 if ok else 1
 
 
 def cli_mode(mode: str) -> int:
@@ -932,6 +953,9 @@ def main() -> int:
         return apply_saved()
     if "--status" in sys.argv:
         return cli_status()
+    if "--position" in sys.argv:
+        i = sys.argv.index("--position")
+        return cli_position(sys.argv[i + 1] if i + 1 < len(sys.argv) else "")
     if "--mode" in sys.argv:
         i = sys.argv.index("--mode")
         return cli_mode(sys.argv[i + 1] if i + 1 < len(sys.argv) else "")

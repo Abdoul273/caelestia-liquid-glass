@@ -83,8 +83,30 @@ Scope {
                 screenState.launcher = false;
                 screenState.dashboard = false;
                 screenState.calculator = false;
+                screenState.display = false;
             }
             screenState.spotlight = open;
+        }
+    }
+
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
+        name: "display"
+        description: qsTr("Ouvrir/Fermer la projection (choix de l'écran)")
+        onPressed: {
+            if (root.hasFullscreen)
+                return;
+            const screenState = ShellState.forActive();
+            const open = !screenState.display;
+            if (open) {
+                screenState.controlCenter = false;
+                screenState.launcher = false;
+                screenState.dashboard = false;
+                screenState.spotlight = false;
+                screenState.calculator = false;
+            }
+            screenState.display = open;
         }
     }
 
@@ -103,6 +125,7 @@ Scope {
                 screenState.launcher = false;
                 screenState.dashboard = false;
                 screenState.spotlight = false;
+                screenState.display = false;
             }
             screenState.calculator = open;
         }

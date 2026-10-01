@@ -17,6 +17,7 @@ PersistentProperties {
     property bool controlCenter
     property bool spotlight
     property bool calculator
+    property bool display
 
     // Dashboard state
     property int dashboardTab
