@@ -8,12 +8,18 @@ set -e
 state="${XDG_STATE_HOME:-$HOME/.local/state}/caelestia/wallpaper"
 mkdir -p "$state"
 
+# Passe par le shell s'il tourne (il garde l'état en mémoire), sinon écrit le fichier
+set_animated() {
+    qs -c caelestia ipc call wallpaper setAnimated "$1" >/dev/null 2>&1 \
+        || printf '%s\n' "$1" > "$state/animated.txt"
+}
+
 case "$1" in
     "")
         cat "$state/animated.txt" 2>/dev/null || echo "(aucun)"
         ;;
     off)
-        : > "$state/animated.txt"
+        set_animated ""
         ;;
     *)
         file=$(realpath "$1")
@@ -25,7 +31,7 @@ case "$1" in
         ffmpeg -loglevel error -y -ss 1 -i "$file" -frames:v 1 -q:v 2 "$still" 2>/dev/null \
             || ffmpeg -loglevel error -y -i "$file" -frames:v 1 -q:v 2 "$still"
         caelestia wallpaper -f "$still"
-        printf '%s\n' "$file" > "$state/animated.txt"
+        set_animated "$file"
         echo "Fond animé : $file (image sur batterie : $still)"
         ;;
 esac

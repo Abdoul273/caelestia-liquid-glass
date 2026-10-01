@@ -29,7 +29,7 @@ Verre translucide partout, Mission Control, Spotlight, animations fluides façon
 - **kitty survitaminé** : barre d'onglets en pilules (icône du programme, disposition, batterie, heure), terminal déroulant (``Super + ` ``), splits au clavier, recherche floue dans l'historique, sortie de la dernière commande, hints (liens, chemins, `fichier:ligne` → nvim), diffusion dans tous les panneaux, sessions, notification quand une longue commande finit, palette de commandes (`Ctrl + Maj + Alt + P`).
 - **Prompt Starship en capsules** : distribution + utilisateur, dossier, git, langages, durée, erreurs et heure dans des capsules Catppuccin Mocha reliées par une ligne.
 - **Les couleurs suivent ton fond d'écran** : tout est régénéré automatiquement à chaque changement de thème.
-- **Fond d'écran animé qui épargne la batterie** : `caelestia-animwall video.mp4` (ou un GIF) le joue en boucle **seulement sur secteur**. Dès que tu débranches, la vidéo est arrêtée et déchargée, et une image tirée de la vidéo prend le relais ; elle repart quand tu rebranches. `caelestia-animwall off` revient à l'image seule.
+- **Fond d'écran animé qui épargne la batterie** : `caelestia-animwall video.mp4` (ou un GIF) le joue en boucle **seulement sur secteur**. Dès que tu débranches, la vidéo est arrêtée et déchargée, et une image tirée de la vidéo prend le relais ; elle repart quand tu rebranches. `caelestia-animwall off` (ou choisir une image dans le sélecteur) revient à l'image seule.
 
 ### 🪟 Façon macOS
 - **Dock qui se cache**, pensé pour le tiling : il ne prend aucune place, sort du bas de l'écran quand la souris touche le bord (et reste sur un bureau vide), icônes qui grossissent au survol, point sous les apps ouvertes, rebond au lancement, clic droit pour épingler / fermer.

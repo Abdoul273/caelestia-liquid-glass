@@ -32,11 +32,19 @@ Searcher {
         return category;
     }
 
+    function setAnimated(path: string): void {
+        animated = path;
+        animatedView.setText(path ? path + "\n" : "");
+    }
+
     function setRandom(): void {
+        setAnimated("");
         Quickshell.execDetached(["caelestia", "wallpaper", "-r", ...smartArg]);
     }
 
+    // Choisir une image fixe dans le sélecteur remplace le fond animé
     function setWallpaper(path: string): void {
+        setAnimated("");
         actualCurrent = path;
         Quickshell.execDetached(["caelestia", "wallpaper", "-f", path, ...smartArg]);
     }
@@ -83,7 +91,7 @@ Searcher {
         }
 
         function setAnimated(path: string): void {
-            animatedView.setText(path);
+            root.setAnimated(path);
         }
 
         function getAnimated(): string {
