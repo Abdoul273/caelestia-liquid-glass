@@ -25,6 +25,8 @@ layout(std140, binding = 0) uniform buf {
     float hover;
     vec4 zone;       // largeur du cadre à gauche, en haut, à droite, en bas (px)
     float refraction; // 0 = pas de réfraction
+    float thickAlpha; // opacité du verre « épais » quand le fond risque de noyer le contenu
+    float unknownBg;  // 1 = on ne sait pas ce qu'il y a derrière (fenêtre flottante) : verre épais
 };
 
 layout(binding = 1) uniform sampler2D source;
@@ -92,17 +94,33 @@ void main() {
     float key = pow(max(facing, 0.0), 1.6);
     float back = pow(max(-facing, 0.0), 2.2) * 0.7;
 
-    // ─── Fond : teinte légère
-    vec3 col = tint;
-    float a = tintAlpha;
-
-    // ─── Réfraction du fond d'écran dans le biseau : cadre, barre, et tout panneau posé
-    //     sur le bureau (aucune fenêtre dessous, sinon on garde le flou de Hyprland)
     vec2 px = uv / texel;
     vec2 size = 1.0 / texel;
     float outside = min(min(px.x - zone.x, px.y - zone.y), min(size.x - zone.z - px.x, size.y - zone.w - px.y));
-    float zoneMask = 1.0 - smoothstep(0.0, 36.0, outside);
-    zoneMask = max(zoneMask, 1.0 - texture(windows, uv).r);
+    float frameMask = 1.0 - smoothstep(0.0, 36.0, outside);
+    float overWin = texture(windows, uv).r;
+
+    // ─── Fond : teinte adaptative, comme les matériaux de macOS. Le verre reste clair quand
+    //     ce qui est derrière s'accorde avec lui, et s'épaissit quand le fond contraste
+    //     (page blanche sous un panneau sombre, fenêtre sombre sous un panneau clair) :
+    //     le panneau garde sa couleur et le texte reste lisible quoi qu'il y ait derrière.
+    float tintL = dot(tint, vec3(0.299, 0.587, 0.114));
+    vec3 wp = texture(wallpaper, uv).rgb * 0.4
+            + texture(wallpaper, uv + vec2(48.0, 0.0) * texel).rgb * 0.15
+            + texture(wallpaper, uv - vec2(48.0, 0.0) * texel).rgb * 0.15
+            + texture(wallpaper, uv + vec2(0.0, 48.0) * texel).rgb * 0.15
+            + texture(wallpaper, uv - vec2(0.0, 48.0) * texel).rgb * 0.15;
+    float wpContrast = abs(dot(wp, vec3(0.299, 0.587, 0.114)) - tintL);
+    float wpThick = smoothstep(0.12, 0.5, wpContrast) * 0.75;
+    // Sous une fenêtre on ne voit pas son contenu : on part du pire (verre épais)
+    float unknown = max(unknownBg, overWin * (1.0 - frameMask));
+    float thick = max(unknown, wpThick * (1.0 - frameMask));
+    vec3 col = tint;
+    float a = mix(tintAlpha, max(thickAlpha, tintAlpha), thick);
+
+    // ─── Réfraction du fond d'écran dans le biseau : cadre, barre, et tout panneau posé
+    //     sur le bureau (aucune fenêtre dessous, sinon on garde le flou de Hyprland)
+    float zoneMask = max(frameMask, 1.0 - overWin);
     float lens = pow(bevel, 1.6) * refraction * zoneMask;
     if (lens > 0.002) {
         // La lentille « aspire » l'image depuis l'intérieur : effet de loupe sur les bords

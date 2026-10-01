@@ -19,6 +19,9 @@ Singleton {
     readonly property bool controls: panels
     // Contrôles en verre bombé (shader glasscontrol) au lieu des simples dégradés. false = version d'avant.
     readonly property bool lensControls: controls
+    // Opacité du verre quand le fond contraste avec le panneau (page blanche derrière un panneau
+    // sombre…) : le panneau garde sa couleur, comme sur macOS. Plus bas = plus transparent.
+    readonly property real thickAlpha: Colours.light ? 0.8 : 0.84
 
     // Fond des cartes à l'intérieur d'un panneau en verre : voile translucide au lieu d'un aplat
     function tile(original: color): color {

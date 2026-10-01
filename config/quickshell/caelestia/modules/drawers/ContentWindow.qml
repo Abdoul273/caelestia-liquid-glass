@@ -577,6 +577,8 @@ StyledWindow {
             // Uniformes du style iOS (ignorés par le shader classique)
             readonly property vector4d zone: Qt.vector4d(bar.implicitWidth, root.borderThickness, root.borderThickness, root.borderThickness)
             readonly property real refraction: wallpaperImg.status === Image.Ready ? 1 : 0
+            readonly property real thickAlpha: Glass.thickAlpha
+            readonly property real unknownBg: 0
             readonly property var wallpaper: wallpaperTex
             readonly property var windows: windowMaskTex
 

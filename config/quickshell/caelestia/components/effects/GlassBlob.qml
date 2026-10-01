@@ -23,6 +23,8 @@ ShaderEffect {
     // Style iOS sans réfraction ici (fenêtres flottantes : le fond d'écran n'est pas derrière)
     readonly property vector4d zone: Qt.vector4d(0, 0, 0, 0)
     readonly property real refraction: 0
+    readonly property real thickAlpha: Glass.thickAlpha
+    readonly property real unknownBg: 1
     readonly property var wallpaper: dummyTex
     readonly property var windows: dummyTex
 
