@@ -113,6 +113,51 @@ def write_if_changed(path: Path, content: str) -> bool:
     return True
 
 
+PORTAL_THEME = "Caelestia-Glass-Portal"
+PORTAL_THEME_CSS = HOME / f".local/share/themes/{PORTAL_THEME}/gtk-3.0/gtk.css"
+PORTAL_DROPIN = HOME / ".config/systemd/user/xdg-desktop-portal-gtk.service.d/caelestia-glass.conf"
+PORTAL_SERVICE = "xdg-desktop-portal-gtk.service"
+
+
+def update_portal(mode: str, colours: dict, density: float) -> None:
+    """Fenêtres « Ouvrir / Enregistrer » du portail GTK 3 : un thème rien qu'à lui.
+
+    Leur fenêtre est un simple « dialog » GTK 3, comme ceux de Chrome : impossible de la
+    cibler dans gtk.css sans toucher les autres applis. On donne donc au seul service du
+    portail un thème (GTK_THEME) qui reprend adw-gtk3 et ajoute le verre.
+    """
+    light = luminance(colours.get("window_bg_color", (12, 14, 18))) > 0.5
+    base = "adw-gtk3" if light else "adw-gtk3-dark"
+    content = f'/* Généré par caelestia-glass-gtk ({mode}) — thème du portail GTK uniquement */\n'
+    content += f'@import url("file:///usr/share/themes/{base}/gtk-3.0/gtk.css");\n'
+    template = TEMPLATES / "portal-gtk3.css"
+    if mode == "complet" and template.is_file():
+        body = re.sub(r"\A\s*/\*.*?\*/\n?", "", template.read_text(), count=1, flags=re.S)
+        content += render(body, colours, density)
+    changed = write_if_changed(PORTAL_THEME_CSS, content)
+
+    dropin = (
+        "# Caelestia Liquid Glass : thème « verre » pour les fenêtres Ouvrir / Enregistrer\n"
+        "# (supprimer ce fichier pour revenir au thème normal)\n"
+        f"[Service]\nEnvironment=GTK_THEME={PORTAL_THEME}\n"
+    )
+    if write_if_changed(PORTAL_DROPIN, dropin):
+        subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
+        changed = True
+
+    if not changed:
+        return
+    # Le portail ne relit pas son thème : on le relance, sauf si une fenêtre est ouverte
+    busy = False
+    try:
+        out = subprocess.run(["hyprctl", "clients", "-j"], capture_output=True, text=True).stdout
+        busy = any(c.get("class") == "xdg-desktop-portal-gtk" for c in json.loads(out or "[]"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    if not busy:
+        subprocess.run(["systemctl", "--user", "try-restart", PORTAL_SERVICE], check=False)
+
+
 def main() -> int:
     args = sys.argv[1:]
     if args and args[0] not in MODES:
@@ -144,6 +189,8 @@ def main() -> int:
         # Anciennes versions (fichiers par variante) : remplacés par ce fichier généré
         for old in gtk_dir.glob("liquid-glass-*.css"):
             old.unlink()
+
+    update_portal(mode, colours, density)
 
     # Liseré de verre des fenêtres (hypr-user.lua lit glass.json)
     if os.environ.get("HYPRLAND_INSTANCE_SIGNATURE") and args:

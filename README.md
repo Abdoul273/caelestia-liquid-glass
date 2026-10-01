@@ -167,6 +167,7 @@ Appuie sur **`Super + H`** : une ligne de recherche façon Spotlight tombe de l'
 **Liquid glass** : Paramètres (`Super + I`) → **Fond d'écran et style** → **Liquid glass** — appliqué immédiatement, enregistré dans `~/.config/caelestia/glass.json` :
 - **Style du verre** : *Classique* (verre teinté et flouté, le compromis, par défaut), *Verre plein* (verre clair façon iOS 26) ou *Désactivé* (panneaux opaques, les notifications restent en verre) ;
 - **Applis GTK en verre** : *Nautilus* (par défaut), *Toutes* (Calculatrice, Éditeur de texte, Loupe, Thunar…) ou *Aucune*. En terminal : `caelestia-glass-gtk nautilus|complet|off`. Le verre GTK reprend les couleurs du thème Caelestia : il suit le thème clair ou sombre et le fond d'écran.
+- Les fenêtres **Ouvrir / Enregistrer** (Chrome, Electron, applis GTK 4) passent aussi en verre en mode *Toutes* : un thème rien qu'au portail GTK, Chrome lui-même n'est pas touché.
 - **Intensité du verre** : un curseur, de *très transparent* à *très dense* (au milieu = réglage d'origine), pour le shell et les applis GTK en même temps.
 
 | Tu veux… | Où |

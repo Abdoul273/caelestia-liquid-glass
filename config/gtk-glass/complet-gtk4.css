@@ -143,15 +143,18 @@ window.background:not(.caelestia-tool) .boxed-list {
 }
 
 /* Zones de texte (Éditeur de texte…) : légère teinte pour la lisibilité */
-window.background:not(.caelestia-tool) textview,
-window.background:not(.caelestia-tool) textview > text {
+window.background:not(.caelestia-tool) textview {
   background-color: {{shade:0.16}};
 }
+/* Zone de texte et gouttière (numéros de ligne) sur la même teinte, sans bande */
+window.background:not(.caelestia-tool) textview > text,
 window.background:not(.caelestia-tool) textview > border,
-window.background:not(.caelestia-tool) textview > gutter,
-window.background:not(.caelestia-tool) textview.sourceview > border,
+window.background:not(.caelestia-tool) textview > border *,
+window.background:not(.caelestia-tool) textview gutter,
+window.background:not(.caelestia-tool) textview gutterrenderer,
 window.background:not(.caelestia-tool) textview .line-numbers {
   background-color: transparent;
+  background-image: none;
 }
 
 /* Barres d'onglets et de recherche */
