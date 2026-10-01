@@ -74,8 +74,8 @@ StyledRect {
     readonly property bool lens: glass && Glass.lensControls
 
     // Effet « gelée » façon iOS 27 : le bouton en verre gonfle à l'appui puis rebondit
-    property real jellyX: !lens ? (glass && pressed ? 0.96 : 1) : pressed ? 1.07 : hovered ? 1.02 : 1
-    property real jellyY: !lens ? (glass && pressed ? 0.96 : 1) : pressed ? 1.04 : hovered ? 1.02 : 1
+    property real jellyX: !Glass.lensControls ? (glass && pressed ? 0.96 : 1) : pressed ? 1.07 : hovered ? 1.02 : 1
+    property real jellyY: !Glass.lensControls ? (glass && pressed ? 0.96 : 1) : pressed ? 1.04 : hovered ? 1.02 : 1
 
     transform: Scale {
         origin.x: root.width / 2
@@ -108,6 +108,24 @@ StyledRect {
         pressed: root.pressed
         hovered: root.hovered
         pointer: root.hovered ? Qt.point(stateLayer.mouseX / Math.max(1, root.width), stateLayer.mouseY / Math.max(1, root.height)) : Qt.point(-1, -1)
+    }
+
+    // Boutons « texte » (icônes sans fond) : une lentille de verre apparaît au survol
+    GlassControl {
+        visible: Glass.lensControls && root.type === ButtonBase.Text && opacity > 0.01
+        anchors.fill: parent
+        radius: root.radius
+        tintColour: Qt.alpha(root.inactiveOnColour, root.pressed ? 0.14 : 0.07)
+        pressed: root.pressed
+        hovered: root.hovered
+        pointer: root.hovered ? Qt.point(stateLayer.mouseX / Math.max(1, root.width), stateLayer.mouseY / Math.max(1, root.height)) : Qt.point(-1, -1)
+        opacity: root.hovered || root.pressed ? 1 : 0
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 140
+            }
+        }
     }
 
     Rectangle {

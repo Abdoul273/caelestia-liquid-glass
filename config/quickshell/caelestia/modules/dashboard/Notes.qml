@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import Caelestia
 import Caelestia.Config
 import qs.components
+import qs.components.effects
 import qs.components.controls
 import qs.components.containers
 import qs.services
@@ -150,7 +151,15 @@ Item {
             Layout.fillHeight: true
 
             radius: Tokens.rounding.extraLarge
-            color: Glass.tile(Colours.tPalette.m3surfaceContainer)
+            color: "transparent"
+            // Verre liquide (iOS 27) sous le contenu
+            GlassControl {
+                anchors.fill: parent
+                radius: parent.radius
+                bevel: parent.height > 60 ? 16 : 0
+                tintColour: Glass.tile(Colours.tPalette.m3surfaceContainer)
+                visible: tintColour.a > 0.01
+            }
             clip: true
 
             ColumnLayout {
@@ -171,7 +180,15 @@ Item {
                         implicitWidth: 34
                         implicitHeight: 34
                         radius: Tokens.rounding.full
-                        color: Colours.palette.m3primary
+                        color: "transparent"
+                        // Verre liquide (iOS 27) sous le contenu
+                        GlassControl {
+                            anchors.fill: parent
+                            radius: parent.radius
+                            bevel: parent.height > 60 ? 16 : 0
+                            tintColour: Colours.palette.m3primary
+                            visible: tintColour.a > 0.01
+                        }
 
                         MaterialIcon {
                             anchors.centerIn: parent
@@ -235,7 +252,15 @@ Item {
                         implicitWidth: Math.max(implicitHeight, countText.implicitWidth + Tokens.padding.medium * 2)
                         implicitHeight: 24
                         radius: Tokens.rounding.full
-                        color: Qt.alpha(Colours.palette.m3primary, 0.16)
+                        color: "transparent"
+                        // Verre liquide (iOS 27) sous le contenu
+                        GlassControl {
+                            anchors.fill: parent
+                            radius: parent.radius
+                            bevel: parent.height > 60 ? 16 : 0
+                            tintColour: Qt.alpha(Colours.palette.m3primary, 0.16)
+                            visible: tintColour.a > 0.01
+                        }
 
                         StyledText {
                             id: countText
@@ -256,7 +281,15 @@ Item {
                     Layout.fillWidth: true
                     implicitHeight: 40
                     radius: Tokens.rounding.full
-                    color: Glass.tile(Colours.tPalette.m3surfaceContainerHigh)
+                    color: "transparent"
+                    // Verre liquide (iOS 27) sous le contenu
+                    GlassControl {
+                        anchors.fill: parent
+                        radius: parent.radius
+                        bevel: parent.height > 60 ? 16 : 0
+                        tintColour: Glass.tile(Colours.tPalette.m3surfaceContainerHigh)
+                        visible: tintColour.a > 0.01
+                    }
 
                     StyledRect {
                         x: root.shownMode === "tasks" ? parent.width / 2 + 2 : 4
@@ -264,7 +297,15 @@ Item {
                         width: parent.width / 2 - 6
                         height: parent.height - 8
                         radius: Tokens.rounding.full
-                        color: Colours.palette.m3primary
+                        color: "transparent"
+                        // Verre liquide (iOS 27) sous le contenu
+                        GlassControl {
+                            anchors.fill: parent
+                            radius: parent.radius
+                            bevel: parent.height > 60 ? 16 : 0
+                            tintColour: Colours.palette.m3primary
+                            visible: tintColour.a > 0.01
+                        }
 
                         Behavior on x {
                             Anim {}
@@ -380,9 +421,21 @@ Item {
                         implicitHeight: itemLayout.implicitHeight + Tokens.padding.medium * 2
 
                         radius: Tokens.rounding.large
-                        color: selected ? Qt.alpha(Colours.palette.m3secondaryContainer, 0.85) : "transparent"
+                        color: "transparent"
+                        // Verre liquide (iOS 27) sous le contenu
+                        GlassControl {
+                            anchors.fill: parent
+                            radius: parent.radius
+                            bevel: parent.height > 60 ? 16 : 0
+                            tintColour: selected ? Qt.alpha(Colours.palette.m3secondaryContainer, 0.85) : "transparent"
+                            visible: tintColour.a > 0.01
+                            pressed: glassArea373.pressed
+                            hovered: glassArea373.containsMouse
+                            pointer: glassArea373.containsMouse ? Qt.point(glassArea373.mouseX / Math.max(1, width), glassArea373.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
+                        }
 
                         StateLayer {
+                            id: glassArea373
                             radius: noteItem.radius
                             color: Colours.palette.m3onSurface
                             onClicked: root.open(noteItem.modelData.id)
@@ -567,7 +620,15 @@ Item {
             Layout.fillHeight: true
 
             radius: Tokens.rounding.extraLarge
-            color: Glass.tile(Colours.tPalette.m3surfaceContainer)
+            color: "transparent"
+            // Verre liquide (iOS 27) sous le contenu
+            GlassControl {
+                anchors.fill: parent
+                radius: parent.radius
+                bevel: parent.height > 60 ? 16 : 0
+                tintColour: Glass.tile(Colours.tPalette.m3surfaceContainer)
+                visible: tintColour.a > 0.01
+            }
 
             TasksPane {
                 id: tasksPane
@@ -892,13 +953,25 @@ Item {
         Layout.fillWidth: true
         implicitHeight: 36
         radius: Tokens.rounding.full
-        color: active ? Qt.alpha(Colours.palette.m3secondaryContainer, 0.85) : "transparent"
+        color: "transparent"
+        // Verre liquide (iOS 27) sous le contenu
+        GlassControl {
+            anchors.fill: parent
+            radius: parent.radius
+            bevel: parent.height > 60 ? 16 : 0
+            tintColour: active ? Qt.alpha(Colours.palette.m3secondaryContainer, 0.85) : "transparent"
+            visible: tintColour.a > 0.01
+            pressed: glassArea882.pressed
+            hovered: glassArea882.containsMouse
+            pointer: glassArea882.containsMouse ? Qt.point(glassArea882.mouseX / Math.max(1, width), glassArea882.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
+        }
 
         Behavior on color {
             CAnim {}
         }
 
         StateLayer {
+            id: glassArea882
             radius: fr.radius
             color: Colours.palette.m3onSurface
             onClicked: {

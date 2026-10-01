@@ -41,7 +41,15 @@ ColumnLayout {
         implicitHeight: input.implicitHeight + Tokens.padding.medium * 2
 
         radius: Tokens.rounding.full
-        color: Glass.tile(Colours.tPalette.m3surfaceContainerHigh)
+        color: "transparent"
+        // Verre liquide (iOS 27) sous le contenu
+        GlassControl {
+            anchors.fill: parent
+            radius: parent.radius
+            bevel: parent.height > 60 ? 16 : 0
+            tintColour: Glass.tile(Colours.tPalette.m3surfaceContainerHigh)
+            visible: tintColour.a > 0.01
+        }
 
         MaterialIcon {
             id: addIcon
@@ -181,7 +189,17 @@ ColumnLayout {
                 implicitHeight: Math.max(checkbox.implicitHeight, textCol.implicitHeight) + Tokens.padding.medium * 1.6
 
                 radius: Tokens.rounding.large
-                color: hover.hovered ? Qt.alpha(Colours.palette.m3onSurface, 0.06) : "transparent"
+                color: "transparent"
+                // Verre liquide (iOS 27) sous le contenu
+                GlassControl {
+                    anchors.fill: parent
+                    radius: parent.radius
+                    bevel: parent.height > 60 ? 16 : 0
+                    tintColour: hover.hovered ? Qt.alpha(Colours.palette.m3onSurface, 0.06) : "transparent"
+                    visible: tintColour.a > 0.01
+                    hovered: hover.hovered
+                    pointer: hover.hovered ? Qt.point(hover.point.position.x / Math.max(1, width), hover.point.position.y / Math.max(1, height)) : Qt.point(-1, -1)
+                }
 
                 Behavior on color {
                     CAnim {}
@@ -223,6 +241,7 @@ ColumnLayout {
                         tintColour: task.done ? Colours.palette.m3primary : task.modelData.priority === "urgent" || task.modelData.priority === "high" ? Qt.alpha(root.priorityColour(task.modelData.priority), 0.35) : Qt.alpha(Colours.palette.m3onSurface, checkMouse.containsMouse ? 0.2 : 0.12)
                         pressed: checkMouse.pressed
                         hovered: checkMouse.containsMouse
+                        pointer: checkMouse.containsMouse ? Qt.point((checkMouse.mouseX - 8) / Math.max(1, width), (checkMouse.mouseY - 8) / Math.max(1, height)) : Qt.point(-1, -1)
                     }
 
                     MaterialIcon {
