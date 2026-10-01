@@ -19,6 +19,26 @@ Singleton {
     readonly property var lead: list.find(a => a.status === "working") ?? null
     property real now: Date.now()
 
+    // Page de l'île : le travail en cours d'abord ; un agent qui a fini reste 10 min
+    // (ou jusqu'à « Nettoyer » / ×), puis s'efface. Il revient dès qu'il se remet au travail.
+    property var dismissed: ({}) // pid → `since` au moment du nettoyage
+    readonly property list<var> shown: list.filter(a => a.status !== "idle" || (dismissed[a.id] !== a.since && now - a.since < 600000))
+    readonly property int doneShown: shown.filter(a => a.status === "idle").length
+
+    function dismiss(agent: var): void {
+        const d = Object.assign({}, dismissed);
+        d[agent.id] = agent.since;
+        dismissed = d;
+    }
+
+    function clean(): void {
+        const d = Object.assign({}, dismissed);
+        for (const a of shown)
+            if (a.status === "idle")
+                d[a.id] = a.since;
+        dismissed = d;
+    }
+
     // Un agent qui travaillait vient de finir (pas une demande de permission)
     signal finished(var agent)
 

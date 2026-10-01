@@ -768,8 +768,8 @@ Item {
             root.agentDone = agent;
             root.flash("agentDone", 7000);
         }
-        function onListChanged(): void {
-            if (Agents.list.length === 0 && root.pageName === "agents")
+        function onShownChanged(): void {
+            if (Agents.shown.length === 0 && root.pageName === "agents")
                 root.pageName = "info";
         }
     }
@@ -1363,7 +1363,7 @@ Item {
         case "agentsMini":
             return Qt.size(330 + actsInset, 40);
         case "agents":
-            return Qt.size(pageWidth, 66 + 52 * Math.min(3, Agents.list.length));
+            return Qt.size(pageWidth, 66 + 52 * Math.min(3, Agents.shown.length));
         case "perm":
             return Qt.size(Math.max(pageWidth, 600), 148);
         case "agentDone":
@@ -1925,7 +1925,7 @@ Item {
 
     // Pages de l'île ouverte : enregistrement et minuteur en cours d'abord (s'il y en a),
     // puis heure/météo ↔ performances du PC ↔ musique (si un lecteur est actif)
-    readonly property list<string> pages: [...(inCall ? ["callFull"] : []), ...(transfer ? ["transferFull"] : []), ...(Recorder.running ? ["recordFull"] : []), ...(clockKind !== "" ? ["clock"] : []), ...(IdleInhibitor.enabled ? ["caffeine"] : []), ...(Agents.list.length > 0 ? ["agents"] : []), "info", "perf", ...(hasMedia ? ["player"] : [])]
+    readonly property list<string> pages: [...(inCall ? ["callFull"] : []), ...(transfer ? ["transferFull"] : []), ...(Recorder.running ? ["recordFull"] : []), ...(clockKind !== "" ? ["clock"] : []), ...(IdleInhibitor.enabled ? ["caffeine"] : []), ...(Agents.shown.length > 0 ? ["agents"] : []), "info", "perf", ...(hasMedia ? ["player"] : [])]
     // Page retenue par son nom : elle reste la même quand d'autres pages apparaissent ou disparaissent
     property string pageName: "info"
     readonly property int pageIndex: Math.max(0, pages.indexOf(pageName))
@@ -4055,14 +4055,67 @@ Item {
                 }
             }
 
-            StyledText {
+            Row {
                 anchors.right: parent.right
-                anchors.rightMargin: 26
+                anchors.rightMargin: 22
                 anchors.verticalCenter: agHead.verticalCenter
-                visible: Agents.list.length > 3
-                text: qsTr("+%1").arg(Agents.list.length - 3)
-                color: root.fgDim
-                font.pointSize: 9.5
+                spacing: 10
+
+                StyledText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: Agents.shown.length > 3
+                    text: qsTr("+%1").arg(Agents.shown.length - 3)
+                    color: root.fgDim
+                    font.pointSize: 9.5
+                }
+
+                // « Nettoyer » : retire d'un coup les agents qui ont fini
+                Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: Agents.doneShown > 0
+                    width: cleanRow.implicitWidth + 20
+                    height: 26
+                    radius: 13
+                    color: Qt.alpha(root.fg, cleanArea.pressed ? 0.2 : cleanArea.containsMouse ? 0.14 : 0.08)
+                    scale: cleanArea.pressed ? 0.94 : 1
+
+                    Behavior on scale {
+                        NumberAnimation {
+                            duration: 120
+                        }
+                    }
+
+                    Row {
+                        id: cleanRow
+
+                        anchors.centerIn: parent
+                        spacing: 4
+
+                        MaterialIcon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "cleaning_services"
+                            color: root.fg
+                            fontStyle: Tokens.font.icon.size(12).build()
+                            fill: 1
+                        }
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: Agents.doneShown > 1 ? qsTr("Nettoyer (%1)").arg(Agents.doneShown) : qsTr("Nettoyer")
+                            color: root.fg
+                            font.pointSize: 9
+                            font.weight: Font.DemiBold
+                        }
+                    }
+
+                    MouseArea {
+                        id: cleanArea
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: Agents.clean()
+                    }
+                }
             }
 
             Column {
@@ -4074,7 +4127,7 @@ Item {
                 anchors.rightMargin: 14
 
                 Repeater {
-                    model: Agents.list.slice(0, 3)
+                    model: Agents.shown.slice(0, 3)
 
                     Item {
                         id: agRow
@@ -4082,6 +4135,7 @@ Item {
                         required property var modelData
                         readonly property bool working: modelData.status === "working"
                         readonly property bool waiting: modelData.status === "waiting"
+                        readonly property bool done: !working && !waiting
                         readonly property color tint: Agents.kindColour(modelData.kind)
 
                         width: parent?.width ?? 0
@@ -4138,11 +4192,28 @@ Item {
                             }
                         }
 
+                        // × au survol d'un agent qui a fini : le retirer de la page
+                        IslandButton {
+                            id: agClose
+
+                            anchors.right: parent.right
+                            anchors.rightMargin: 8
+                            anchors.verticalCenter: parent.verticalCenter
+                            z: 1
+                            icon: "close"
+                            visible: agRow.done && rowHover.hovered
+                            onClicked: Agents.dismiss(agRow.modelData)
+                        }
+
+                        HoverHandler {
+                            id: rowHover
+                        }
+
                         Column {
                             id: agTime
 
-                            anchors.right: parent.right
-                            anchors.rightMargin: 14
+                            anchors.right: agClose.visible ? agClose.left : parent.right
+                            anchors.rightMargin: agClose.visible ? 6 : 14
                             anchors.verticalCenter: parent.verticalCenter
 
                             StyledText {
