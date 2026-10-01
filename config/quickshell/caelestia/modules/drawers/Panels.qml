@@ -166,7 +166,7 @@ Item {
         y: Math.round(parent.height * 0.2)
     }
 
-    // Calculatrice : même goutte de verre, sous l'île
+    // Calculatrice : une ligne comme Spotlight, à la même place
     SpotlightModule.Calculator {
         id: calculator
 
@@ -175,7 +175,7 @@ Item {
         island: island
 
         anchors.horizontalCenter: parent.horizontalCenter
-        y: Math.round(parent.height * 0.11)
+        y: Math.round(parent.height * 0.2)
     }
 
     // Dock : sort du bas de l'écran au survol
