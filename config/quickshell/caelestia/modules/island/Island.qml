@@ -1315,7 +1315,7 @@ Item {
     readonly property real actsInset: compactActive && otherActs.length > 0 ? otherActs.length * 18 + 12 : 0
 
     function actIcon(a: string): string {
-        return ({ call: callMuted ? "mic_off" : "call", transfer: transfer?.kind === "copy" ? "content_copy" : "download", record: "radio_button_checked", clockMini: "timer", agentsMini: "smart_toy", media: "music_note", caffeine: "coffee" })[a] ?? "";
+        return ({ call: callMuted ? "mic_off" : "call", transfer: transfer?.kind === "copy" ? "content_copy" : transfer?.kind === "upload" ? "cloud_upload" : "download", record: "radio_button_checked", clockMini: "timer", agentsMini: "smart_toy", media: "music_note", caffeine: "coffee" })[a] ?? "";
     }
 
     function actColour(a: string): color {
@@ -2694,7 +2694,7 @@ Item {
 
                 MaterialIcon {
                     anchors.centerIn: parent
-                    text: root.transfer?.kind === "copy" ? "content_copy" : "arrow_downward"
+                    text: root.transfer?.kind === "copy" ? "content_copy" : root.transfer?.kind === "upload" ? "arrow_upward" : "arrow_downward"
                     color: "#0a84ff"
                     fontStyle: Tokens.font.icon.size(11).build()
                     fill: 1
@@ -2749,7 +2749,7 @@ Item {
 
                 MaterialIcon {
                     anchors.centerIn: parent
-                    text: root.transfer?.kind === "copy" ? "content_copy" : "download"
+                    text: root.transfer?.kind === "copy" ? "content_copy" : root.transfer?.kind === "upload" ? "cloud_upload" : "download"
                     color: "#0a84ff"
                     fontStyle: Tokens.font.icon.size(19).build()
                     fill: 1
@@ -2779,7 +2779,8 @@ Item {
                         const t = root.transfer;
                         if (!t)
                             return "";
-                        const parts = [t.total > 0 ? qsTr("%1 sur %2").arg(root.fmtBytes(t.done)).arg(root.fmtBytes(t.total)) : root.fmtBytes(t.done)];
+                        const parts = t.kind === "upload" ? [t.count ? qsTr("Drive · fichier %1").arg(t.count) : qsTr("Envoi sur Drive")] : [];
+                        parts.push(t.total > 0 ? qsTr("%1 sur %2").arg(root.fmtBytes(t.done)).arg(root.fmtBytes(t.total)) : root.fmtBytes(t.done));
                         if (t.speed > 0)
                             parts.push(`${root.fmtBytes(t.speed)}/s`);
                         const eta = root.transferEta(t);
@@ -2900,7 +2901,7 @@ Item {
                     font.weight: Font.DemiBold
                 }
                 StyledText {
-                    text: root.fileDone?.kind === "copy" ? qsTr("Copie terminée") : qsTr("Téléchargement terminé")
+                    text: root.fileDone?.kind === "copy" ? qsTr("Copie terminée") : root.fileDone?.kind === "upload" ? qsTr("Sauvegardé sur Google Drive") : qsTr("Téléchargement terminé")
                     color: root.fgDim
                     font.pointSize: 9
                 }
@@ -2924,10 +2925,10 @@ Item {
                     }
                 }
                 ShotButton {
-                    icon: "open_in_new"
-                    tip: qsTr("Ouvrir")
+                    icon: root.fileDone?.kind === "upload" ? "cloud" : "open_in_new"
+                    tip: root.fileDone?.kind === "upload" ? qsTr("Ouvrir Google Drive") : qsTr("Ouvrir")
                     onClicked: {
-                        Quickshell.execDetached(["xdg-open", root.fileDone?.path ?? ""]);
+                        Quickshell.execDetached(["xdg-open", root.fileDone?.kind === "upload" ? "https://drive.google.com/drive/search?q=Sauvegarde%20PC" : root.fileDone?.path ?? ""]);
                         root.pulse = "";
                     }
                 }

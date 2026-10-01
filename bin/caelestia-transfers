@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Suit les téléchargements (Chrome, Firefox…) et les copies de fichiers (Nautilus, cp, rsync…).
+"""Suit les téléchargements (Chrome, Firefox…), les copies de fichiers (Nautilus, cp, rsync…)
+et les envois vers Google Drive (drive-sync, journal JSON de rclone).
 
 Écrit une ligne JSON par seconde tant qu'il se passe quelque chose, lue par la Dynamic Island :
   {"items": [{id, kind, name, done, total, speed, dir}], "finished": [{kind, name, path}]}
-kind = "download" ou "copy" ; total = 0 si inconnu.
+kind = "download", "copy" ou "upload" ; total = 0 si inconnu ; count = « 3 / 12 » (envois).
 """
 import glob
 import json
@@ -18,6 +19,7 @@ COPIERS = {"nautilus", "gio", "cp", "mv", "rsync", "dd", "nemo", "thunar", "pcma
 PARTIAL = (".crdownload", ".part", ".download", ".opdownload")
 MIN_AGE = 1.2  # un transfert plus court ne s'affiche pas
 MIN_COPY = 4 * 1024 * 1024  # fichiers copiés : au moins 4 Mo
+DRIVE_LOG = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "drive-sync-progress.log")
 
 
 def download_dirs():
@@ -164,9 +166,46 @@ class Tracker:
             }
         return out
 
+    def scan_drive(self, now):
+        """Envoi drive-sync en cours : dernière ligne de stats du journal rclone (écrite chaque seconde)."""
+        try:
+            if now - os.path.getmtime(DRIVE_LOG) > 3:
+                return {}
+            with open(DRIVE_LOG, "rb") as f:
+                first = f.readline()
+                f.seek(0, os.SEEK_END)
+                f.seek(max(0, f.tell() - 65536))
+                lines = f.read().decode("utf-8", "replace").splitlines()
+            src = json.loads(first).get("source", "")
+        except (OSError, ValueError):
+            return {}
+        st = None
+        for line in reversed(lines):
+            if '"stats"' in line:
+                try:
+                    st = json.loads(line)["stats"]
+                    break
+                except ValueError:
+                    continue
+        if not st or not st.get("totalTransfers"):
+            return {}
+        sent, total = st.get("transfers", 0), st["totalTransfers"]
+        cur = st.get("transferring") or []
+        name = os.path.basename(cur[0]["name"]) if cur else os.path.basename(src)
+        return {"drive:" + src: {
+            "kind": "upload",
+            "name": name,
+            "done": int(st.get("bytes", 0)),
+            "total": int(st.get("totalBytes", 0)),
+            "dir": src,
+            "final": src,
+            "count": f"{min(sent + 1, total)} / {total}" if total > 1 else "",
+            "doneName": f"{total} fichier{'s' if total > 1 else ''} · {os.path.basename(src)}",
+        }}
+
     def tick(self):
         now = time.time()
-        current = {**self.scan_downloads(now), **self.scan_copies()}
+        current = {**self.scan_downloads(now), **self.scan_copies(), **self.scan_drive(now)}
         items, finished = [], []
         for key, info in current.items():
             s = self.seen.setdefault(key, {"first": now, "samples": []})
@@ -178,7 +217,7 @@ class Tracker:
                 info = s.get("info")
                 # Terminé (et pas annulé) : le fichier final existe
                 if info and info["final"] and now - s["first"] >= MIN_AGE and os.path.exists(info["final"]):
-                    finished.append({"kind": info["kind"], "name": os.path.basename(info["final"]), "path": info["final"]})
+                    finished.append({"kind": info["kind"], "name": info.get("doneName") or os.path.basename(info["final"]), "path": info["final"]})
         for key, s in self.seen.items():
             if now - s["first"] < MIN_AGE:
                 continue
@@ -193,6 +232,7 @@ class Tracker:
                 "total": info["total"],
                 "speed": max(0, int(speed)),
                 "dir": info["dir"],
+                "count": info.get("count", ""),
             })
         return items, finished
 
