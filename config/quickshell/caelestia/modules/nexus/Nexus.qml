@@ -47,7 +47,7 @@ Item {
         layer.enabled: Glass.panels
         layer.effect: GlassBlob {
             tintColour: root.blobColour
-            tintOpacity: Colours.light ? 0.5 : 0.4
+            tintOpacity: Glass.strength(Colours.light ? 0.5 : 0.4)
             shadow: 0
             pointerActive: frameHover.hovered
             mouse: Qt.point(frameHover.point.position.x / Math.max(1, width), frameHover.point.position.y / Math.max(1, height))

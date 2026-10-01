@@ -7,7 +7,7 @@ import qs.services
 // l'éclairage des bords sont appliqués ici.
 ShaderEffect {
     property color tintColour: Colours.palette.m3surface
-    property real tintOpacity: Glass.ios ? (Colours.light ? 0.3 : 0.24) : Colours.light ? 0.56 : 0.46
+    property real tintOpacity: Glass.strength(Glass.ios ? (Colours.light ? 0.3 : 0.24) : Colours.light ? 0.56 : 0.46)
     property real shadow: 0.17
     property Item pointerArea
     property bool pointerActive

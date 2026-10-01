@@ -298,13 +298,13 @@ install_files() {
     install_item config/starship/starship.toml "$HOME/.config/starship.toml"
     ok "Prompt Starship (capsules Catppuccin Mocha)"
 
-    # Variantes du verre GTK ; liquid-glass.css (généré par caelestia-glass-gtk) importe la variante
-    # choisie dans Paramètres → Fond d'écran et style. Ancienne version : lien vers le fichier GTK 4.
+    # Modèles du verre GTK : caelestia-glass-gtk en génère ~/.config/gtk-{3,4}.0/liquid-glass.css
+    # avec les couleurs du thème et l'intensité choisies dans Paramètres → Fond d'écran et style.
+    # Anciennes versions : lien vers le fichier GTK 4 et fichiers par variante.
     [[ -L $HOME/.config/gtk-3.0/liquid-glass.css ]] && run rm -f "$HOME/.config/gtk-3.0/liquid-glass.css"
-    install_item config/gtk-4.0/liquid-glass-nautilus.css "$HOME/.config/gtk-4.0/liquid-glass-nautilus.css"
-    install_item config/gtk-4.0/liquid-glass-complet.css "$HOME/.config/gtk-4.0/liquid-glass-complet.css"
-    install_item config/gtk-3.0/liquid-glass-complet.css "$HOME/.config/gtk-3.0/liquid-glass-complet.css"
-    ok "Applis GTK en verre (au choix : Nautilus seul, toutes, aucune)"
+    run rm -f "$HOME"/.config/gtk-{3,4}.0/liquid-glass-*.css
+    install_item config/gtk-glass "$DATA_DIR/gtk-glass"
+    ok "Applis GTK en verre (Nautilus seul, toutes ou aucune ; intensité réglable ; suit le thème)"
 
     for unit in "$REPO_DIR"/config/systemd/user/*; do
         install_item "config/systemd/user/$(basename "$unit")" "$HOME/.config/systemd/user/$(basename "$unit")"

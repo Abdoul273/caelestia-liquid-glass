@@ -246,6 +246,16 @@ PageBase {
             onSelected: item => Glass.set("shell", root.shellModes[root.shellItems.indexOf(item)])
         }
 
+        SliderRow {
+            Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
+
+            icon: "opacity"
+            label: qsTr("Intensité du verre (shell et applis GTK)")
+            valueLabel: value < 0.34 ? qsTr("Très transparent") : value < 0.46 ? qsTr("Transparent") : value <= 0.54 ? qsTr("Équilibré") : value < 0.75 ? qsTr("Dense") : qsTr("Très dense")
+            value: Glass.density
+            onMoved: v => Glass.set("density", Math.round(v * 100) / 100)
+        }
+
         SelectRow {
             Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
 

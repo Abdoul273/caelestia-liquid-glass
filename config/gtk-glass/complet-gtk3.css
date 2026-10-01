@@ -1,10 +1,14 @@
-/* Liquid glass pour les applis GTK 3 — limité à Thunar : Chromium et Electron
- * lisent les couleurs GTK 3 et ne doivent pas devenir translucides.
- * Choisi avec « caelestia-glass-gtk complet » (Paramètres → Applis GTK).
- * Le flou vient de Hyprland. */
+/* Modèle du liquid glass GTK — GTK 3, limité à Thunar (Chromium et Electron lisent les couleurs GTK 3).
+ * Ne pas copier tel quel : caelestia-glass-gtk le transforme en
+ * ~/.config/gtk-3.0/liquid-glass.css en remplaçant :
+ *   {{bg:A}} {{pop:A}} {{view:A}}  fond de fenêtre / menus / vues du thème Caelestia,
+ *                                  opacité A ajustée (thème clair, curseur d'intensité)
+ *   {{shade:A}}  voile de lecture (noir en sombre, blanc en clair), ajusté aussi
+ *   {{ink:A}}    remplissage de survol (blanc en sombre, noir en clair), fixe
+ * Choix et intensité : Paramètres → Fond d'écran et style → Liquid glass. */
 
 .thunar.background {
-  background-color: alpha(#131317, 0.50);
+  background-color: {{bg:0.50}};
   background-image: linear-gradient(to bottom, alpha(white, 0.06), alpha(white, 0.015) 35%, transparent 70%);
 }
 
@@ -20,7 +24,7 @@
 
 /* Barre latérale flottante, comme dans les applis GTK 4 */
 .thunar .sidebar {
-  background-color: alpha(white, 0.045);
+  background-color: {{ink:0.045}};
   border-radius: 18px;
   margin: 8px;
   box-shadow: inset 0 1px alpha(white, 0.14), inset 0 0 0 1px alpha(white, 0.06);
@@ -33,7 +37,7 @@
 /* Barre de chemin et barre d'état en verre */
 .thunar .location-button.path-bar-button:not(:checked),
 .thunar statusbar {
-  background-color: alpha(white, 0.07);
+  background-color: {{ink:0.07}};
   box-shadow: inset 0 1px alpha(white, 0.09);
 }
 
@@ -41,5 +45,5 @@
 .thunar menu,
 .thunar .menu,
 .thunar popover {
-  background-color: alpha(#1c1c22, 0.88);
+  background-color: {{pop:0.88}};
 }

@@ -624,13 +624,13 @@ StyledWindow {
             readonly property real thickAlpha: Glass.thickAlpha
             readonly property real unknownBg: 0
             readonly property real clearGlass: Glass.clear ? 1 : 0
-            readonly property real clearVeil: Colours.light ? 0.38 : 0.34
+            readonly property real clearVeil: Glass.strength(Colours.light ? 0.38 : 0.34)
             readonly property var wallpaper: wallpaperTex
             readonly property var windows: windowMaskTex
 
             readonly property vector2d texel: Qt.vector2d(1 / Math.max(1, width), 1 / Math.max(1, height))
             readonly property vector3d tint: Qt.vector3d(root.surfaceColour.r, root.surfaceColour.g, root.surfaceColour.b)
-            readonly property real tintAlpha: Glass.ios ? (Colours.light ? 0.3 : 0.24) : Colours.light ? 0.56 : 0.46
+            readonly property real tintAlpha: Glass.strength(Glass.ios ? (Colours.light ? 0.3 : 0.24) : Colours.light ? 0.56 : 0.46)
             readonly property real light: Colours.light ? 1.2 : 1
             readonly property real shadowStrength: 0.17 * Math.max(0, root.shadowOpacity) / 0.7
             readonly property point mouse: Qt.point(interactions.mouseX / Math.max(1, width), interactions.mouseY / Math.max(1, height))

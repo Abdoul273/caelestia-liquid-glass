@@ -1,29 +1,32 @@
-/* Liquid glass « complet » : toutes les applis GTK 4 / libadwaita.
- * Choisi dans Paramètres → Fond d'écran et style → Applis GTK, ou
- * « caelestia-glass-gtk nautilus|complet|off ».
- * Le flou vient de Hyprland ; le texte et les icônes restent nets. Les outils
- * Caelestia (classe .caelestia-tool) gardent leur propre style. */
+/* Modèle du liquid glass GTK — toutes les applis GTK 4 / libadwaita (les outils Caelestia, classe .caelestia-tool, gardent leur style).
+ * Ne pas copier tel quel : caelestia-glass-gtk le transforme en
+ * ~/.config/gtk-4.0/liquid-glass.css en remplaçant :
+ *   {{bg:A}} {{pop:A}} {{view:A}}  fond de fenêtre / menus / vues du thème Caelestia,
+ *                                  opacité A ajustée (thème clair, curseur d'intensité)
+ *   {{shade:A}}  voile de lecture (noir en sombre, blanc en clair), ajusté aussi
+ *   {{ink:A}}    remplissage de survol (blanc en sombre, noir en clair), fixe
+ * Choix et intensité : Paramètres → Fond d'écran et style → Liquid glass. */
 
 /* ---------------------------------------------------------------------------
  *  Verre de base : libadwaita 1.6+ tire ses fonds de variables CSS
  * ------------------------------------------------------------------------- */
 window.background:not(.caelestia-tool) {
-  --window-bg-color: alpha(#131317, 0.50);
+  --window-bg-color: {{bg:0.50}};
   --view-bg-color: transparent;
   --headerbar-bg-color: transparent;
   --headerbar-backdrop-color: transparent;
-  --headerbar-shade-color: alpha(white, 0.05);
+  --headerbar-shade-color: {{ink:0.05}};
   --sidebar-bg-color: transparent;
   --sidebar-backdrop-color: transparent;
-  --sidebar-shade-color: alpha(white, 0.06);
+  --sidebar-shade-color: {{ink:0.06}};
   --secondary-sidebar-bg-color: transparent;
   --secondary-sidebar-backdrop-color: transparent;
-  --card-bg-color: alpha(white, 0.05);
+  --card-bg-color: {{ink:0.05}};
   --card-shade-color: alpha(black, 0.18);
-  --thumbnail-bg-color: alpha(white, 0.06);
-  --dialog-bg-color: alpha(#1a1a20, 0.90);
-  --popover-bg-color: alpha(#1c1c22, 0.86);
-  background-color: alpha(@window_bg_color, 0.50);
+  --thumbnail-bg-color: {{ink:0.06}};
+  --dialog-bg-color: {{pop:0.90}};
+  --popover-bg-color: {{pop:0.86}};
+  background-color: {{bg:0.50}};
   /* Voile lumineux en haut, comme une lentille éclairée d'en haut */
   background-image: linear-gradient(to bottom, alpha(white, 0.06), alpha(white, 0.015) 35%, transparent 70%);
 }
@@ -31,7 +34,7 @@ window.background:not(.caelestia-tool) {
 /* Fenêtres sans barre latérale : un peu plus teintées pour la lecture */
 window.background.dialog:not(.caelestia-tool),
 window.background.messagedialog:not(.caelestia-tool) {
-  background-color: alpha(@window_bg_color, 0.78);
+  background-color: {{bg:0.78}};
 }
 
 /* Fonds intérieurs : on laisse passer le verre */
@@ -69,7 +72,7 @@ window.background:not(.caelestia-tool) toolbarview.undershoot-top > .top-bar hea
 window.background:not(.caelestia-tool) .sidebar-pane {
   margin: 8px 0 8px 8px;
   border-radius: 18px;
-  background-color: alpha(white, 0.045);
+  background-color: {{ink:0.045}};
   background-image: linear-gradient(to bottom, alpha(white, 0.05), transparent 40%);
   box-shadow:
     inset 0 1px alpha(white, 0.14),
@@ -94,7 +97,7 @@ window.background:not(.caelestia-tool) .navigation-sidebar > row {
   transition: background-color 180ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 window.background:not(.caelestia-tool) .navigation-sidebar > row:hover {
-  background-color: alpha(white, 0.07);
+  background-color: {{ink:0.07}};
 }
 window.background:not(.caelestia-tool) .navigation-sidebar > row:selected {
   background-color: alpha(@accent_bg_color, 0.24);
@@ -109,21 +112,21 @@ window.background:not(.caelestia-tool) spinbutton,
 window.background:not(.caelestia-tool) dropdown > button,
 window.background:not(.caelestia-tool) .path-bar-box,
 window.background:not(.caelestia-tool) .nautilus-path-bar {
-  background-color: alpha(white, 0.07);
+  background-color: {{ink:0.07}};
   box-shadow: inset 0 1px alpha(white, 0.09);
   border-radius: 10px;
 }
 window.background:not(.caelestia-tool) entry:focus-within {
-  background-color: alpha(white, 0.10);
+  background-color: {{ink:0.10}};
 }
 
 /* Boutons pleins (pas les boutons « plats » des barres) */
 window.background:not(.caelestia-tool) button:not(.flat):not(.suggested-action):not(.destructive-action):not(.circular):not(.image-button):not(.toggle):not(.link) {
-  background-color: alpha(white, 0.08);
+  background-color: {{ink:0.08}};
   box-shadow: inset 0 1px alpha(white, 0.10);
 }
 window.background:not(.caelestia-tool) button:not(.flat):not(.suggested-action):not(.destructive-action):not(.circular):not(.image-button):not(.toggle):not(.link):hover {
-  background-color: alpha(white, 0.12);
+  background-color: {{ink:0.12}};
 }
 window.background:not(.caelestia-tool) button.suggested-action,
 window.background:not(.caelestia-tool) button.destructive-action {
@@ -134,7 +137,7 @@ window.background:not(.caelestia-tool) button.destructive-action {
 window.background:not(.caelestia-tool) .card,
 window.background:not(.caelestia-tool) list.boxed-list,
 window.background:not(.caelestia-tool) .boxed-list {
-  background-color: alpha(white, 0.05);
+  background-color: {{ink:0.05}};
   box-shadow: inset 0 1px alpha(white, 0.08), inset 0 0 0 1px alpha(white, 0.04);
   border-radius: 14px;
 }
@@ -142,7 +145,7 @@ window.background:not(.caelestia-tool) .boxed-list {
 /* Zones de texte (Éditeur de texte…) : légère teinte pour la lisibilité */
 window.background:not(.caelestia-tool) textview,
 window.background:not(.caelestia-tool) textview > text {
-  background-color: alpha(black, 0.16);
+  background-color: {{shade:0.16}};
 }
 window.background:not(.caelestia-tool) textview > border,
 window.background:not(.caelestia-tool) textview > gutter,
@@ -168,7 +171,7 @@ window.background:not(.caelestia-tool) columnview row {
 }
 window.background:not(.caelestia-tool) gridview > child:hover,
 window.background:not(.caelestia-tool) columnview row:hover {
-  background-color: alpha(white, 0.05);
+  background-color: {{ink:0.05}};
 }
 window.background:not(.caelestia-tool) gridview > child:selected,
 window.background:not(.caelestia-tool) columnview row:selected {
@@ -182,7 +185,7 @@ window.background:not(.caelestia-tool) columnview row:selected {
 popover.background > contents,
 popover.background > arrow,
 popover.menu > contents {
-  background-color: alpha(#1c1c22, 0.86);
+  background-color: {{pop:0.86}};
   box-shadow: inset 0 1px alpha(white, 0.10), inset 0 0 0 1px alpha(white, 0.05), 0 10px 30px alpha(black, 0.35);
   border-radius: 14px;
 }
@@ -200,14 +203,14 @@ window.background:not(.caelestia-tool) floating-sheet > sheet {
 
 /* Bulles d'aide */
 tooltip.background {
-  background-color: alpha(#1c1c22, 0.88);
+  background-color: {{pop:0.88}};
   box-shadow: inset 0 1px alpha(white, 0.10);
   border-radius: 9px;
 }
 
 /* Toasts (« Fichier supprimé — Annuler ») */
 toast {
-  background-color: alpha(#26262e, 0.88);
+  background-color: {{pop:0.88}};
   box-shadow: inset 0 1px alpha(white, 0.12), 0 8px 24px alpha(black, 0.35);
   border-radius: 14px;
 }

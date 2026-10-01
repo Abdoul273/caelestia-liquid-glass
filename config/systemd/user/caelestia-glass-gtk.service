@@ -3,5 +3,7 @@ Description=Caelestia Liquid Glass : réactive le verre des applis GTK après un
 
 [Service]
 Type=oneshot
-# Caelestia réécrit gtk.css à chaque changement de thème : on y remet l'import du verre
+# Caelestia réécrit gtk.css à chaque changement de thème : on y remet l'import du verre,
+# puis on régénère le verre avec les nouvelles couleurs (clair/sombre, fond d'écran)
 ExecStart=/bin/sh -c 'for v in gtk-3.0 gtk-4.0; do f="$HOME/.config/$v/gtk.css"; [ -f "$f" ] || continue; grep -q "liquid-glass.css" "$f" || printf "\\n@import \\"liquid-glass.css\\";\\n" >> "$f"; done'
+ExecStart=%h/.local/bin/caelestia-glass-gtk

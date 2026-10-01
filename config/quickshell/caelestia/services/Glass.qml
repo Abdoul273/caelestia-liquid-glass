@@ -10,6 +10,7 @@ import Quickshell.Io
 // enregistré dans ~/.config/caelestia/glass.json (modifiable à la main aussi) :
 //   shell : "classic" (verre teinté, le compromis) | "ios" (verre plein) | "off" (Caelestia d'origine)
 //   gtk   : "nautilus" | "complet" | "off" (appliqué par caelestia-glass-gtk)
+//   density : intensité du verre de 0 (très transparent) à 1 (presque opaque), 0.5 = réglage d'origine
 // Les notifications restent en verre dans tous les cas.
 Singleton {
     id: root
@@ -33,7 +34,17 @@ Singleton {
     readonly property bool lensControls: controls
     // Opacité du verre quand le fond contraste avec le panneau (page blanche derrière un panneau
     // sombre…) : le panneau garde sa couleur, comme sur macOS. Plus bas = plus transparent.
-    readonly property real thickAlpha: Colours.light ? 0.44 : 0.45
+    readonly property real thickAlpha: strength(Colours.light ? 0.44 : 0.45)
+
+    // Intensité du verre (curseur des Paramètres) : 0.5 garde les opacités d'origine
+    readonly property real density: Math.max(0, Math.min(1, opts.density))
+
+    // Opacité d'origine → opacité selon l'intensité choisie (même formule que caelestia-glass-gtk)
+    function strength(base: real): real {
+        if (density <= 0.5)
+            return base * (0.35 + 1.3 * density);
+        return base + (0.95 - base) * (density - 0.5) * 2;
+    }
 
     // Chaque carte en verre (couleur venant de tile()) devient sa propre pièce de verre
     // bombée (biseau, reflets, liseré), comme les widgets d'iOS 27. false = simple voile.
@@ -64,6 +75,16 @@ Singleton {
         file.writeAdapter();
         if (key === "gtk")
             Quickshell.execDetached(["caelestia-glass-gtk", value]);
+        else if (key === "density")
+            gtkTimer.restart();
+    }
+
+    // Le curseur bouge en continu : on ne régénère le style GTK qu'une fois relâché
+    Timer {
+        id: gtkTimer
+
+        interval: 450
+        onTriggered: Quickshell.execDetached(["caelestia-glass-gtk"])
     }
 
     FileView {
@@ -83,6 +104,7 @@ Singleton {
 
             property string shell: "classic"
             property string gtk: "nautilus"
+            property real density: 0.5
         }
     }
 }

@@ -1,21 +1,25 @@
-/* Liquid glass « classique » : Nautilus seulement (le bon compromis).
- * Choisi dans Paramètres → Fond d'écran et style → Applis GTK, ou
- * « caelestia-glass-gtk nautilus|complet|off ».
- * Le flou vient de Hyprland ; le texte et les icônes restent nets. */
+/* Modèle du liquid glass GTK — Nautilus seulement.
+ * Ne pas copier tel quel : caelestia-glass-gtk le transforme en
+ * ~/.config/gtk-4.0/liquid-glass.css en remplaçant :
+ *   {{bg:A}} {{pop:A}} {{view:A}}  fond de fenêtre / menus / vues du thème Caelestia,
+ *                                  opacité A ajustée (thème clair, curseur d'intensité)
+ *   {{shade:A}}  voile de lecture (noir en sombre, blanc en clair), ajusté aussi
+ *   {{ink:A}}    remplissage de survol (blanc en sombre, noir en clair), fixe
+ * Choix et intensité : Paramètres → Fond d'écran et style → Liquid glass. */
 
 /* Verre de base : libadwaita 1.6+ tire ses fonds de variables CSS, on les rend translucides */
 window.nautilus-window {
-  --window-bg-color: alpha(#131317, 0.46);
+  --window-bg-color: {{bg:0.46}};
   --view-bg-color: transparent;
   --headerbar-bg-color: transparent;
   --headerbar-backdrop-color: transparent;
-  --headerbar-shade-color: alpha(white, 0.05);
+  --headerbar-shade-color: {{ink:0.05}};
   --sidebar-bg-color: transparent;
   --sidebar-backdrop-color: transparent;
-  --sidebar-shade-color: alpha(white, 0.06);
+  --sidebar-shade-color: {{ink:0.06}};
   --secondary-sidebar-bg-color: transparent;
-  --card-bg-color: alpha(white, 0.05);
-  background-color: alpha(@window_bg_color, 0.46);
+  --card-bg-color: {{ink:0.05}};
+  background-color: {{bg:0.46}};
   /* Voile lumineux en haut, comme une lentille éclairée d'en haut */
   background-image: linear-gradient(to bottom, alpha(white, 0.06), alpha(white, 0.015) 35%, transparent 70%);
 }
@@ -35,7 +39,7 @@ window.nautilus-window placessidebar list {
 /* Zone des fichiers : une plaque de verre un peu plus teintée pour la lisibilité */
 window.nautilus-window .content-pane,
 window.nautilus-window .content-pane > toolbarview {
-  background-color: alpha(@view_bg_color, 0.38);
+  background-color: {{view:0.38}};
   background-image: none;
 }
 
@@ -70,7 +74,7 @@ window.nautilus-window .path-bar-box,
 window.nautilus-window .nautilus-path-bar,
 window.nautilus-window headerbar entry,
 window.nautilus-window searchbar entry {
-  background-color: alpha(white, 0.06);
+  background-color: {{ink:0.06}};
   box-shadow: inset 0 1px alpha(white, 0.08);
   border-radius: 10px;
 }
@@ -82,7 +86,7 @@ window.nautilus-window .navigation-sidebar row {
 }
 
 window.nautilus-window .navigation-sidebar row:hover {
-  background-color: alpha(white, 0.06);
+  background-color: {{ink:0.06}};
 }
 
 window.nautilus-window .navigation-sidebar row:selected {
@@ -99,7 +103,7 @@ window.nautilus-window columnview row {
 
 window.nautilus-window gridview > child:hover,
 window.nautilus-window columnview row:hover {
-  background-color: alpha(white, 0.05);
+  background-color: {{ink:0.05}};
 }
 
 window.nautilus-window gridview > child:selected,
@@ -111,6 +115,6 @@ window.nautilus-window columnview row:selected {
 /* Menus et popups : verre plus dense pour rester lisibles */
 window.nautilus-window popover > contents,
 window.nautilus-window popover > arrow {
-  background-color: alpha(@popover_bg_color, 0.82);
+  background-color: {{pop:0.82}};
   box-shadow: inset 0 1px alpha(white, 0.08), 0 8px 24px alpha(black, 0.30);
 }
