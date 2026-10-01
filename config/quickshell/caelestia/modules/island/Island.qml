@@ -768,10 +768,6 @@ Item {
             root.agentDone = agent;
             root.flash("agentDone", 7000);
         }
-        function onBusyChanged(): void {
-            if (Agents.busy && root.pageName === "info")
-                root.pageName = "agents";
-        }
         function onListChanged(): void {
             if (Agents.list.length === 0 && root.pageName === "agents")
                 root.pageName = "info";
@@ -1304,13 +1300,16 @@ Item {
     }
 
     // Activités en cours affichables en compact ; celle qu'on a regardée en dernier passe devant
-    readonly property list<string> compactActs: [...(inCall ? ["call"] : []), ...(transfer ? ["transfer"] : []), ...(Recorder.running ? ["record"] : []), ...(clockKind !== "" ? ["clockMini"] : []), ...(Agents.busy ? ["agentsMini"] : []), ...(hasMedia && playing ? ["media"] : [])]
+    readonly property list<string> allActs: [...(inCall ? ["call"] : []), ...(transfer ? ["transfer"] : []), ...(Recorder.running ? ["record"] : []), ...(clockKind !== "" ? ["clockMini"] : []), ...(Agents.busy ? ["agentsMini"] : []), ...(hasMedia && playing ? ["media"] : [])]
+    // Agents et musique ne prennent l'île repliée que si c'est leur page qu'on regardait ;
+    // sinon l'île revient au repos (heure, date…) avec juste une petite icône à droite
+    readonly property list<string> compactActs: allActs.filter(a => (a !== "agentsMini" || pageName === "agents") && (a !== "media" || pageName === "player"))
     readonly property string compactPick: {
         const fromPage = ({ callFull: "call", transferFull: "transfer", recordFull: "record", clock: "clockMini", agents: "agentsMini", player: "media" })[pageName];
         return fromPage && compactActs.includes(fromPage) ? fromPage : (compactActs[0] ?? "");
     }
     // Les autres activités, en petites icônes au bord de l'île compacte (+ caféine)
-    readonly property list<string> otherActs: [...compactActs.filter(a => a !== mode), ...(IdleInhibitor.enabled ? ["caffeine"] : [])]
+    readonly property list<string> otherActs: [...allActs.filter(a => a !== mode), ...(IdleInhibitor.enabled ? ["caffeine"] : [])]
     readonly property bool compactActive: mode === "call" || mode === "transfer" || mode === "record" || mode === "clockMini" || mode === "agentsMini" || mode === "media"
     readonly property real actsInset: compactActive && otherActs.length > 0 ? otherActs.length * 18 + 12 : 0
 
@@ -2356,6 +2355,16 @@ Item {
                             font.weight: Font.Bold
                         }
                     }
+                }
+                IdleIcon {
+                    shown: Agents.busy && root.pageName !== "agents"
+                    icon: "smart_toy"
+                    tint: Agents.kindColour(Agents.lead?.kind ?? "")
+                }
+                IdleIcon {
+                    shown: root.hasMedia && root.playing && root.pageName !== "player"
+                    icon: "music_note"
+                    tint: root.accent
                 }
                 IdleIcon {
                     shown: FocusMode.active
