@@ -16,6 +16,7 @@ import qs.modules.utilities.toasts as Toasts
 import qs.modules.island as IslandModule
 import qs.modules.controlcenter as CC
 import qs.modules.dock as DockModule
+import qs.modules.spotlight as SpotlightModule
 
 Item {
     id: root
@@ -40,6 +41,7 @@ Item {
     readonly property alias island: island
     readonly property alias controlCenter: controlCenter
     readonly property alias dock: dock
+    readonly property alias spotlight: spotlight
 
     anchors.fill: parent
     anchors.margins: borderThickness
@@ -149,6 +151,18 @@ Item {
         anchors.top: parent.top
         anchors.topMargin: -root.borderThickness
         island: island
+    }
+
+    // Spotlight : une goutte de verre tombe de l'île jusqu'au centre de l'écran
+    SpotlightModule.Spotlight {
+        id: spotlight
+
+        screen: root.screen
+        screenState: root.screenState
+        island: island
+
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: Math.round(parent.height * 0.2)
     }
 
     // Dock : sort du bas de l'écran au survol

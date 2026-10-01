@@ -1838,7 +1838,166 @@ class Calculator(Gtk.Application):
             self.insert(result.split(" ")[0].replace("\u202f", ""))
 
 
+# ---------------------------------------------------------------- mode serveur (Spotlight du shell)
+
+def run_action(action: str) -> None:
+    """Exécute l'action d'un résultat (même logique que la fenêtre GTK)."""
+    quiet = {"start_new_session": True, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+    if action.startswith("copy:"):
+        copy_text(action[5:])
+    elif action.startswith("app:"):
+        info = Gio.DesktopAppInfo.new(action[4:])
+        if info is not None and info.get_filename():
+            subprocess.Popen(["gio", "launch", info.get_filename()], **quiet)
+    elif action.startswith("cmd:"):
+        subprocess.Popen(json.loads(action[4:]), **quiet)
+    elif action.startswith("note:"):
+        subprocess.Popen(["sh", "-c", 'qs -c caelestia ipc call notes select "$1"; hyprctl dispatch \'hl.dsp.global("caelestia:quicknotes")\'', "sh", action[5:]], **quiet)
+    elif action.startswith("task:"):
+        subprocess.Popen(["hyprctl", "dispatch", 'hl.dsp.global("caelestia:quicktasks")'], **quiet)
+    elif action.startswith("file:"):
+        subprocess.Popen(["xdg-open", action[5:]], **quiet)
+    elif action:
+        open_url(action)
+
+
+def _icon_name(gicon) -> str:
+    if gicon is None:
+        return ""
+    if isinstance(gicon, Gio.ThemedIcon):
+        names = gicon.get_names()
+        return names[0] if names else ""
+    if isinstance(gicon, Gio.FileIcon):
+        return gicon.get_file().get_path() or ""
+    return gicon.to_string() or ""
+
+
+def _file_item(path: str, recent: bool) -> dict:
+    is_dir = os.path.isdir(path)
+    ctype = "inode/directory" if is_dir else Gio.content_type_guess(path, None)[0]
+    return {"kind": "file", "section": "Fichiers", "title": os.path.basename(path.rstrip("/")),
+            "sub": os.path.dirname(path.rstrip("/")).replace(HOME, "~", 1), "tag": "Récent" if recent else "",
+            "icon": _icon_name(Gio.content_type_get_icon(ctype)), "fallback": "folder" if is_dir else "text-x-generic",
+            "action": "file:" + path}
+
+
+def _task_item(t: dict, section: str) -> dict:
+    return {"kind": "task", "section": section, "title": t["title"], "sub": t["due"] or PRIORITY_FR.get(t["priority"], ""),
+            "done": t["done"], "late": t["due"].startswith("En retard"), "priority": t["priority"],
+            "glyph": "󰄵" if t["done"] else "󰄱", "action": "task:" + str(t["id"])}
+
+
+def local_items(query: str) -> list[dict]:
+    items: list[dict] = []
+    if not query:
+        for t in today_tasks():
+            items.append(_task_item(t, "Aujourd'hui"))
+        for path in recent_files("", 6):
+            items.append(_file_item(path, True))
+        return items
+    apps = search_apps(query)
+    for i, a in enumerate(apps[:4]):
+        items.append({"kind": "app", "section": "Meilleur résultat" if i == 0 else "Applications",
+                      "title": a.get_display_name() or a.get_name() or "", "sub": a.get_description() or a.get_generic_name() or "Application",
+                      "icon": _icon_name(a.get_icon()), "fallback": "application-x-executable", "top": i == 0,
+                      "action": "app:" + (a.get_id() or "")})
+    for title, icon, cmd in search_actions(query):
+        items.append({"kind": "action", "section": "Actions", "title": title, "sub": "Action", "glyph": icon, "action": "cmd:" + json.dumps(cmd)})
+    clock = clock_command(query)
+    if clock:
+        items.append({"kind": "calc", "section": "Horloge", "title": clock[1], "sub": "Entrée pour lancer", "glyph": "󰔛", "action": "cmd:" + json.dumps(clock[0])})
+    else:
+        value = None
+        if is_calculation(query):
+            v = calculate(query)
+            value = format_number(v) if v is not None else None
+        elif convert(query):
+            value = convert(query)
+        if value:
+            items.append({"kind": "calc", "section": "Calcul", "title": "= " + value, "sub": "Entrée pour copier", "glyph": "󰃬",
+                          "action": "copy:" + value.replace(chr(0x202f), "").replace(" ", "")})
+    for n in search_notes(query):
+        items.append({"kind": "note", "section": "Notes", "title": n["title"], "sub": n["snippet"], "glyph": "󰎞", "action": "note:" + str(n["id"])})
+    for t in search_tasks(query):
+        items.append(_task_item(t, "Tâches"))
+    for path in recent_files(query, 3):
+        items.append(_file_item(path, True))
+    return items
+
+
+def serve() -> int:
+    """Protocole en lignes JSON sur stdin/stdout, utilisé par le Spotlight du shell :
+    entrée {"seq": n, "q": "…"} ou {"run": "action"} ; sortie {"seq": n, "stage": …, "items": […]}."""
+    lock = threading.Lock()
+    state = {"seq": 0}
+
+    def send(seq: int, stage: str, items: list[dict], **extra) -> None:
+        if seq != state["seq"]:
+            return
+        with lock:
+            sys.stdout.write(json.dumps({"seq": seq, "stage": stage, "items": items, **extra}, ensure_ascii=False) + "\n")
+            sys.stdout.flush()
+
+    def slow(seq: int, query: str) -> None:
+        import time
+        if len(query) >= 3:
+            recent = set(recent_files(query, 3))
+            send(seq, "files", [_file_item(f, False) for f in search_files(query) if f not in recent])
+        time.sleep(0.11)
+        if seq != state["seq"]:
+            return
+        try:
+            send(seq, "suggest", [{"kind": "suggest", "section": "Suggestions", "title": t, "glyph": "󰍉", "action": "suggest:" + t}
+                                  for t in suggestions(query)[:4] if t.strip().lower() != query.lower()])
+        except Exception:
+            send(seq, "suggest", [])
+        time.sleep(0.5)
+        if seq != state["seq"]:
+            return
+        hit_holder: list[TopHit | None] = [None]
+        wiki = threading.Thread(target=lambda: hit_holder.__setitem__(0, top_hit(query)), daemon=True)
+        wiki.start()
+        error = False
+        try:
+            results = web_search(query)
+        except Exception:
+            results, error = [], True
+        wiki.join(timeout=TIMEOUT)
+        items = []
+        hit = hit_holder[0]
+        if hit is not None:
+            items.append({"kind": "hit", "section": hit.source, "title": hit.title, "sub": hit.text, "glyph": "󰖟", "action": hit.url or "https://fr.wikipedia.org"})
+        for r in results[:8]:
+            items.append({"kind": "web", "section": "Sur le Web", "title": r.title, "sub": r.snippet, "domain": r.domain,
+                          "icon": r.icon_url, "action": r.url})
+        send(seq, "web", items, error=error)
+
+    for line in sys.stdin:
+        try:
+            msg = json.loads(line)
+        except ValueError:
+            continue
+        if "run" in msg:
+            try:
+                run_action(msg["run"])
+            except Exception:
+                pass
+            continue
+        seq = int(msg.get("seq", 0))
+        query = str(msg.get("q", "")).strip()
+        state["seq"] = seq
+        try:
+            send(seq, "local", local_items(query))
+        except Exception:
+            send(seq, "local", [])
+        if query:
+            threading.Thread(target=slow, args=(seq, query), daemon=True).start()
+    return 0
+
+
 def main() -> int:
+    if len(sys.argv) > 1 and sys.argv[1] == "serve":
+        return serve()
     if len(sys.argv) > 1 and sys.argv[1] in ("calc", "calculatrice", "-c"):
         return Calculator().run([sys.argv[0]])
     return Spotlight("search").run([sys.argv[0]])

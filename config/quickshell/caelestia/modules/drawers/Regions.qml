@@ -38,6 +38,11 @@ Region {
     }
 
     R {
+        panel: root.panels.spotlight
+        width: root.panels.spotlight.visible ? panel.width : 0
+    }
+
+    R {
         panel: root.panels.island
         y: 0
         height: panel.height

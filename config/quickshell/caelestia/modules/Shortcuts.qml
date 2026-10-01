@@ -71,6 +71,25 @@ Scope {
     // qmllint disable unresolved-type
     CustomShortcut {
         // qmllint enable unresolved-type
+        name: "spotlight"
+        description: qsTr("Ouvrir/Fermer Spotlight")
+        onPressed: {
+            if (root.hasFullscreen)
+                return;
+            const screenState = ShellState.forActive();
+            const open = !screenState.spotlight;
+            if (open) {
+                screenState.controlCenter = false;
+                screenState.launcher = false;
+                screenState.dashboard = false;
+            }
+            screenState.spotlight = open;
+        }
+    }
+
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
         name: "quicknotes"
         description: qsTr("Ouvrir les notes rapides")
         onPressed: root.toggleQuick("notes")
