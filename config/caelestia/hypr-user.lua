@@ -204,7 +204,7 @@ rebind("SUPER + grave", hl.dsp.exec_cmd("kitten quick-access-terminal"))
 
 rebind("SUPER + SHIFT + O", hl.dsp.global("caelestia:clock")) -- Horloge dans le verre du shell
 rebind("SUPER + H", hl.dsp.global("caelestia:keyhelp")) -- Raccourcis façon Spotlight dans le verre du shell
-rebind("SUPER + Print", hl.dsp.exec_cmd(home .. "/.local/bin/caelestia-capture-annotate")) -- Capture de l’écran actif → éditeur d’annotation
+rebind("SUPER + Print", hl.dsp.global("caelestia:screenshot")) -- Capture sur mesure (choix de la zone → éditeur d’annotation), comme le bouton Capture du centre de contrôle
 
 
 -- ---------------------------------------------------------------------------
