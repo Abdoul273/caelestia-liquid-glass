@@ -23,7 +23,6 @@ import asyncio
 import datetime as dt
 import json
 import os
-import re
 import subprocess
 import sys
 import time
@@ -71,6 +70,12 @@ def load_config() -> dict:
 
 CFG = load_config()
 
+# Les actions d'ANO-GPT impriment beaucoup : stdout (fd 1) est redirigé vers stderr
+# et le protocole JSON passe par une copie privée du vrai stdout.
+OUT = os.fdopen(os.dup(1), "w", buffering=1)
+os.dup2(2, 1)
+sys.stdout = sys.stderr
+
 
 _last_state = None
 
@@ -82,8 +87,8 @@ def emit(**msg) -> None:
         if key == _last_state:
             return
         _last_state = key
-    sys.stdout.write(json.dumps(msg, ensure_ascii=False) + "\n")
-    sys.stdout.flush()
+    OUT.write(json.dumps(msg, ensure_ascii=False) + "\n")
+    OUT.flush()
 
 
 def run(*cmd: str, timeout: float = 4) -> str:
@@ -103,77 +108,10 @@ def fold(s: str) -> str:
 
 # ── Outils ────────────────────────────────────────────────────────────────────
 
-def t_open_app(name: str) -> dict:
-    import gi
-    gi.require_version("Gio", "2.0")
-    from gi.repository import Gio
-    q = fold(name)
-    best, score = None, 0
-    for app in Gio.AppInfo.get_all():
-        if not app.should_show():
-            continue
-        names = [app.get_display_name() or "", app.get_name() or "", app.get_id() or ""]
-        names += list(getattr(app, "get_keywords", lambda: [])() or [])
-        for n in names:
-            f = fold(n).removesuffix(".desktop")
-            s = 100 if f == q else 80 if f.startswith(q) else 60 if q in f.split() else 40 if q in f else 0
-            if s > score:
-                best, score = app, s
-    if not best:
-        return {"ok": False, "erreur": f"aucune application ne correspond à « {name} »"}
-    subprocess.Popen(["gio", "launch", best.get_filename()], start_new_session=True,
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    return {"ok": True, "application": best.get_display_name()}
-
-
-def t_open_url(url: str) -> dict:
-    if not re.match(r"^[a-z]+://", url):
-        url = "https://" + url
-    subprocess.Popen(["xdg-open", url], start_new_session=True,
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    return {"ok": True}
-
-
-def t_web_search(query: str) -> dict:
-    sys.path.insert(0, str(ANO))
-    from actions.web_search import web_search
-    import contextlib
-    import io
-    with contextlib.redirect_stdout(io.StringIO()):  # ses journaux casseraient le JSON
-        text = web_search({"query": query})
-    return {"resultats": text[:6000]}
-
 
 def t_timer(duration: str, label: str = "") -> dict:
     qs_ipc("island", "timerFor", duration, label)
     return {"ok": True, "duree": duration}
-
-
-def t_media(action: str) -> dict:
-    fn = {"lecture": "play", "pause": "pause", "basculer": "playPause", "suivant": "next",
-          "precedent": "previous", "stop": "stop"}.get(action, "playPause")
-    qs_ipc("mpris", fn)
-    return {"ok": True}
-
-
-def t_volume(level: str) -> dict:
-    sink = "@DEFAULT_AUDIO_SINK@"
-    if level in ("muet", "silence"):
-        run("wpctl", "set-mute", sink, "1")
-    elif level == "reactiver":
-        run("wpctl", "set-mute", sink, "0")
-    elif level in ("plus", "moins"):
-        run("wpctl", "set-volume", "-l", "1.0", sink, "10%+" if level == "plus" else "10%-")
-    else:
-        n = max(0, min(100, int(re.sub(r"\D", "", level) or 50)))
-        run("wpctl", "set-mute", sink, "0")
-        run("wpctl", "set-volume", sink, f"{n}%")
-    return {"ok": True, "volume": run("wpctl", "get-volume", sink)}
-
-
-def t_brightness(level: int) -> dict:
-    qs_ipc("brightness", "set", f"{max(1, min(100, int(level))) / 100:.2f}")
-    return {"ok": True}
 
 
 def t_dnd(active: bool) -> dict:
@@ -184,133 +122,6 @@ def t_dnd(active: bool) -> dict:
 def t_now() -> dict:
     now = dt.datetime.now()
     return {"maintenant": now.strftime("%A %d %B %Y, %H:%M")}
-
-
-# Fenêtre active au moment où l'assistant a été appelé (« ferme ça », « mets-la en plein écran »)
-ACTIVE = {"address": ""}
-DEICTIC = {"", "ca", "cela", "ceci", "celle-ci", "celui-ci", "cette", "cette fenetre", "cette application",
-           "fenetre active", "active", "actuelle", "la fenetre", "l'application", "ici"}
-
-
-def hypr_clients() -> list:
-    try:
-        return json.loads(run("hyprctl", "clients", "-j")) or []
-    except ValueError:
-        return []
-
-
-def hypr(*args: str) -> str:
-    return run("hyprctl", "dispatch", *args)
-
-
-def find_windows(name: str) -> list:
-    q = fold(name).strip()
-    wins = [w for w in hypr_clients() if w.get("mapped", True) and w.get("address")]
-    if q in DEICTIC:
-        return [w for w in wins if w["address"] == ACTIVE["address"]]
-    scored = []
-    for w in wins:
-        fields = [fold(w.get(k) or "") for k in ("class", "initialClass", "title", "initialTitle")]
-        fields = [f.split(".")[-1] if k < 2 else f for k, f in enumerate(fields)]  # org.gnome.Nautilus → nautilus
-        s = max((100 if f == q else 80 if f.startswith(q) else 60 if q in f else 0) for f in fields)
-        if s:
-            scored.append((s, w))
-    if not scored:
-        return []
-    top = max(s for s, _ in scored)
-    return [w for s, w in scored if s == top]
-
-
-def label(w: dict) -> str:
-    return f"{w.get('class') or '?'} — {(w.get('title') or '')[:60]}"
-
-
-def t_close_app(name: str, everything: bool = True) -> dict:
-    wins = find_windows(name)
-    if not everything:
-        wins = wins[:1]
-    for w in wins:
-        hypr("closewindow", f"address:{w['address']}")
-    if wins:
-        time.sleep(0.6)
-        left = {w["address"] for w in hypr_clients()} & {w["address"] for w in wins}
-        return {"ok": True, "fermees": [label(w) for w in wins],
-                "info": "certaines demandent une confirmation dans l'application" if left else ""}
-    # Pas de fenêtre : processus en arrière-plan (lecteur, démon…)
-    q = re.sub(r"[^a-z0-9_.-]", "", fold(name))
-    if q and run("pgrep", "-ix", q):
-        run("pkill", "-ix", q)
-        return {"ok": True, "processus_arrete": q}
-    return {"ok": False, "erreur": f"aucune fenêtre ni processus « {name} » ouvert",
-            "fenetres_ouvertes": [label(w) for w in hypr_clients()][:20]}
-
-
-def t_window(action: str, target: str = "", workspace: int = 0) -> dict:
-    a = fold(action)
-    if a in ("lister", "liste"):
-        return {"fenetres": [f"{label(w)} (bureau {w.get('workspace', {}).get('id')})" for w in hypr_clients()]}
-    wins = find_windows(target)
-    if not wins:
-        return {"ok": False, "erreur": f"fenêtre « {target or 'active'} » introuvable"}
-    addr = f"address:{wins[0]['address']}"
-    if a in ("focus", "afficher", "aller"):
-        hypr("focuswindow", addr)
-    elif a in ("plein_ecran", "pleinecran"):
-        hypr("focuswindow", addr)
-        hypr("fullscreen", "0")
-    elif a in ("agrandir", "maximiser"):
-        hypr("focuswindow", addr)
-        hypr("fullscreen", "1")
-    elif a == "flottant":
-        hypr("togglefloating", addr)
-    elif a == "epingler":
-        hypr("focuswindow", addr)
-        hypr("pin", addr)
-    elif a in ("deplacer_bureau", "deplacer"):
-        hypr("movetoworkspacesilent", f"{workspace},{addr}")
-    elif a in ("minimiser", "cacher"):
-        hypr("movetoworkspacesilent", f"special:minimized,{addr}")
-    elif a == "fermer":
-        hypr("closewindow", addr)
-    else:
-        return {"ok": False, "erreur": f"action inconnue : {action}"}
-    return {"ok": True, "fenetre": label(wins[0])}
-
-
-def t_workspace(number: int) -> dict:
-    hypr("workspace", str(int(number)))
-    return {"ok": True}
-
-
-BLOCKED = re.compile("|".join([
-    r"\brm\s+-[a-z]*r[a-z]*\s+(?:-\S+\s+)*(?:/|/\*|~/?|\$HOME/?)(?:\s|$)", r"--no-preserve-root",
-    r"\bmkfs", r"\bdd\s+.*of=/dev/", r":\(\)\s*\{", r"\bwipefs\b", r">\s*/dev/(?:sd|nvme)",
-]), re.I)
-RISKY = re.compile("|".join([
-    r"\bsudo\b", r"\bdoas\b", r"\brm\s+-[a-z]*r", r"\bkillall\b", r"\bpkill\b",
-    r"\bsystemctl\s+(?:stop|disable|mask|poweroff|reboot)", r"\b(?:shutdown|reboot|poweroff)\b",
-    r"\bgit\s+(?:reset\s+--hard|push\s+.*--force|clean\s+-\w*f)", r"\bpacman\s+-R", r"\byay\s+-R",
-    r"\bchmod\s+-R\b", r"\bchown\s+-R\b", r"\bdd\b", r"\bmv\s+.*\s/dev/null",
-]), re.I)
-
-
-def t_shell(command: str, confirmed: bool = False) -> dict:
-    if BLOCKED.search(command):
-        return {"ok": False, "erreur": "commande destructrice refusée"}
-    if RISKY.search(command) and not confirmed:
-        return {"ok": False, "confirmation_requise": True,
-                "info": "commande sensible : demande à l'utilisateur s'il confirme, puis rappelle avec confirme=true"}
-    if "sudo" in command and "-A" not in command and "-n" not in command:
-        command = command.replace("sudo ", "sudo -n ", 1)  # pas de mot de passe à taper ici
-    try:
-        p = subprocess.run(["bash", "-lc", command], capture_output=True, text=True, timeout=45,
-                           cwd=HOME, start_new_session=True, stdin=subprocess.DEVNULL)
-    except subprocess.TimeoutExpired:
-        return {"ok": False, "erreur": "délai de 45 s dépassé (pour une application graphique, utilise ouvrir_application)"}
-    out = (p.stdout or "") + (("\n[stderr] " + p.stderr) if p.stderr.strip() else "")
-    if len(out) > 5000:
-        out = out[:2500] + "\n…\n" + out[-2500:]
-    return {"code_retour": p.returncode, "sortie": out.strip() or "(aucune sortie)"}
 
 
 def t_screen(question: str) -> dict:
@@ -333,106 +144,138 @@ def t_screen(question: str) -> dict:
         path.unlink(missing_ok=True)
 
 
-def t_clipboard(action: str, text: str = "") -> dict:
-    if fold(action) in ("ecrire", "copier"):
-        subprocess.run(["wl-copy"], input=text, text=True, timeout=4)
-        return {"ok": True}
-    return {"contenu": run("wl-paste", "-n")[:4000]}
+# ── Actions d'ANO-GPT ─────────────────────────────────────────────────────────
+# Siri utilise directement les actions d'ANO (mêmes déclarations, mêmes fonctions) :
+# tout ce qu'ANO sait faire sur la machine, Siri le fait aussi, sans qu'ANO tourne.
+
+ANO_TOOLS = {  # nom ANO → (module, fonction)
+    "open_app": ("actions.open_app", "open_app"),
+    "close_app": ("actions.close_app", "close_app"),
+    "shell_exec": ("actions.shell_exec", "shell_exec"),
+    "computer_settings": ("actions.computer_settings", "computer_settings"),
+    "computer_control": ("actions.computer_control", "computer_control"),
+    "browser_control": ("actions.browser_control", "browser_control"),
+    "file_controller": ("actions.file_controller", "file_controller"),
+    "hypr_orchestrator": ("actions.hypr_orchestrator", "hypr_orchestrator_control"),
+    "devsecops": ("actions.devsecops", "devsecops_control"),
+    "web_search": ("actions.web_search", "web_search"),
+    "weather_report": ("actions.weather_report", "weather_action"),
+    "system_status": ("actions.system_monitor", "get_system_status"),
+    "system_state": ("actions.system_probe", "system_state"),
+    "reminder": ("actions.reminder", "reminder"),
+    "youtube_video": ("actions.youtube_video", "youtube_video"),
+    "music_control": ("actions.music", "music_control"),
+    "download_music": ("actions.download_music", "download_music"),
+    "capture_control": ("actions.capture", "capture_control"),
+    "find_nearby": ("actions.find_nearby", "find_nearby"),
+    "email_control": ("actions.email", "email_control"),
+    "calendar_control": ("actions.calendar", "calendar_control"),
+    "contacts_control": ("actions.contacts", "contacts_control"),
+    "github_control": ("actions.github", "github_control"),
+    "cloud_integrations_control": ("actions.cloud_integrations", "cloud_integrations_control"),
+    "send_message": ("actions.send_message", "send_message"),
+    "prayer_control": ("actions.prayer", "prayer_control"),
+}
+ANO_DECLS: list = []
+ANO_RUNTIME = None
+ANO_MEMORY: dict = {}
 
 
-def t_files(action: str, path: str) -> dict:
-    a = fold(action)
-    p = Path(os.path.expanduser(path))
-    if a == "chercher":
-        found = run("fd", "-i", "-H", "--max-results", "25", "-E", ".git", "-E", "node_modules", "-E", ".cache",
-                    path, str(HOME), timeout=10)
-        return {"resultats": found.splitlines() or ["rien trouvé"]}
-    if not p.is_absolute():
-        p = HOME / p
-    if a == "ouvrir":
-        if not p.exists():
-            return {"erreur": f"{p} n'existe pas"}
-        subprocess.Popen(["xdg-open", str(p)], start_new_session=True,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return {"ok": True}
-    if a == "lister":
-        items = sorted(p.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True)[:60]
-        return {"contenu": [x.name + ("/" if x.is_dir() else "") for x in items]}
-    if a == "lire":
-        return {"contenu": p.read_text(errors="replace")[:6000]}
-    return {"erreur": f"action inconnue : {action}"}
+class _Noop:
+    """Remplace l'interface d'ANO (HUD) : toute méthode existe et ne fait rien."""
+
+    def __call__(self, *a, **k):
+        return None
+
+    def __bool__(self):
+        return False
+
+    def __getattr__(self, name):
+        return _Noop()
 
 
-def t_sysinfo() -> dict:
-    load = os.getloadavg()[0]
-    mem = {l.split(":")[0]: int(l.split()[1]) for l in open("/proc/meminfo") if ":" in l}
-    disk = os.statvfs(str(HOME))
-    bat = run("sh", "-c", "cat /sys/class/power_supply/BAT*/capacity /sys/class/power_supply/BAT*/status 2>/dev/null")
-    return {
-        "charge_cpu": f"{load:.1f} sur {os.cpu_count()} cœurs",
-        "memoire": f"{(mem['MemTotal'] - mem['MemAvailable']) / 2**20:.1f} Go utilisés sur {mem['MemTotal'] / 2**20:.1f}",
-        "disque_libre": f"{disk.f_bavail * disk.f_frsize / 2**30:.0f} Go",
-        "batterie": bat.replace("\n", " ") or "pas de batterie",
-        "wifi": run("sh", "-c", "nmcli -t -f active,ssid dev wifi | grep '^oui\\|^yes' | cut -d: -f2") or "non connecté",
-        "allume_depuis": run("uptime", "-p"),
-        "processus_gourmands": run("sh", "-c", "ps -eo comm,%cpu,%mem --sort=-%cpu | head -6"),
-    }
+class AnoUI(_Noop):
+    current_file = None
+
+    def show_card(self, kind="", title="", body="", *a, **k):
+        if kind == "result" and body:
+            emit(stage="card", title=str(title), body=str(body)[:4000])
+
+    def write_log(self, text="", *a, **k):
+        print(text, file=sys.stderr)
 
 
-def t_radio(device: str, active: bool) -> dict:
-    if "blue" in fold(device):
-        run("bluetoothctl", "power", "on" if active else "off")
-    else:
-        run("nmcli", "radio", "wifi", "on" if active else "off")
-    return {"ok": True}
+def notify(title: str, body: str = "") -> None:
+    subprocess.Popen(["notify-send", "-a", CFG["name"], title, body],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-def t_reminder(message: str, delay: str = "", time_: str = "") -> dict:
-    cmd = ["systemd-run", "--user", "--collect", f"--unit=siri-rappel-{int(time.time())}"]
-    if time_:
-        hh = re.sub(r"\s*h\s*", ":", time_.strip()).rstrip(":")
-        cmd.append(f"--on-calendar={hh if ':' in hh else hh + ':00'}")
-    else:
-        d = re.sub(r"(\d+)\s*m(?:in)?\b", r"\1min", delay or "10min")
-        cmd.append(f"--on-active={d}")
-    cmd += ["notify-send", "-u", "critical", "-a", CFG["name"], "Rappel", message]
-    out = run(*cmd)
-    return {"ok": "Running" in out or not out.startswith("erreur"), "detail": out[:200]}
+def load_ano() -> None:
+    """Charge les déclarations d'ANO (≈ 2 s) et branche sa barrière de confirmation."""
+    global ANO_DECLS, ANO_RUNTIME
+    if ANO_RUNTIME is not None or not (ANO / "core/tool_dispatcher.py").exists():
+        return
+    sys.path.insert(0, str(ANO))
+    os.chdir(ANO)  # certaines actions lisent des chemins relatifs
+    import warnings
+    warnings.filterwarnings("ignore")
+    from core import human_confirmation
+    from core.action_runtime import ActionRuntime
+    from core.tool_dispatcher import TOOL_DECLARATIONS
+
+    def show(pending):
+        # Comme le HUD d'ANO : un clic humain (bouton de la notification) valide l'action
+        def wait():
+            try:
+                r = subprocess.run(["notify-send", "-u", "critical", "-a", CFG["name"], "--wait",
+                                    "-A", "ok=Confirmer", "-A", "no=Annuler",
+                                    f"Confirmer : {pending.title}", pending.detail],
+                                   capture_output=True, text=True, timeout=95)
+                human_confirmation.resolve(pending.token, r.stdout.strip() == "ok", source="siri")
+            except Exception:
+                human_confirmation.resolve(pending.token, False, source="siri")
+        import threading
+        threading.Thread(target=wait, daemon=True).start()
+        emit(stage="tool", label=f"Confirme dans la notification : {pending.title}")
+
+    human_confirmation.bind(show=show, notify=lambda m: notify(CFG["name"], m),
+                            log=lambda m: print(m, file=sys.stderr))
+    ANO_DECLS = [d for d in TOOL_DECLARATIONS if d["name"] in ANO_TOOLS]
+    ANO_RUNTIME = ActionRuntime(ANO_DECLS)
+
+
+def call_ano(name: str, args: dict) -> str:
+    import importlib
+    import inspect
+    mod, fn_name = ANO_TOOLS[name]
+    fn = getattr(importlib.import_module(mod), fn_name)
+    try:
+        params = ANO_RUNTIME.prepare(name, args)
+    except Exception:
+        params = dict(args)
+    params = {k: v for k, v in params.items() if not k.startswith("_")}
+    if name == "system_status":
+        return str(fn())
+    if name == "system_state":
+        return str(fn(str(params.get("topic") or "all")))
+    ui = AnoUI()
+    offer = {"parameters": params, "player": ui, "ui": ui, "response": None,
+             "session_memory": ANO_MEMORY, "speak": lambda *_: None}
+    sig = inspect.signature(fn)
+    takes_all = any(p.kind == p.VAR_KEYWORD for p in sig.parameters.values())
+    kwargs = {k: v for k, v in offer.items() if takes_all or k in sig.parameters}
+    if "parameters" not in sig.parameters and not takes_all:
+        kwargs = {}
+    return str(fn(**kwargs) or "Fait.")
 
 
 TOOLS = {
-    "ouvrir_application": (t_open_app, "Ouvre une application installée (Firefox, Fichiers, Terminal, Spotify…).",
-                           {"nom": "string"}, "Ouverture de {nom}…"),
-    "ouvrir_lien": (t_open_url, "Ouvre une adresse web ou un site dans le navigateur.",
-                    {"url": "string"}, "Ouverture du lien…"),
-    "recherche_web": (t_web_search, "Cherche sur le web (actualité, météo, prix, faits récents, résultats sportifs…). À utiliser dès que la réponse dépend d'informations récentes.",
-                      {"requete": "string"}, "Recherche : {requete}"),
     "minuteur": (t_timer, "Lance un minuteur dans l'île. duree au format « 5m », « 1h30m », « 45s ».",
                  {"duree": "string", "libelle": "string?"}, "Minuteur {duree}"),
-    "musique": (t_media, "Contrôle le lecteur multimédia. action : lecture, pause, basculer, suivant, precedent, stop.",
-                {"action": "string"}, "Musique : {action}"),
-    "volume": (t_volume, "Règle le volume : un nombre 0-100, « plus », « moins », « muet » ou « reactiver ».",
-               {"niveau": "string"}, "Volume : {niveau}"),
-    "luminosite": (t_brightness, "Règle la luminosité de l'écran (1-100).", {"niveau": "integer"}, "Luminosité {niveau} %"),
     "ne_pas_deranger": (t_dnd, "Active ou désactive le mode Ne pas déranger.", {"actif": "boolean"}, "Ne pas déranger"),
     "date_heure": (t_now, "Date et heure actuelles.", {}, "Heure"),
-    "fermer_application": (t_close_app, "Ferme une application ou fenêtre ouverte (par son nom : firefox, spotify, kitty…). nom « active » = la fenêtre devant l'utilisateur quand il t'a appelé. tout=false pour une seule fenêtre.",
-                           {"nom": "string", "tout": "boolean?"}, "Fermeture de {nom}…"),
-    "fenetre": (t_window, "Gère les fenêtres : action lister, focus, plein_ecran, agrandir, flottant, epingler, deplacer_bureau (avec bureau), minimiser, fermer. cible = nom de l'appli ou « active ».",
-                {"action": "string", "cible": "string?", "bureau": "integer?"}, "Fenêtre : {action}"),
-    "bureau": (t_workspace, "Va sur le bureau virtuel numéro N.", {"numero": "integer"}, "Bureau {numero}"),
-    "commande_terminal": (t_shell, "Exécute une commande bash sur l'ordinateur (Arch Linux, Hyprland) et renvoie la sortie. Accès complet : tout ce qu'aucun autre outil ne couvre (fichiers, paquets, git, processus, réseau, réglages, hyprctl, playerctl…). confirme=true seulement après accord explicite de l'utilisateur pour une commande sensible.",
-                          {"commande": "string", "confirme": "boolean?"}, "Terminal : {commande}"),
     "regarder_ecran": (t_screen, "Regarde l'écran de l'utilisateur et répond à une question sur ce qui s'y trouve (lire un texte, une erreur, expliquer, résumer).",
                        {"question": "string"}, "Je regarde l'écran…"),
-    "presse_papiers": (t_clipboard, "Lit (action lire) ou remplit (action ecrire, avec texte) le presse-papiers.",
-                       {"action": "string", "texte": "string?"}, "Presse-papiers"),
-    "fichiers": (t_files, "Fichiers : action chercher (chemin = nom à chercher dans le dossier personnel), lister, lire ou ouvrir (chemin, ~ accepté).",
-                 {"action": "string", "chemin": "string"}, "Fichiers : {action}"),
-    "infos_systeme": (t_sysinfo, "Batterie, CPU, mémoire, disque, Wi-Fi, processus gourmands.", {}, "État du système"),
-    "wifi_bluetooth": (t_radio, "Active ou désactive le Wi-Fi ou le Bluetooth.", {"appareil": "string", "actif": "boolean"}, "{appareil}"),
-    "rappel": (t_reminder, "Programme une notification de rappel : delai (« 10m », « 2h ») OU heure (« 18:30 »).",
-               {"message": "string", "delai": "string?", "heure": "string?"}, "Rappel : {message}"),
     "alimentation": (None, "Veille, eteindre, redemarrer ou deconnecter (exécuté après ta réponse). Pour eteindre/redemarrer/deconnecter, demande d'abord confirmation puis rappelle avec confirme=true.",
                      {"action": "string", "confirme": "boolean?"}, "Alimentation : {action}"),
     "verrouiller": (None, "Verrouille l'écran (après avoir répondu).", {}, "Verrouillage"),
@@ -440,6 +283,13 @@ TOOLS = {
                      {"texte": "string"}, "Écriture…"),
     "fin_conversation": (None, "Ferme l'assistant quand l'utilisateur dit au revoir, merci c'est tout, ou n'a plus besoin de rien.",
                          {}, ""),
+}
+ANO_LABELS = {
+    "open_app": "Ouverture…", "close_app": "Fermeture…", "shell_exec": "Terminal…",
+    "computer_settings": "Réglages…", "computer_control": "Contrôle de l'ordinateur…",
+    "browser_control": "Navigateur…", "file_controller": "Fichiers…", "web_search": "Recherche…",
+    "weather_report": "Météo…", "reminder": "Rappel…", "youtube_video": "YouTube…",
+    "music_control": "Musique…", "email_control": "Mails…", "system_status": "État du système",
 }
 ARG_NAMES = {"nom": "name", "requete": "query", "duree": "duration", "libelle": "label",
              "niveau": "level", "actif": "active", "tout": "everything", "cible": "target",
@@ -458,6 +308,11 @@ def declarations(blocking: bool) -> list:
         if blocking:
             d["behavior"] = "BLOCKING"
         decls.append(d)
+    for d in ANO_DECLS:
+        d = dict(d)
+        if blocking:
+            d["behavior"] = "BLOCKING"
+        decls.append(d)
     return decls
 
 
@@ -468,16 +323,20 @@ def system_prompt() -> str:
         f"Tu es {CFG['name']}, l'assistant vocal intégré au bureau Linux de l'utilisateur (Caelestia, Hyprland), "
         "comme Siri sur un Mac. Tu parles français naturellement, avec chaleur, et tu vas droit au but : "
         "réponses orales COURTES (une à trois phrases), sans listes ni Markdown, car tout est lu à voix haute. "
-        "Tu as un contrôle COMPLET de l'ordinateur grâce à tes outils : ouvrir/fermer des applications, gérer "
-        "les fenêtres et bureaux, regarder l'écran, fichiers, presse-papiers, réglages, rappels, et surtout "
-        "commande_terminal qui exécute n'importe quelle commande bash. Ne dis JAMAIS que tu ne peux pas faire "
-        "quelque chose sur l'ordinateur : trouve l'outil adapté ou passe par commande_terminal (enchaîne plusieurs "
-        "appels si besoin, vérifie le résultat). Agis directement sans demander la permission, sauf pour une "
-        "action irréversible (supprimer des données, éteindre) où tu demandes une confirmation courte. "
-        "« ça », « cette fenêtre » désignent la fenêtre active (cible « active »). Quand on te demande ce qu'il y a "
+        "Tu as un contrôle COMPLET de l'ordinateur avec les mêmes outils qu'ANO-GPT : open_app, close_app "
+        "(le SEUL outil pour fermer une application), shell_exec (n'importe quelle commande), computer_settings "
+        "(volume, luminosité, Wi-Fi, Bluetooth…), computer_control (clavier, souris, clic), browser_control, "
+        "file_controller, hypr_orchestrator, web_search, weather_report, reminder, youtube_video, music_control, "
+        "mails, agenda, contacts, GitHub… Ne dis JAMAIS que tu ne peux pas faire quelque chose sur l'ordinateur : "
+        "trouve l'outil adapté (enchaîne plusieurs appels si besoin). N'annonce JAMAIS qu'une action est faite "
+        "si le résultat de l'outil ne le confirme pas : lis le résultat, et en cas d'échec dis-le et réessaie "
+        "autrement. Si un outil répond qu'une confirmation est affichée, dis à l'utilisateur de cliquer sur "
+        "Confirmer dans la notification. Agis directement sans demander la permission. "
+        "Pour les fenêtres et bureaux (focus, plein écran, déplacer, aller au bureau N), utilise shell_exec "
+        "ou hypr_orchestrator. Quand on te demande ce qu'il y a "
         "à l'écran, d'expliquer une erreur visible ou de lire quelque chose, utilise regarder_ecran. "
         "Confirme en quelques mots après avoir agi. Pour une information récente (actualité, météo, prix, sport), "
-        "utilise recherche_web au lieu de deviner. Quand l'utilisateur demande d'écrire ou de rédiger quelque "
+        "utilise web_search au lieu de deviner. Quand l'utilisateur demande d'écrire ou de rédiger quelque "
         "chose dans son champ, utilise ecrire_texte avec le texte final. Si l'utilisateur dit au revoir ou "
         f"merci c'est tout, réponds brièvement puis appelle fin_conversation.{city} Nous sommes le {now}."
     )
@@ -554,7 +413,6 @@ class Assistant:
         if self.task and not self.task.done():
             return
         self.window = run("sh", "-c", "hyprctl activewindow -j | python3 -c 'import json,sys;print(json.load(sys.stdin).get(\"address\",\"\"))'")
-        ACTIVE["address"] = self.window
         self.exchanges = 0
         self.close_after_reply = None
         self.last_activity = time.monotonic()
@@ -767,6 +625,15 @@ class Assistant:
                 return "fermee"
 
     async def call_tool(self, name: str, args: dict) -> dict:
+        if name in ANO_TOOLS and ANO_RUNTIME is not None:
+            emit(stage="tool", label=ANO_LABELS.get(name, name.replace("_", " ")))
+            emit(stage="state", state="outil")
+            try:
+                return {"result": await asyncio.wait_for(asyncio.to_thread(call_ano, name, args), 120)}
+            except asyncio.TimeoutError:
+                return {"result": "Délai dépassé : vérifie l'état avant d'annoncer un résultat."}
+            except Exception as exc:
+                return {"result": f"Échec : {str(exc)[:300]}"}
         spec = TOOLS.get(name)
         if not spec:
             return {"erreur": "outil inconnu"}
@@ -809,6 +676,10 @@ class Assistant:
 
 async def serve():
     loop = asyncio.get_running_loop()
+    try:
+        await asyncio.to_thread(load_ano)
+    except Exception as exc:
+        print(f"actions d'ANO indisponibles : {exc}", file=sys.stderr)
     reader = asyncio.StreamReader()
     await loop.connect_read_pipe(lambda: asyncio.StreamReaderProtocol(reader), sys.stdin)
     asst = Assistant()
@@ -847,6 +718,7 @@ async def test_file(path: str):
             yield pcm[i:i + MIC_CHUNK]
             await asyncio.sleep(CHUNK_MS / 1000)
 
+    load_ano()
     asst = Assistant()
     asst.player.mute = True
     asst.file_source = chunks()
@@ -865,6 +737,6 @@ if __name__ == "__main__":
         elif len(sys.argv) > 2 and sys.argv[1] == "--file":
             asyncio.run(test_file(sys.argv[2]))
         else:
-            print(__doc__)
+            print(__doc__, file=OUT)
     except KeyboardInterrupt:
         pass
