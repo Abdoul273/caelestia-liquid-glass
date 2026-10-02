@@ -149,13 +149,24 @@ def t_location() -> dict:
         if age > 20 * 60:
             out["attention"] = (f"relevé vieux de {age / 3600:.0f} h" if age < 172800 else f"relevé vieux de {age / 86400:.0f} jours") + \
                 " : ouvrir ANO-Remote sur le téléphone avec ANO-GPT lancé pour une position à jour"
+        out["releve_il_y_a"] = f"{age:.0f} s" if age < 120 else f"{age / 60:.0f} min" if age < 7200 else f"{age / 3600:.0f} h"
         try:
             import urllib.request
             req = urllib.request.Request(
                 f"https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&accept-language=fr&lat={lat}&lon={lon}",
                 headers={"User-Agent": "caelestia-siri"})
             with urllib.request.urlopen(req, timeout=8) as r:
-                out["adresse"] = json.load(r).get("display_name", "")
+                data = json.load(r)
+            a = data.get("address") or {}
+            pick = lambda *keys: next((a[k] for k in keys if a.get(k)), "")  # noqa: E731
+            out.update({
+                "quartier": pick("neighbourhood", "suburb", "quarter", "village", "hamlet", "city_district"),
+                "rue": pick("road", "pedestrian", "footway"),
+                "lieu_proche": pick("amenity", "shop", "building", "leisure"),
+                "ville": pick("city", "town", "municipality"),
+                "prefecture": a.get("county", ""), "region": a.get("state", ""), "pays": a.get("country", ""),
+                "adresse_complete": data.get("display_name", ""),
+            })
         except Exception:
             pass
         return out
@@ -531,7 +542,7 @@ TOOLS = {
     "minuteur": (t_timer, "Lance un minuteur dans l'île. duree au format « 5m », « 1h30m », « 45s ».",
                  {"duree": "string", "libelle": "string?"}, "Minuteur {duree}"),
     "ne_pas_deranger": (t_dnd, "Active ou désactive le mode Ne pas déranger.", {"actif": "boolean"}, "Ne pas déranger"),
-    "ma_position": (t_location, "Position précise de l'utilisateur (GPS du téléphone, adresse, quartier, lien de carte). À utiliser pour « où suis-je », « ma position », « où exactement ». Si le relevé est ancien, dis-le.",
+    "ma_position": (t_location, "Position RÉELLE de l'utilisateur, relevée en direct par le GPS de son téléphone (ANO Remote) : quartier, rue, ville, coordonnées. À utiliser pour « où suis-je », « ma position », « où exactement ». Dans ta réponse, annonce TOUJOURS le quartier et la ville (ex. « à Kirikilan, Dubréka »), puis la rue ou le lieu proche s'il y en a, et la précision. Ne remplace jamais ces données par la ville par défaut. Si le relevé est ancien, dis-le.",
                     {}, "Localisation…"),
     "date_heure": (t_now, "Date et heure actuelles.", {}, "Heure"),
     "regarder_ecran": (t_screen, "Regarde l'écran de l'utilisateur et répond à une question sur ce qui s'y trouve (lire un texte, une erreur, expliquer, résumer).",
