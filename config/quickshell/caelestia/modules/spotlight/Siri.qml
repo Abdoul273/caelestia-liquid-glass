@@ -472,6 +472,40 @@ Item {
                     Qt.callLater(positionViewAtEnd);
                 }
 
+                // Molette : le shell freine fort les Flickable (QT_QUICK_FLICKABLE_WHEEL_DECELERATION),
+                // le fil gère donc lui-même un défilement ample et doux
+                property real wheelTarget: 0
+
+                function scrollBy(dy: real): void {
+                    const top = originY;
+                    const bottom = Math.max(top, originY + contentHeight - height);
+                    const from = scrollAnim.running ? wheelTarget : contentY;
+                    wheelTarget = Math.max(top, Math.min(bottom, from - dy));
+                    follow = wheelTarget >= bottom - 2;
+                    scrollAnim.restart();
+                }
+
+                NumberAnimation {
+                    id: scrollAnim
+
+                    target: thread
+                    property: "contentY"
+                    to: thread.wheelTarget
+                    duration: 220
+                    easing.type: Easing.OutCubic
+                }
+
+                WheelHandler {
+                    target: null
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                    onWheel: event => {
+                        // Pavé tactile : pixels réels ; molette : ~3 lignes par cran
+                        const dy = event.pixelDelta.y !== 0 ? event.pixelDelta.y * 1.6 : event.angleDelta.y / 120 * 110;
+                        thread.scrollBy(dy);
+                        event.accepted = true;
+                    }
+                }
+
                 add: Transition {
                     NumberAnimation {
                         property: "opacity"
