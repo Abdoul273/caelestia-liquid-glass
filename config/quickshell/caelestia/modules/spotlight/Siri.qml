@@ -232,6 +232,9 @@ Item {
         }
     }
 
+    // Moteur lancé avec le shell : il sert aussi ANO Remote (téléphone) quand ANO-GPT est éteint
+    Component.onCompleted: backend.running = true
+
     Timer {
         id: decay
 
@@ -257,8 +260,15 @@ Item {
             send({
                 open: true
             })
-        onExited: if (root.shown)
-            running = true
+        // Toujours relancé (même bulle fermée) : il porte le relais du téléphone
+        onExited: relaunch.restart()
+    }
+
+    Timer {
+        id: relaunch
+
+        interval: 2000
+        onTriggered: backend.running = true
     }
 
     // Le contenu suit la forme du verre qui tombe de l'île

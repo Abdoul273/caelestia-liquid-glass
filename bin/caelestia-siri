@@ -2,6 +2,7 @@
 """Assistant vocal façon Siri pour Caelestia (Super + Maj + Espace).
 
     caelestia-siri serve        serveur persistant piloté par le shell (JSON lignes)
+    caelestia-siri phone-relay  (interne) serveur ANO Remote quand ANO-GPT est éteint
     caelestia-siri --file a.wav test : envoie un fichier comme s'il venait du micro
 
 Même chaîne que ANO-GPT : Gemini Live audio natif (gemini-3.8-live → 3.1-flash-live
@@ -128,6 +129,17 @@ def t_location() -> dict:
     """Position la plus précise connue : GPS du téléphone (ANO-Remote) → dernier GPS → IP."""
     sys.path.insert(0, str(ANO))
     from core.geolocation import get_last_known_gps, get_user_location
+    if RELAY is not None and RELAY.up and RELAY.connected and RELAY_LOOP is not None:
+        try:  # demande un relevé GPS tout frais au téléphone
+            asyncio.run_coroutine_threadsafe(RELAY.call("location", {}, timeout=10), RELAY_LOOP).result(timeout=12)
+        except Exception:
+            pass
+    elif ano_running():
+        try:
+            from core.tool_bridge import call_app
+            call_app("location", {"refresh": True}, timeout=12)
+        except Exception:
+            pass
     gps = get_last_known_gps()
     if gps:
         lat, lon = gps["lat"], gps["lon"]
@@ -288,13 +300,18 @@ def load_ano() -> None:
 def call_ano(name: str, args: dict) -> str:
     import importlib
     import inspect
+    if name in ANO_RELAYED and RELAY is not None and RELAY.up and RELAY_LOOP is not None:
+        fut = asyncio.run_coroutine_threadsafe(RELAY.call(name, args, timeout=60), RELAY_LOOP)
+        result = fut.result(timeout=65)
+        if not RELAY.connected and "indisponible" not in result.lower():
+            result += " (Attention : ANO Remote ne semble pas connecté — ouvrir l'appli sur le téléphone.)"
+        return result
     if name in ANO_RELAYED:
         from core.tool_bridge import AppUnavailable, call_app
         try:
             return call_app(name, args, timeout=50)
         except AppUnavailable:
-            return ("ANO-GPT n'est pas lancé : le téléphone (ANO-Remote) n'est joignable que par lui. "
-                    "Propose à l'utilisateur de lancer ANO-GPT avec open_app, puis de réessayer.")
+            return "Le relais téléphone n'est pas prêt : réessaie dans quelques secondes."
     mod, fn_name = ANO_TOOLS[name]
     fn = getattr(importlib.import_module(mod), fn_name)
     try:
@@ -315,6 +332,199 @@ def call_ano(name: str, args: dict) -> str:
     if "parameters" not in sig.parameters and not takes_all:
         kwargs = {}
     return str(fn(**kwargs) or "Fait.")
+
+
+# ── ANO Remote sans ANO-GPT ───────────────────────────────────────────────────
+# Le téléphone se connecte au serveur d'ANO (dashboard, port 8000, appairage sur disque).
+# Quand ANO-GPT est éteint, Siri fait tourner ce même serveur dans un sous-processus
+# `caelestia-siri phone-relay` ; dès qu'ANO démarre, le relais s'arrête et lui rend le port.
+
+def ano_running() -> bool:
+    for d in Path("/proc").iterdir():
+        if d.name.isdigit():
+            try:
+                if b"ANO-GPT/main.py" in (d / "cmdline").read_bytes():
+                    return True
+            except OSError:
+                pass
+    return False
+
+
+def port_free(port: int) -> bool:
+    import socket
+    with socket.socket() as sock:
+        sock.settimeout(0.3)
+        return sock.connect_ex(("127.0.0.1", port)) != 0
+
+
+class PhoneRelay:
+    """Côté Siri : lance / arrête le relais et lui passe les demandes (JSON lignes)."""
+
+    def __init__(self, on_command):
+        self.proc = None
+        self.on_command = on_command
+        self.waiters: dict[int, asyncio.Future] = {}
+        self.next_id = 0
+        self.connected = False
+
+    @property
+    def up(self) -> bool:
+        return self.proc is not None and self.proc.returncode is None
+
+    async def supervise(self):
+        while True:
+            try:
+                ano = await asyncio.to_thread(ano_running)
+                if ano and self.up:
+                    print("ANO-GPT démarre : le relais téléphone lui rend la main", file=sys.stderr)
+                    self.proc.terminate()
+                    await self.proc.wait()
+                elif not ano and not self.up and (ANO / "dashboard/server.py").exists() and port_free(8000):
+                    self.proc = await asyncio.create_subprocess_exec(
+                        sys.executable, str(Path(__file__).resolve()), "phone-relay",
+                        stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE)
+                    asyncio.create_task(self.read(self.proc))
+            except Exception as exc:
+                print(f"relais téléphone : {exc}", file=sys.stderr)
+            await asyncio.sleep(2)
+
+    async def read(self, proc):
+        while True:
+            line = await proc.stdout.readline()
+            if not line:
+                break
+            try:
+                msg = json.loads(line)
+            except ValueError:
+                continue
+            if "id" in msg and msg["id"] in self.waiters:
+                self.waiters.pop(msg["id"]).set_result(msg.get("result", ""))
+            elif "phone" in msg:
+                self.connected = bool(msg["phone"])
+            elif msg.get("command"):
+                await self.on_command(msg["command"])
+        self.connected = False
+        for fut in self.waiters.values():
+            if not fut.done():
+                fut.set_result("Le relais téléphone s'est arrêté.")
+        self.waiters.clear()
+
+    def send(self, msg: dict):
+        if self.up:
+            self.proc.stdin.write((json.dumps(msg, ensure_ascii=False) + "\n").encode())
+
+    async def call(self, tool: str, args: dict, timeout: float = 45) -> str:
+        if not self.up:
+            raise ConnectionError("relais arrêté")
+        self.next_id += 1
+        fut = asyncio.get_running_loop().create_future()
+        self.waiters[self.next_id] = fut
+        self.send({"id": self.next_id, "tool": tool, "args": args})
+        return await asyncio.wait_for(fut, timeout)
+
+
+RELAY: PhoneRelay | None = None
+RELAY_LOOP = None
+
+
+async def phone_relay_main():
+    """Sous-processus : le serveur ANO Remote d'ANO-GPT, sans le reste d'ANO."""
+    sys.path.insert(0, str(ANO))
+    os.chdir(ANO)
+    import threading
+    import warnings
+    warnings.filterwarnings("ignore")
+    from core import human_confirmation
+    from core.tool_dispatcher import _render_phone_outcome
+    from dashboard.server import DashboardServer
+
+    loop = asyncio.get_running_loop()
+    dash = DashboardServer()
+
+    def out(**msg):
+        OUT.write(json.dumps(msg, ensure_ascii=False) + "\n")
+        OUT.flush()
+
+    def show(pending):  # SMS : validé par un clic (notification) ou depuis le téléphone
+        def wait():
+            r = subprocess.run(["notify-send", "-u", "critical", "-a", CFG["name"], "--wait",
+                                "-A", "ok=Confirmer", "-A", "no=Annuler",
+                                f"Confirmer : {pending.title}", pending.detail],
+                               capture_output=True, text=True, timeout=95)
+            human_confirmation.resolve(pending.token, r.stdout.strip() == "ok", source="siri")
+        threading.Thread(target=wait, daemon=True).start()
+
+    human_confirmation.bind(show=show, notify=lambda m: notify(CFG["name"], m),
+                            log=lambda m: print(m, file=sys.stderr))
+    dash.set_confirmation_callback(lambda token, ok: human_confirmation.resolve(token, ok, source="AnoRemote"))
+    dash.spawn(dash.serve(), "dashboard-serve")
+
+    async def commands():  # messages tapés dans ANO Remote → Siri
+        while True:
+            text = await dash._command_queue.get()
+            if text:
+                out(command=text)
+
+    async def presence():
+        last = None
+        while True:
+            now = bool(dash._phone_clients)
+            if now != last:
+                out(phone=now)
+                last = now
+            await asyncio.sleep(1)
+
+    async def tool(name: str, a: dict) -> str:
+        if name == "phone_call":
+            target = str(a.get("target") or "").strip()
+            if not target:
+                return "Indiquez le nom ou le numéro à appeler."
+            return _render_phone_outcome(await dash.request_phone_call(target, selection=int(a.get("selection") or 0)),
+                                         "Commande téléphonique traitée.")
+        if name == "phone_hangup":
+            return _render_phone_outcome(await dash.request_phone_hangup(), "Demande de raccrochage traitée.")
+        if name == "phone_contacts":
+            return _render_phone_outcome(await dash.request_phone_contacts(str(a.get("query") or "")),
+                                         "Recherche de contacts traitée.", choices_hint="Ce sont les contacts du téléphone.")
+        if name == "phone_sms":
+            target, body = str(a.get("target") or "").strip(), str(a.get("body") or "").strip()
+            if not target or not body:
+                return "Indiquez le destinataire et le texte du SMS."
+
+            def send() -> str:
+                fut = asyncio.run_coroutine_threadsafe(
+                    dash.request_phone_sms(target, body, int(a.get("selection") or 0)), loop)
+                return _render_phone_outcome(fut.result(timeout=40), "Commande SMS traitée.")
+            return human_confirmation.request("phone:sms", "Envoyer un SMS depuis le téléphone",
+                                              f"Destinataire : {target}\n\n{body}", send)
+        if name == "location":
+            return "ok" if await dash.request_fresh_location(timeout=8.0) else "pas de réponse du téléphone"
+        if name == "log":
+            await dash.broadcast({"type": "log", "speaker": a.get("speaker", "jarvis"), "text": a.get("text", ""),
+                                  "ts": dt.datetime.now().isoformat()})
+            return "ok"
+        return f"outil inconnu : {name}"
+
+    async def handle(msg):
+        try:
+            result = await tool(msg.get("tool", ""), msg.get("args") or {})
+        except Exception as exc:
+            result = f"Échec : {str(exc)[:300]}"
+        if "id" in msg:
+            out(id=msg["id"], result=result)
+
+    asyncio.create_task(commands())
+    asyncio.create_task(presence())
+    reader = asyncio.StreamReader()
+    await loop.connect_read_pipe(lambda: asyncio.StreamReaderProtocol(reader), sys.stdin)
+    while True:
+        line = await reader.readline()
+        if not line:
+            os._exit(0)  # Siri parti : on libère le port
+        try:
+            asyncio.create_task(handle(json.loads(line)))
+        except ValueError:
+            pass
 
 
 TOOLS = {
@@ -466,6 +676,7 @@ class Assistant:
         self.waiting_since = 0.0
         self.retried = False
         self.force_reconnect = False
+        self.phone_turn = False  # la demande vient d'ANO Remote : la réponse y repart
 
     # Commandes du shell
     def open(self):
@@ -717,6 +928,9 @@ class Assistant:
                     self.player.stop()
                 if sc.turn_complete:
                     self.exchanges += 1
+                    if self.phone_turn and self.reply_text.strip() and RELAY is not None:
+                        RELAY.send({"tool": "log", "args": {"speaker": "jarvis", "text": self.reply_text.strip()}})
+                        self.phone_turn = False
                     # Une demande vocale = un appui, comme Siri : le micro se recoupe
                     if self.heard and not CFG["micro_par_defaut"] and self.file_source is None:
                         self.mic_on = False
@@ -787,6 +1001,17 @@ async def serve():
     reader = asyncio.StreamReader()
     await loop.connect_read_pipe(lambda: asyncio.StreamReaderProtocol(reader), sys.stdin)
     asst = Assistant()
+
+    async def from_phone(text: str):
+        emit(stage="user", text=text)
+        asst.phone_turn = True
+        if RELAY is not None:
+            RELAY.send({"tool": "log", "args": {"speaker": "user", "text": text}})
+        await asst.text(text)
+
+    global RELAY, RELAY_LOOP
+    RELAY, RELAY_LOOP = PhoneRelay(from_phone), loop
+    asyncio.create_task(RELAY.supervise())
     while True:
         line = await reader.readline()
         if not line:
@@ -844,6 +1069,8 @@ if __name__ == "__main__":
     try:
         if len(sys.argv) > 1 and sys.argv[1] == "serve":
             asyncio.run(serve())
+        elif len(sys.argv) > 1 and sys.argv[1] == "phone-relay":
+            asyncio.run(phone_relay_main())
         elif len(sys.argv) > 2 and sys.argv[1] == "--file":
             asyncio.run(test_file(sys.argv[2]))
         else:
