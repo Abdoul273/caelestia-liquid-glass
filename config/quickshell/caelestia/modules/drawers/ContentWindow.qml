@@ -119,7 +119,7 @@ StyledWindow {
         active: {
             const s = root.screenState;
             const conf = root.contentItem.Config;
-            if ((s.launcher && conf.launcher.enabled) || (s.session && conf.session.enabled) || (s.sidebar && conf.sidebar.enabled) || s.controlCenter || s.spotlight || s.calculator || s.dictation || s.writing || s.translate || s.siri || s.display || s.clipboard || s.emoji || s.keyhelp || s.clock || s.settings || s.annotate)
+            if ((s.launcher && conf.launcher.enabled) || (s.session && conf.session.enabled) || (s.sidebar && conf.sidebar.enabled) || s.controlCenter || s.spotlight || s.calculator || s.dictation || s.writing || s.translate || s.display || s.clipboard || s.emoji || s.keyhelp || s.clock || s.settings || s.annotate)
                 return true;
             if (!conf.dashboard.showOnHover && s.dashboard && conf.dashboard.enabled)
                 return true;
@@ -139,7 +139,7 @@ StyledWindow {
             root.screenState.dictation = false;
             root.screenState.writing = false;
             root.screenState.translate = false;
-            root.screenState.siri = false;
+            // Siri reste ouvert quand on passe sur une fenêtre : il se ferme par Échap
             root.screenState.display = false;
             root.screenState.annotate = false;
             root.screenState.settings = false;

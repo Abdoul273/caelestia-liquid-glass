@@ -152,18 +152,9 @@ Item {
         });
     }
 
-    // Échap : coupe d'abord la parole (ou le micro), puis ferme
+    // Échap : ferme l'assistant et coupe sa voix (la bulle ne se ferme plus quand on clique ailleurs)
     function handleEscape(): void {
-        if (phase === "parle")
-            backend.send({
-                interrupt: true
-            });
-        else if (micOn)
-            backend.send({
-                mic: false
-            });
-        else
-            close();
+        close();
     }
 
     function statusText(): string {
