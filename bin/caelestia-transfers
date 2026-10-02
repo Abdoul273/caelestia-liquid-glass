@@ -20,6 +20,7 @@ PARTIAL = (".crdownload", ".part", ".download", ".opdownload")
 MIN_AGE = 1.2  # un transfert plus court ne s'affiche pas
 MIN_COPY = 4 * 1024 * 1024  # fichiers copiés : au moins 4 Mo
 DRIVE_LOG = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "drive-sync-progress.log")
+DRIVE_PAUSE = os.path.join(os.environ.get("XDG_STATE_HOME", os.path.join(HOME, ".local/state")), "drive-sync/pause")
 
 
 def download_dirs():
@@ -167,10 +168,14 @@ class Tracker:
         return out
 
     def scan_drive(self, now):
-        """Envoi drive-sync en cours : dernière ligne de stats du journal rclone (écrite chaque seconde)."""
+        """Envoi drive-sync en cours : dernière ligne de stats du journal rclone (écrite chaque seconde).
+        En pause, rclone est gelé : on garde l'envoi affiché (paused) pour pouvoir le reprendre depuis l'île."""
+        paused = os.path.exists(DRIVE_PAUSE)
+        idle = {"drive:pause": {"kind": "upload", "name": "Sauvegarde Drive", "done": 0, "total": 0, "dir": HOME,
+                                "final": "", "count": "", "paused": True}} if paused else {}
         try:
-            if now - os.path.getmtime(DRIVE_LOG) > 3:
-                return {}
+            if now - os.path.getmtime(DRIVE_LOG) > 3 and not (paused and self.drive_frozen()):
+                return idle
             with open(DRIVE_LOG, "rb") as f:
                 first = f.readline()
                 f.seek(0, os.SEEK_END)
@@ -178,7 +183,7 @@ class Tracker:
                 lines = f.read().decode("utf-8", "replace").splitlines()
             src = json.loads(first).get("source", "")
         except (OSError, ValueError):
-            return {}
+            return idle
         st = None
         for line in reversed(lines):
             if '"stats"' in line:
@@ -188,7 +193,7 @@ class Tracker:
                 except ValueError:
                     continue
         if not st or not st.get("totalTransfers"):
-            return {}
+            return idle
         sent, total = st.get("transfers", 0), st["totalTransfers"]
         cur = st.get("transferring") or []
         name = os.path.basename(cur[0]["name"]) if cur else os.path.basename(src)
@@ -201,7 +206,25 @@ class Tracker:
             "final": src,
             "count": f"{min(sent + 1, total)} / {total}" if total > 1 else "",
             "doneName": f"{total} fichier{'s' if total > 1 else ''} · {os.path.basename(src)}",
+            "paused": paused,
         }}
+
+    @staticmethod
+    def drive_frozen():
+        """Un rclone de drive-sync est gelé (pause en plein envoi)."""
+        for pid in os.listdir("/proc"):
+            if not pid.isdigit():
+                continue
+            try:
+                with open(f"/proc/{pid}/cmdline", "rb") as f:
+                    if DRIVE_LOG.encode() not in f.read():
+                        continue
+                with open(f"/proc/{pid}/stat") as f:
+                    if f.read().rsplit(")", 1)[1].split()[0] == "T":
+                        return True
+            except OSError:
+                continue
+        return False
 
     def tick(self):
         now = time.time()
@@ -233,6 +256,7 @@ class Tracker:
                 "speed": max(0, int(speed)),
                 "dir": info["dir"],
                 "count": info.get("count", ""),
+                "paused": info.get("paused", False),
             })
         return items, finished
 

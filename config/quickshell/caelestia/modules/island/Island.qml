@@ -2684,7 +2684,7 @@ Item {
 
                     // Taille inconnue : l'arc tourne
                     RotationAnimation on rotation {
-                        running: root.mode === "transfer" && root.transferProgress < 0
+                        running: root.mode === "transfer" && root.transferProgress < 0 && !root.transfer?.paused
                         from: 0
                         to: 360
                         duration: 1200
@@ -2694,7 +2694,7 @@ Item {
 
                 MaterialIcon {
                     anchors.centerIn: parent
-                    text: root.transfer?.kind === "copy" ? "content_copy" : root.transfer?.kind === "upload" ? "arrow_upward" : "arrow_downward"
+                    text: root.transfer?.paused ? "pause" : root.transfer?.kind === "copy" ? "content_copy" : root.transfer?.kind === "upload" ? "arrow_upward" : "arrow_downward"
                     color: "#0a84ff"
                     fontStyle: Tokens.font.icon.size(11).build()
                     fill: 1
@@ -2779,6 +2779,8 @@ Item {
                         const t = root.transfer;
                         if (!t)
                             return "";
+                        if (t.paused)
+                            return t.total > 0 ? qsTr("En pause · %1 sur %2").arg(root.fmtBytes(t.done)).arg(root.fmtBytes(t.total)) : qsTr("Envoi sur Drive en pause");
                         const parts = t.kind === "upload" ? [t.count ? qsTr("Drive · fichier %1").arg(t.count) : qsTr("Envoi sur Drive")] : [];
                         parts.push(t.total > 0 ? qsTr("%1 sur %2").arg(root.fmtBytes(t.done)).arg(root.fmtBytes(t.total)) : root.fmtBytes(t.done));
                         if (t.speed > 0)
@@ -2805,6 +2807,12 @@ Item {
                 anchors.rightMargin: 24
                 anchors.verticalCenter: trBadge.verticalCenter
 
+                ShotButton {
+                    visible: root.transfer?.kind === "upload"
+                    icon: root.transfer?.paused ? "play_arrow" : "pause"
+                    tip: root.transfer?.paused ? qsTr("Reprendre la sauvegarde") : qsTr("Mettre la sauvegarde en pause")
+                    onClicked: Quickshell.execDetached([`${Quickshell.env("HOME")}/.local/bin/drive-sync`, root.transfer?.paused ? "resume" : "pause"])
+                }
                 ShotButton {
                     icon: "folder_open"
                     tip: qsTr("Ouvrir le dossier")
@@ -2849,7 +2857,7 @@ Item {
                     color: "#0a84ff"
 
                     NumberAnimation on x {
-                        running: root.mode === "transferFull" && root.transferProgress < 0
+                        running: root.mode === "transferFull" && root.transferProgress < 0 && !root.transfer?.paused
                         from: -trWave.width
                         to: trWave.parent.width
                         duration: 1300
