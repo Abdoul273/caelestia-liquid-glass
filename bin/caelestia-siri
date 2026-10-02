@@ -407,6 +407,11 @@ class Assistant:
         self.file_source = None
         self.mic_on = False
         self.heard = False  # la demande en cours vient du micro
+        self.pending: list[str] = []  # demandes écrites arrivées sans session prête
+        self.waiting_text = ""  # demande écrite sans réponse pour l'instant
+        self.waiting_since = 0.0
+        self.retried = False
+        self.force_reconnect = False
 
     # Commandes du shell
     def open(self):
@@ -447,8 +452,25 @@ class Assistant:
     async def text(self, text: str):
         self.last_activity = time.monotonic()
         self.reply_text = ""
-        if self.session:
+        self.waiting_text, self.waiting_since, self.retried = text, time.monotonic(), False
+        emit(stage="state", state="reflexion")
+        if not await self.send_text(text):
+            self.pending.append(text)  # envoyée dès que la session est prête
+            if not self.task or self.task.done():
+                self.open()
+
+    async def send_text(self, text: str) -> bool:
+        if not self.session:
+            return False
+        try:
             await self.session.send_realtime_input(text=text)  # comme ANO (3.8 refuse client_content)
+            return True
+        except Exception as exc:
+            print(f"envoi impossible : {exc}", file=sys.stderr)
+            return False
+
+    def got_answer(self):
+        self.waiting_text = ""
 
     def config(self, model: str):
         from google.genai import types
@@ -505,12 +527,21 @@ class Assistant:
             try:
                 async with client.aio.live.connect(model=model, config=self.config(model)) as session:
                     self.session = session
-                    emit(stage="state", state="ecoute", detail=model.split("/")[-1])
+                    emit(stage="state", state="reflexion" if self.pending else "ecoute", detail=model.split("/")[-1])
+                    while self.pending:  # demandes tapées pendant la connexion
+                        if not await self.send_text(self.pending[0]):
+                            break
+                        self.pending.pop(0)
                     sender = asyncio.create_task(self.send_mic(session, rec))
                     watcher = asyncio.create_task(self.watch_idle())
                     try:
                         return await self.receive(session)
+                    except Exception:
+                        if self.force_reconnect:  # session fermée volontairement par le chien de garde
+                            return "relance"
+                        raise
                     finally:
+                        self.force_reconnect = False
                         sender.cancel()
                         watcher.cancel()
                         self.session = None
@@ -548,6 +579,23 @@ class Assistant:
             if self.player.speaking:
                 self.last_activity = time.monotonic()
                 continue
+            # Chien de garde : une demande écrite restée sans aucune réponse
+            if self.waiting_text and time.monotonic() - self.waiting_since > 12:
+                if not self.retried:
+                    self.retried, self.waiting_since = True, time.monotonic()
+                    print("pas de réponse : renvoi de la demande", file=sys.stderr)
+                    await self.send_text(self.waiting_text)
+                else:
+                    print("toujours rien : reconnexion", file=sys.stderr)
+                    self.pending.append(self.waiting_text)
+                    self.waiting_text = ""
+                    self.force_reconnect = True
+                    emit(stage="state", state="connexion")
+                    try:
+                        await self.session.close()  # receive() se termine → reconnexion avec la poignée
+                    except Exception:
+                        pass
+                    return
             if self.close_after_reply:
                 action, self.close_after_reply = self.close_after_reply, None
                 emit(stage="idle")
@@ -574,6 +622,8 @@ class Assistant:
                     self.handle_at = time.monotonic()
                 if msg.go_away is not None:
                     return "goaway"  # reconnexion avec la poignée : la conversation continue
+                if msg.tool_call or msg.server_content and (msg.server_content.model_turn or msg.server_content.output_transcription):
+                    self.got_answer()
                 if msg.tool_call:
                     responses = []
                     for fc in msg.tool_call.function_calls or []:

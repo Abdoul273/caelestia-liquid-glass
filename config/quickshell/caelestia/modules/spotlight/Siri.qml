@@ -488,6 +488,65 @@ Item {
                     }
                 }
 
+                // « … » pendant que l'assistant réfléchit ou agit
+                footer: Item {
+                    readonly property bool on: root.hasThread && root.replyIndex < 0 && (root.phase === "reflexion" || root.phase === "outil" || root.phase === "connexion")
+
+                    width: ListView.view.width
+                    height: on ? 36 : 0
+                    visible: on
+
+                    Rectangle {
+                        y: 10
+                        width: 58
+                        height: 26
+                        radius: 13
+                        color: Qt.alpha(root.fg, 0.08)
+
+                        Row {
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            Repeater {
+                                model: 3
+
+                                Rectangle {
+                                    id: dot
+
+                                    required property int index
+
+                                    width: 7
+                                    height: 7
+                                    radius: 3.5
+                                    color: root.fgDim
+
+                                    SequentialAnimation on opacity {
+                                        running: root.shown
+                                        loops: Animation.Infinite
+
+                                        PauseAnimation {
+                                            duration: dot.index * 160
+                                        }
+                                        NumberAnimation {
+                                            from: 0.25
+                                            to: 1
+                                            duration: 320
+                                        }
+                                        NumberAnimation {
+                                            from: 1
+                                            to: 0.25
+                                            duration: 320
+                                        }
+                                        PauseAnimation {
+                                            duration: (2 - dot.index) * 160
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 delegate: Item {
                     id: msg
 
