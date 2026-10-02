@@ -23,6 +23,7 @@ Sortie : {"stage":"state","state":"connexion|ecoute|reflexion|parle|outil|erreur
 import asyncio
 import datetime as dt
 import json
+import re
 import os
 import subprocess
 import sys
@@ -40,6 +41,7 @@ MIC_RATE, OUT_RATE = 16000, 24000
 CHUNK_MS = 64
 MIC_CHUNK = MIC_RATE * 2 * CHUNK_MS // 1000
 HANDLE_TTL = 900  # au-delà, Gemini a oublié la session
+SESSION_FILE = HOME / ".cache/caelestia-siri/session.json"  # survit aux redémarrages du moteur
 IDLE_AFTER_REPLY = 8.0
 IDLE_BEFORE_ANY = 14.0
 
@@ -104,7 +106,8 @@ def qs_ipc(*args: str) -> str:
 
 
 def fold(s: str) -> str:
-    return "".join(c for c in unicodedata.normalize("NFD", s.casefold()) if unicodedata.category(c) != "Mn")
+    s = s.casefold().replace("œ", "oe").replace("æ", "ae")
+    return "".join(c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn")
 
 
 # ── Outils ────────────────────────────────────────────────────────────────────
@@ -485,29 +488,70 @@ async def phone_relay_main():
                 last = now
             await asyncio.sleep(1)
 
+    def variants(q: str) -> list:
+        """Android ne relie pas « soeur » et « sœur » : on essaie les écritures possibles."""
+        q = re.sub(r"^(?:ma|mon|mes|la|le)\s+", "", q.strip(), flags=re.I)
+        out = []
+        for v in (q, q.replace("oe", "œ").replace("Oe", "Œ"), q.replace("œ", "oe").replace("Œ", "Oe"),
+                  q.replace("ae", "æ"), q.replace("æ", "ae")):
+            for w in (v, v[:1].upper() + v[1:], v.lower()):
+                if w and w not in out:
+                    out.append(w)
+        return out
+
+    async def search(q: str):
+        """(requête qui marche, résultat Android) — la première écriture qui trouve quelque chose."""
+        first = None
+        for v in variants(q):
+            res = await dash.request_phone_contacts(v)
+            first = first or res
+            if res.get("choices") or res.get("ok") and "aucun" not in str(res.get("message", "")).lower():
+                return v, res
+        return q, first or {}
+
+    async def resolve(target: str, selection: int):
+        """Nom → (requête Android, choix) : prend le contact dont le nom correspond exactement."""
+        if selection or re.fullmatch(r"[+\d\s().-]{6,}", target):
+            return target, selection, None
+        query, res = await search(target)
+        choices = [c for c in res.get("choices") or [] if isinstance(c, dict)]
+        want = fold(re.sub(r"^(?:ma|mon|mes|la|le)\s+", "", target.strip(), flags=re.I))
+        exact = [c for c in choices if fold(str(c.get("name", ""))) == want]
+        if len(exact) == 1:
+            return query, int(exact[0].get("index") or 0), exact[0]
+        if len(choices) == 1:
+            return query, int(choices[0].get("index") or 0), choices[0]
+        return query, 0, None
+
     async def tool(name: str, a: dict) -> str:
         if name == "phone_call":
             target = str(a.get("target") or "").strip()
             if not target:
                 return "Indiquez le nom ou le numéro à appeler."
-            return _render_phone_outcome(await dash.request_phone_call(target, selection=int(a.get("selection") or 0)),
-                                         "Commande téléphonique traitée.")
+            query, sel, picked = await resolve(target, int(a.get("selection") or 0))
+            msg = _render_phone_outcome(await dash.request_phone_call(query, selection=sel),
+                                        "Commande téléphonique traitée.")
+            return (f"Contact choisi : {picked.get('name')} ({picked.get('number_hint')}). " if picked else "") + msg
         if name == "phone_hangup":
             return _render_phone_outcome(await dash.request_phone_hangup(), "Demande de raccrochage traitée.")
         if name == "phone_contacts":
-            return _render_phone_outcome(await dash.request_phone_contacts(str(a.get("query") or "")),
-                                         "Recherche de contacts traitée.", choices_hint="Ce sont les contacts du téléphone.")
+            query, res = await search(str(a.get("query") or ""))
+            return f"(recherche Android : « {query} ») " + _render_phone_outcome(
+                res, "Recherche de contacts traitée.", choices_hint="Ce sont les contacts du téléphone.")
         if name == "phone_sms":
             target, body = str(a.get("target") or "").strip(), str(a.get("body") or "").strip()
             if not target or not body:
                 return "Indiquez le destinataire et le texte du SMS."
+            target, sel, picked = await resolve(target, int(a.get("selection") or 0))
+            a = {**a, "selection": sel}
 
             def send() -> str:
                 fut = asyncio.run_coroutine_threadsafe(
                     dash.request_phone_sms(target, body, int(a.get("selection") or 0)), loop)
                 return _render_phone_outcome(fut.result(timeout=40), "Commande SMS traitée.")
+            who = f"{picked.get('name')} ({picked.get('number_hint')})" if picked else target
             return human_confirmation.request("phone:sms", "Envoyer un SMS depuis le téléphone",
-                                              f"Destinataire : {target}\n\n{body}", send)
+                                              f"Destinataire : {who}\n\n{body}", send)
         if name == "location":
             return "ok" if await dash.request_fresh_location(timeout=8.0) else "pas de réponse du téléphone"
         if name == "log":
@@ -608,6 +652,12 @@ def system_prompt() -> str:
         "Pour les fenêtres et bureaux (focus, plein écran, déplacer, aller au bureau N), utilise shell_exec "
         "ou hypr_orchestrator. Quand on te demande ce qu'il y a "
         "à l'écran, d'expliquer une erreur visible ou de lire quelque chose, utilise regarder_ecran. "
+        "C'est UNE conversation continue : chaque message de l'utilisateur fait suite aux précédents. "
+        "Une réponse courte (« oui », « si c'est bien écrit sœur », un nom, un numéro) répond à TA dernière "
+        "question : reprends l'action en cours avec cette précision au lieu de changer de sujet ou de regarder "
+        "l'écran. Pour un contact du téléphone, passe directement par phone_call / phone_sms avec le nom tel "
+        "que l'utilisateur le dit (« sœur », « maman ») : le relais trouve le bon contact tout seul ; n'utilise "
+        "phone_contacts que si l'appel échoue, et contacts_control jamais pour le téléphone. "
         "Pour toute question sur la position de l'utilisateur (où suis-je, où exactement, mon quartier), "
         "appelle ma_position au lieu de te fier à la ville par défaut. "
         "Confirme en quelques mots après avoir agi. Pour une information récente (actualité, météo, prix, sport), "
@@ -670,6 +720,13 @@ class Assistant:
     def __init__(self):
         self.handle = None
         self.handle_at = 0.0
+        try:
+            saved = json.loads(SESSION_FILE.read_text())
+            if time.time() - saved["at"] < HANDLE_TTL:
+                self.handle = saved["handle"]
+                self.handle_at = time.monotonic() - (time.time() - saved["at"])
+        except (OSError, ValueError, KeyError):
+            pass
         self.task = None
         self.player = Player()
         self.window = ""
@@ -896,6 +953,11 @@ class Assistant:
                 if msg.session_resumption_update and msg.session_resumption_update.new_handle:
                     self.handle = msg.session_resumption_update.new_handle
                     self.handle_at = time.monotonic()
+                    try:
+                        SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
+                        SESSION_FILE.write_text(json.dumps({"handle": self.handle, "at": time.time()}))
+                    except OSError:
+                        pass
                 if msg.go_away is not None:
                     return "goaway"  # reconnexion avec la poignée : la conversation continue
                 if msg.tool_call or msg.server_content and (msg.server_content.model_turn or msg.server_content.output_transcription):
@@ -1040,6 +1102,7 @@ async def serve():
             asst.interrupt()
         elif msg.get("reset"):  # nouvelle conversation : Gemini repart de zéro
             asst.handle = None
+            SESSION_FILE.unlink(missing_ok=True)
             if asst.task and not asst.task.done():
                 asst.close()
                 await asyncio.sleep(0.2)
