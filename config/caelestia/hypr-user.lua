@@ -197,6 +197,7 @@ rebind("SUPER + V", hl.dsp.global("caelestia:clipboard")) -- Presse-papiers dans
 rebind("SUPER + Period", hl.dsp.global("caelestia:emoji")) -- Emojis dans le verre du shell
 rebind("SUPER + P", hl.dsp.global("caelestia:display")) -- Projection dans le verre du shell
 rebind("SUPER + Space", hl.dsp.global("caelestia:spotlight")) -- Spotlight dans le verre du shell
+rebind("SUPER + SHIFT + Space", hl.dsp.global("caelestia:siri")) -- Assistant vocal Gemini Live
 rebind("SUPER + O", hl.dsp.global("caelestia:calculator")) -- Calculatrice dans le verre du shell
 rebind("SUPER + SHIFT + D", hl.dsp.global("caelestia:dictation")) -- Dictée façon macOS : texte tapé dans le champ actif
 rebind("SUPER + SHIFT + W", hl.dsp.global("caelestia:writing")) -- Outils d'écriture sur la sélection

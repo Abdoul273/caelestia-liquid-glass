@@ -73,6 +73,11 @@ Region {
     }
 
     R {
+        panel: root.panels.siri
+        width: root.panels.siri.visible ? panel.width : 0
+    }
+
+    R {
         panel: root.panels.writing
         width: root.panels.writing.visible ? panel.width : 0
     }

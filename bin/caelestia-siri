@@ -1,0 +1,579 @@
+#!/usr/bin/env python3
+"""Assistant vocal façon Siri pour Caelestia (Super + Maj + Espace).
+
+    caelestia-siri serve        serveur persistant piloté par le shell (JSON lignes)
+    caelestia-siri --file a.wav test : envoie un fichier comme s'il venait du micro
+
+Même chaîne que ANO-GPT : Gemini Live audio natif (gemini-3.8-live → 3.1-flash-live
+→ 2.5 native-audio, API v1alpha, voix de ANO), VAD serveur, reprise de session
+(la conversation continue d'une ouverture à l'autre pendant 15 min) et
+compression de contexte (pas de fin de session sur une longue conversation).
+
+Entrée : {"open":true} {"close":true} {"interrupt":true} {"text":"…"}
+Sortie : {"stage":"state","state":"connexion|ecoute|reflexion|parle|outil|erreur","detail"}
+         {"stage":"level","v",who:"mic|voice"} {"stage":"user","text"} {"stage":"reply","text"}
+         {"stage":"tool","label"} {"stage":"idle"} (fin de conversation → le shell ferme)
+"""
+
+import asyncio
+import datetime as dt
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+import unicodedata
+import wave
+from pathlib import Path
+
+import numpy as np
+
+HOME = Path.home()
+ANO = HOME / "OUTILS/ANO-GPT"
+CONFIG = HOME / ".config/caelestia-siri/config.json"
+MIC_RATE, OUT_RATE = 16000, 24000
+CHUNK_MS = 64
+MIC_CHUNK = MIC_RATE * 2 * CHUNK_MS // 1000
+HANDLE_TTL = 900  # au-delà, Gemini a oublié la session
+IDLE_AFTER_REPLY = 8.0
+IDLE_BEFORE_ANY = 14.0
+
+
+def load_config() -> dict:
+    ano = {}
+    try:
+        ano = json.loads((ANO / "config/api_keys.json").read_text())
+    except (OSError, ValueError):
+        pass
+    cfg = {
+        "name": "Siri",
+        "api_key": os.environ.get("GEMINI_API_KEY", "") or ano.get("gemini_live_api_key") or ano.get("gemini_api_key", ""),
+        "models": [m for m in (ano.get("live_model") or "models/gemini-3.8-live",
+                               ano.get("live_model_fallback") or "models/gemini-3.1-flash-live-preview",
+                               ano.get("live_model_emergency") or "models/gemini-2.5-flash-native-audio-latest") if m],
+        "api_version": ano.get("gemini_live_api_version") or "v1alpha",
+        "voice": ano.get("live_voice") or "Charon",
+        "language": ano.get("conversation_language") or "fr-FR",
+        "city": ano.get("user_city") or "",
+    }
+    try:
+        cfg.update(json.loads(CONFIG.read_text()))
+    except (OSError, ValueError):
+        pass
+    return cfg
+
+
+CFG = load_config()
+
+
+_last_state = None
+
+
+def emit(**msg) -> None:
+    global _last_state
+    if msg.get("stage") == "state":
+        key = (msg.get("state"), msg.get("detail"))
+        if key == _last_state:
+            return
+        _last_state = key
+    sys.stdout.write(json.dumps(msg, ensure_ascii=False) + "\n")
+    sys.stdout.flush()
+
+
+def run(*cmd: str, timeout: float = 4) -> str:
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout).stdout.strip()
+    except Exception as exc:
+        return f"erreur : {exc}"
+
+
+def qs_ipc(*args: str) -> str:
+    return run("qs", "ipc", "-c", "caelestia", "call", *args)
+
+
+def fold(s: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFD", s.casefold()) if unicodedata.category(c) != "Mn")
+
+
+# ── Outils ────────────────────────────────────────────────────────────────────
+
+def t_open_app(name: str) -> dict:
+    import gi
+    gi.require_version("Gio", "2.0")
+    from gi.repository import Gio
+    q = fold(name)
+    best, score = None, 0
+    for app in Gio.AppInfo.get_all():
+        if not app.should_show():
+            continue
+        names = [app.get_display_name() or "", app.get_name() or "", app.get_id() or ""]
+        names += list(getattr(app, "get_keywords", lambda: [])() or [])
+        for n in names:
+            f = fold(n).removesuffix(".desktop")
+            s = 100 if f == q else 80 if f.startswith(q) else 60 if q in f.split() else 40 if q in f else 0
+            if s > score:
+                best, score = app, s
+    if not best:
+        return {"ok": False, "erreur": f"aucune application ne correspond à « {name} »"}
+    subprocess.Popen(["gio", "launch", best.get_filename()], start_new_session=True,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return {"ok": True, "application": best.get_display_name()}
+
+
+def t_open_url(url: str) -> dict:
+    if not re.match(r"^[a-z]+://", url):
+        url = "https://" + url
+    subprocess.Popen(["xdg-open", url], start_new_session=True,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return {"ok": True}
+
+
+def t_web_search(query: str) -> dict:
+    sys.path.insert(0, str(ANO))
+    from actions.web_search import web_search
+    import contextlib
+    import io
+    with contextlib.redirect_stdout(io.StringIO()):  # ses journaux casseraient le JSON
+        text = web_search({"query": query})
+    return {"resultats": text[:6000]}
+
+
+def t_timer(duration: str, label: str = "") -> dict:
+    qs_ipc("island", "timerFor", duration, label)
+    return {"ok": True, "duree": duration}
+
+
+def t_media(action: str) -> dict:
+    fn = {"lecture": "play", "pause": "pause", "basculer": "playPause", "suivant": "next",
+          "precedent": "previous", "stop": "stop"}.get(action, "playPause")
+    qs_ipc("mpris", fn)
+    return {"ok": True}
+
+
+def t_volume(level: str) -> dict:
+    sink = "@DEFAULT_AUDIO_SINK@"
+    if level in ("muet", "silence"):
+        run("wpctl", "set-mute", sink, "1")
+    elif level == "reactiver":
+        run("wpctl", "set-mute", sink, "0")
+    elif level in ("plus", "moins"):
+        run("wpctl", "set-volume", "-l", "1.0", sink, "10%+" if level == "plus" else "10%-")
+    else:
+        n = max(0, min(100, int(re.sub(r"\D", "", level) or 50)))
+        run("wpctl", "set-mute", sink, "0")
+        run("wpctl", "set-volume", sink, f"{n}%")
+    return {"ok": True, "volume": run("wpctl", "get-volume", sink)}
+
+
+def t_brightness(level: int) -> dict:
+    qs_ipc("brightness", "set", f"{max(1, min(100, int(level))) / 100:.2f}")
+    return {"ok": True}
+
+
+def t_dnd(active: bool) -> dict:
+    qs_ipc("notifs", "enableDnd" if active else "disableDnd")
+    return {"ok": True}
+
+
+def t_now() -> dict:
+    now = dt.datetime.now()
+    return {"maintenant": now.strftime("%A %d %B %Y, %H:%M")}
+
+
+TOOLS = {
+    "ouvrir_application": (t_open_app, "Ouvre une application installée (Firefox, Fichiers, Terminal, Spotify…).",
+                           {"nom": "string"}, "Ouverture de {nom}…"),
+    "ouvrir_lien": (t_open_url, "Ouvre une adresse web ou un site dans le navigateur.",
+                    {"url": "string"}, "Ouverture du lien…"),
+    "recherche_web": (t_web_search, "Cherche sur le web (actualité, météo, prix, faits récents, résultats sportifs…). À utiliser dès que la réponse dépend d'informations récentes.",
+                      {"requete": "string"}, "Recherche : {requete}"),
+    "minuteur": (t_timer, "Lance un minuteur dans l'île. duree au format « 5m », « 1h30m », « 45s ».",
+                 {"duree": "string", "libelle": "string?"}, "Minuteur {duree}"),
+    "musique": (t_media, "Contrôle le lecteur multimédia. action : lecture, pause, basculer, suivant, precedent, stop.",
+                {"action": "string"}, "Musique : {action}"),
+    "volume": (t_volume, "Règle le volume : un nombre 0-100, « plus », « moins », « muet » ou « reactiver ».",
+               {"niveau": "string"}, "Volume : {niveau}"),
+    "luminosite": (t_brightness, "Règle la luminosité de l'écran (1-100).", {"niveau": "integer"}, "Luminosité {niveau} %"),
+    "ne_pas_deranger": (t_dnd, "Active ou désactive le mode Ne pas déranger.", {"actif": "boolean"}, "Ne pas déranger"),
+    "date_heure": (t_now, "Date et heure actuelles.", {}, "Heure"),
+    "verrouiller": (None, "Verrouille l'écran (après avoir répondu).", {}, "Verrouillage"),
+    "ecrire_texte": (None, "Tape un texte dans le champ où l'utilisateur était avant d'appeler l'assistant (rédiger un message, une réponse…). Le panneau se ferme.",
+                     {"texte": "string"}, "Écriture…"),
+    "fin_conversation": (None, "Ferme l'assistant quand l'utilisateur dit au revoir, merci c'est tout, ou n'a plus besoin de rien.",
+                         {}, ""),
+}
+ARG_NAMES = {"nom": "name", "requete": "query", "duree": "duration", "libelle": "label",
+             "niveau": "level", "actif": "active"}
+
+
+def declarations(blocking: bool) -> list:
+    decls = []
+    for name, (_, desc, params, _) in TOOLS.items():
+        props = {k: {"type": t.rstrip("?").upper()} for k, t in params.items()}
+        d = {"name": name, "description": desc}
+        if props:
+            d["parameters"] = {"type": "OBJECT", "properties": props,
+                               "required": [k for k, t in params.items() if not t.endswith("?")]}
+        if blocking:
+            d["behavior"] = "BLOCKING"
+        decls.append(d)
+    return decls
+
+
+def system_prompt() -> str:
+    now = dt.datetime.now().strftime("%A %d %B %Y, %H:%M")
+    city = f" L'utilisateur est à {CFG['city']}." if CFG["city"] else ""
+    return (
+        f"Tu es {CFG['name']}, l'assistant vocal intégré au bureau Linux de l'utilisateur (Caelestia, Hyprland), "
+        "comme Siri sur un Mac. Tu parles français naturellement, avec chaleur, et tu vas droit au but : "
+        "réponses orales COURTES (une à trois phrases), sans listes ni Markdown, car tout est lu à voix haute. "
+        "Utilise les outils pour agir (applications, minuteur, musique, volume, luminosité, recherche web) "
+        "et confirme en quelques mots. Pour une information récente (actualité, météo, prix, sport), "
+        "utilise recherche_web au lieu de deviner. Quand l'utilisateur demande d'écrire ou de rédiger quelque "
+        "chose dans son champ, utilise ecrire_texte avec le texte final. Si l'utilisateur dit au revoir ou "
+        f"merci c'est tout, réponds brièvement puis appelle fin_conversation.{city} Nous sommes le {now}."
+    )
+
+
+# ── Audio ─────────────────────────────────────────────────────────────────────
+
+class Player:
+    """Sortie 24 kHz via pw-cat ; estime la fin de la parole pour le semi-duplex."""
+
+    def __init__(self):
+        self.proc = None
+        self.ends_at = 0.0
+        self.mute = False  # tests : rien ne sort des haut-parleurs
+        self.received = 0
+
+    def _ensure(self):
+        if self.proc is None or self.proc.poll() is not None:
+            self.proc = subprocess.Popen(
+                ["pw-cat", "--playback", "--rate", str(OUT_RATE), "--channels", "1", "--format", "s16",
+                 "--media-role", "Assistant", "--latency", "60ms", "-"],
+                stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+    def write(self, pcm: bytes) -> None:
+        now = time.monotonic()
+        self.ends_at = max(self.ends_at, now + 0.15) + len(pcm) / (OUT_RATE * 2)
+        self.received += len(pcm)
+        if self.mute:
+            return
+        self._ensure()
+        try:
+            self.proc.stdin.write(pcm)
+            self.proc.stdin.flush()
+        except (BrokenPipeError, OSError):
+            self.proc = None
+
+    @property
+    def speaking(self) -> bool:
+        return time.monotonic() < self.ends_at + 0.35  # écho de la pièce
+
+    def stop(self) -> None:
+        self.ends_at = 0.0
+        if self.proc and self.proc.poll() is None:
+            self.proc.kill()
+        self.proc = None
+
+
+def rms(pcm: bytes) -> float:
+    a = np.frombuffer(pcm, dtype=np.int16).astype(np.float32)
+    return float(np.sqrt(np.mean(a * a)) / 32768) if a.size else 0.0
+
+
+# ── Session ───────────────────────────────────────────────────────────────────
+
+class Assistant:
+    def __init__(self):
+        self.handle = None
+        self.handle_at = 0.0
+        self.task = None
+        self.player = Player()
+        self.window = ""
+        self.user_text = ""
+        self.reply_text = ""
+        self.exchanges = 0
+        self.last_activity = 0.0
+        self.close_after_reply = None  # action différée à la fin de la phrase
+        self.session = None
+        self.file_source = None
+
+    # Commandes du shell
+    def open(self):
+        if self.task and not self.task.done():
+            return
+        self.window = run("sh", "-c", "hyprctl activewindow -j | python3 -c 'import json,sys;print(json.load(sys.stdin).get(\"address\",\"\"))'")
+        self.exchanges = 0
+        self.close_after_reply = None
+        self.last_activity = time.monotonic()
+        self.task = asyncio.create_task(self.run())
+
+    def close(self):
+        if self.task and not self.task.done():
+            self.task.cancel()
+        self.player.stop()
+
+    def interrupt(self):
+        self.player.stop()
+        emit(stage="state", state="ecoute")
+
+    async def text(self, text: str):
+        self.last_activity = time.monotonic()
+        self.reply_text = ""
+        if self.session:
+            await self.session.send_realtime_input(text=text)  # comme ANO (3.8 refuse client_content)
+
+    def config(self, model: str):
+        from google.genai import types
+        handle = self.handle if time.monotonic() - self.handle_at < HANDLE_TTL else None
+        return types.LiveConnectConfig(
+            response_modalities=["AUDIO"],
+            temperature=0.5,
+            system_instruction=system_prompt(),
+            tools=[{"function_declarations": declarations(blocking="3.8" in model)}],
+            input_audio_transcription=types.AudioTranscriptionConfig(language_codes=[CFG["language"]]),
+            output_audio_transcription=types.AudioTranscriptionConfig(),
+            session_resumption=types.SessionResumptionConfig(handle=handle),
+            context_window_compression=types.ContextWindowCompressionConfig(sliding_window=types.SlidingWindow()),
+            speech_config=types.SpeechConfig(voice_config=types.VoiceConfig(
+                prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=CFG["voice"]))),
+        )
+
+    async def run(self):
+        from google import genai
+        client = genai.Client(api_key=CFG["api_key"], http_options={"api_version": CFG["api_version"]})
+        rec = None
+        try:
+            if not CFG["api_key"]:
+                emit(stage="state", state="erreur", detail="Clé Gemini introuvable")
+                return
+            if self.file_source is None:
+                rec = await asyncio.create_subprocess_exec(
+                    "pw-record", "--rate", str(MIC_RATE), "--channels", "1", "--format", "s16",
+                    "--latency", f"{CHUNK_MS}ms", "--media-role", "Communication", "-",
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+            delay = 1.0
+            while True:  # reconnexion : goAway, coupure réseau
+                emit(stage="state", state="connexion")
+                err = await self.session_loop(client, rec)
+                if err is None:
+                    return
+                await asyncio.sleep(delay)
+                delay = min(15.0, delay * 2)
+        except asyncio.CancelledError:
+            pass
+        finally:
+            self.session = None
+            if rec and rec.returncode is None:
+                rec.terminate()
+            self.player.stop()
+            try:
+                await client.aio.aclose()
+            except Exception:
+                pass
+
+    async def session_loop(self, client, rec):
+        last = ""
+        for model in CFG["models"]:
+            try:
+                async with client.aio.live.connect(model=model, config=self.config(model)) as session:
+                    self.session = session
+                    emit(stage="state", state="ecoute", detail=model.split("/")[-1])
+                    sender = asyncio.create_task(self.send_mic(session, rec))
+                    watcher = asyncio.create_task(self.watch_idle())
+                    try:
+                        return await self.receive(session)
+                    finally:
+                        sender.cancel()
+                        watcher.cancel()
+                        self.session = None
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                last = str(exc)
+                if self.handle and ("handle" in last.lower() or "resum" in last.lower()):
+                    self.handle = None  # poignée refusée : session neuve
+                continue
+        emit(stage="state", state="erreur", detail=last[:160] or "Gemini Live indisponible")
+        return last or "erreur"
+
+    async def send_mic(self, session, rec):
+        from google.genai import types
+        if self.file_source is not None:
+            async for pcm in self.file_source:
+                await session.send_realtime_input(audio=types.Blob(data=pcm, mime_type=f"audio/pcm;rate={MIC_RATE}"))
+            return
+        silence = b"\0" * MIC_CHUNK
+        while True:
+            pcm = await rec.stdout.readexactly(MIC_CHUNK)
+            if self.player.speaking:
+                pcm = silence  # semi-duplex : l'assistant ne s'entend pas lui-même
+            else:
+                emit(stage="level", v=round(min(1.0, rms(pcm) * 9), 3), who="mic")
+            await session.send_realtime_input(audio=types.Blob(data=pcm, mime_type=f"audio/pcm;rate={MIC_RATE}"))
+
+    async def watch_idle(self):
+        """Comme Siri : sans nouvelle demande après la réponse, le panneau se referme."""
+        while True:
+            await asyncio.sleep(0.5)
+            if self.player.speaking:
+                self.last_activity = time.monotonic()
+                continue
+            if self.close_after_reply:
+                action, self.close_after_reply = self.close_after_reply, None
+                emit(stage="idle")
+                await asyncio.sleep(0.3)
+                action()
+                continue
+            limit = IDLE_AFTER_REPLY if self.exchanges else IDLE_BEFORE_ANY
+            if time.monotonic() - self.last_activity > limit:
+                emit(stage="idle")
+                self.last_activity = time.monotonic() + 3600
+
+    async def receive(self, session):
+        from google.genai import types
+        while True:
+            got = False
+            async for msg in session.receive():
+                got = True
+                if msg.session_resumption_update and msg.session_resumption_update.new_handle:
+                    self.handle = msg.session_resumption_update.new_handle
+                    self.handle_at = time.monotonic()
+                if msg.go_away is not None:
+                    return "goaway"  # reconnexion avec la poignée : la conversation continue
+                if msg.tool_call:
+                    responses = []
+                    for fc in msg.tool_call.function_calls or []:
+                        responses.append(types.FunctionResponse(
+                            id=fc.id, name=fc.name, response=await self.call_tool(fc.name, dict(fc.args or {}))))
+                    await session.send_tool_response(function_responses=responses)
+                sc = msg.server_content
+                if not sc:
+                    continue
+                if sc.input_transcription and sc.input_transcription.text:
+                    if self.reply_text:  # nouvelle demande
+                        self.user_text, self.reply_text = "", ""
+                    self.user_text += sc.input_transcription.text
+                    self.last_activity = time.monotonic()
+                    emit(stage="user", text=self.user_text.strip())
+                    emit(stage="state", state="reflexion")
+                if sc.model_turn:
+                    for part in sc.model_turn.parts or []:
+                        if part.inline_data and part.inline_data.data:
+                            pcm = part.inline_data.data
+                            starts_in = max(0.15, self.player.ends_at - time.monotonic())
+                            self.player.write(pcm)
+                            emit(stage="state", state="parle")
+                            # Niveau émis quand ce morceau est réellement joué (l'audio arrive en avance)
+                            loop = asyncio.get_running_loop()
+                            step = len(pcm) / (OUT_RATE * 2) / 4
+                            for i in range(4):
+                                n = len(pcm) // 2
+                                part_pcm = pcm[2 * (i * n // 4):2 * ((i + 1) * n // 4)]
+                                loop.call_later(starts_in + i * step, lambda v=rms(part_pcm): emit(
+                                    stage="level", v=round(min(1.0, v * 6), 3), who="voice"))
+                if sc.output_transcription and sc.output_transcription.text:
+                    self.reply_text += sc.output_transcription.text
+                    emit(stage="reply", text=self.reply_text.strip())
+                if sc.interrupted:
+                    self.player.stop()
+                if sc.turn_complete:
+                    self.exchanges += 1
+                    self.last_activity = time.monotonic()
+                    self.user_text = ""
+                    emit(stage="state", state="ecoute")
+            if not got:
+                return "fermee"
+
+    async def call_tool(self, name: str, args: dict) -> dict:
+        spec = TOOLS.get(name)
+        if not spec:
+            return {"erreur": "outil inconnu"}
+        fn, _, params, label = spec
+        try:
+            emit(stage="tool", label=label.format(**{k: args.get(k, "") for k in params}) if label else "")
+        except (KeyError, IndexError):
+            emit(stage="tool", label=label)
+        emit(stage="state", state="outil")
+        if name == "fin_conversation":
+            self.close_after_reply = lambda: None
+            return {"ok": True}
+        if name == "verrouiller":
+            self.close_after_reply = lambda: qs_ipc("lock", "lock")
+            return {"ok": True, "info": "l'écran se verrouille après ta réponse"}
+        if name == "ecrire_texte":
+            text, window = args.get("texte", ""), self.window
+            self.close_after_reply = lambda: subprocess.Popen(
+                [str(HOME / ".local/bin/caelestia-write"), "insert-text", window, text],
+                start_new_session=True)
+            return {"ok": True, "info": "le texte est tapé à la fermeture du panneau ; confirme en trois mots"}
+        kwargs = {ARG_NAMES.get(k, k): v for k, v in args.items() if k in params}
+        try:
+            return await asyncio.wait_for(asyncio.to_thread(fn, **kwargs), 18)
+        except asyncio.TimeoutError:
+            return {"erreur": "délai dépassé"}
+        except Exception as exc:
+            return {"erreur": str(exc)[:200]}
+
+
+async def serve():
+    loop = asyncio.get_running_loop()
+    reader = asyncio.StreamReader()
+    await loop.connect_read_pipe(lambda: asyncio.StreamReaderProtocol(reader), sys.stdin)
+    asst = Assistant()
+    while True:
+        line = await reader.readline()
+        if not line:
+            asst.close()
+            return
+        try:
+            msg = json.loads(line)
+        except ValueError:
+            continue
+        if msg.get("open"):
+            asst.open()
+        elif msg.get("close"):
+            asst.close()
+        elif msg.get("interrupt"):
+            asst.interrupt()
+        elif msg.get("text"):
+            await asst.text(msg["text"])
+
+
+async def test_file(path: str):
+    with wave.open(path) as w:
+        pcm = w.readframes(w.getnframes())
+        rate = w.getframerate()
+    a = np.frombuffer(pcm, dtype=np.int16)
+    if rate != MIC_RATE:
+        a = np.interp(np.arange(0, len(a), rate / MIC_RATE), np.arange(len(a)), a).astype(np.int16)
+    pcm = a.tobytes() + b"\0" * (MIC_RATE * 2 * 8)
+
+    async def chunks():
+        for i in range(0, len(pcm) - MIC_CHUNK + 1, MIC_CHUNK):
+            yield pcm[i:i + MIC_CHUNK]
+            await asyncio.sleep(CHUNK_MS / 1000)
+
+    asst = Assistant()
+    asst.player.mute = True
+    asst.file_source = chunks()
+    asst.open()
+    try:
+        await asyncio.wait_for(asst.task, 40)
+    except asyncio.TimeoutError:
+        asst.close()
+    print(f"audio reçu : {asst.player.received / (OUT_RATE * 2):.1f} s", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    try:
+        if len(sys.argv) > 1 and sys.argv[1] == "serve":
+            asyncio.run(serve())
+        elif len(sys.argv) > 2 and sys.argv[1] == "--file":
+            asyncio.run(test_file(sys.argv[2]))
+        else:
+            print(__doc__)
+    except KeyboardInterrupt:
+        pass

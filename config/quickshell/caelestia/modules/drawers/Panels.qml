@@ -46,6 +46,7 @@ Item {
     readonly property alias dictation: dictation
     readonly property alias writing: writing
     readonly property alias translate: translate
+    readonly property alias siri: siri
     readonly property alias display: display
     readonly property alias annotate: annotate
     readonly property alias settings: settings
@@ -179,6 +180,18 @@ Item {
     // Calculatrice : une ligne comme Spotlight, à la même place
     SpotlightModule.Calculator {
         id: calculator
+
+        screen: root.screen
+        screenState: root.screenState
+        island: island
+
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: Math.round(parent.height * 0.2)
+    }
+
+    // Assistant vocal (Super + Maj + Espace) : orbe + réponse parlée, Gemini Live
+    SpotlightModule.Siri {
+        id: siri
 
         screen: root.screen
         screenState: root.screenState

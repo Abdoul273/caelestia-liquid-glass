@@ -20,6 +20,7 @@ PersistentProperties {
     property bool dictation
     property bool writing
     property bool translate
+    property bool siri
     property bool display
     property bool annotate
     property string annotatePath

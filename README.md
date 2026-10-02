@@ -52,6 +52,7 @@ Verre translucide partout, Mission Control, Spotlight, animations fluides façon
 - **Mission Control** (`Super + Tab` ou **3 doigts vers le haut**) : tes fenêtres glissent en grille, tes bureaux s'affichent en haut, et un clic t'y emmène.
 - **Spotlight** (`Super + Espace`) : **lance tes apps** (la meilleure en grand, Entrée pour l'ouvrir), actions du système (verrouiller, veille, éteindre, paramètres, Horloge…), **fichiers** de ton dossier perso, calculs et conversions, puis suggestions Google, fiche Wikipédia et résultats web.
 - **Calculatrice** (`Super + O`) : une seule ligne dans le verre de l'île ; le résultat apparaît en grand pendant que tu tapes (`12,5 × 4 + 20 %`), Entrée le copie, ↑ rappelle l'historique.
+- **Assistant vocal** (`Super + Maj + Espace`) : un Siri dans le verre de l'île. Une orbe réagit à ta voix, il répond à voix haute (Gemini Live audio natif : `gemini-3.8-live` → `3.1-flash-live` → `2.5 native-audio`, voix Charon) et agit : ouvrir une appli ou un lien, minuteur dans l'île, musique, volume, luminosité, Ne pas déranger, verrouiller, écrire un texte dans le champ actif, recherche web (si ANO-GPT est installé). Reprise de session et compression de contexte : la conversation continue d'une ouverture à l'autre (15 min) et ne s'arrête pas sur une longue discussion. Tape une lettre pour écrire au lieu de parler, Espace coupe la parole, Échap ferme ; sans nouvelle demande il se referme seul. Réglages : `~/.config/caelestia-siri/config.json` (`api_key`, `voice`, `name`, `models`).
 - **Dictée** (`Super + Maj + D`) : clique dans un champ, appuie sur le raccourci et parle ; le texte s'affiche en direct dans le verre de l'île, puis Entrée (ou le même raccourci) le tape dans le champ, Échap annule. Reconnaissance Gemini (`gemini-3.5-transcribe-live`, ponctuation automatique) : mettre la clé dans `~/.config/caelestia-dictate/config.json` (`{"api_key": "…"}`) ou la variable `GEMINI_API_KEY`. Il faut `python-google-genai`, `wtype` et `pw-record`.
 - **Outils d'écriture** (`Super + Maj + W`) : sélectionne du texte n'importe où ; la goutte propose Corriger, Reformuler, Professionnel, Amical, Concis, Résumer, Points clés, En anglais, ou une consigne libre (« ajoute un emoji »…). Le résultat arrive en direct, Entrée remplace la sélection, Ctrl+C copie.
 - **Traduction** (`Super + Alt + T`) : une ligne comme Spotlight, reprend la sélection, traduit pendant que tu tapes (Auto = français ↔ anglais, Tab pour une autre langue) ; Entrée insère la traduction dans le champ. Mêmes réglages Gemini que la dictée (`~/.config/caelestia-write/config.json` ou `GEMINI_API_KEY`).
@@ -138,6 +139,7 @@ Appuie sur **`Super + H`** : une ligne de recherche façon Spotlight tombe de l'
 | `Super` | Lanceur d'applications |
 | `Super + Espace` | Recherche façon Spotlight |
 | `Super + O` | Calculatrice |
+| `Super + Maj + Espace` | Assistant vocal |
 | `Super + Maj + D` | Dictée dans le champ actif |
 | `Super + Maj + W` | Outils d'écriture (sélection) |
 | `Super + Alt + T` | Traduction rapide |

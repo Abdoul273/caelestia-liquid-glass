@@ -203,6 +203,9 @@ def main() -> int:
     if len(sys.argv) > 1 and sys.argv[1] == "serve":
         serve()
         return 0
+    if len(sys.argv) > 3 and sys.argv[1] == "insert-text":  # utilisé par caelestia-siri
+        insert(sys.argv[3], sys.argv[2])
+        return 0
     if len(sys.argv) > 3 and sys.argv[1] == "test":
         what, text = sys.argv[2], sys.argv[3]
         current_seq = 1

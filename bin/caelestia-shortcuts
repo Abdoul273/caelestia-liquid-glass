@@ -25,6 +25,7 @@ SHORTCUTS = [
     ("Essentiels", "󰌌", [
         ("Super", "Ouvrir le lanceur d'applications (appui seul, puis relâcher)"),
         ("Super + Espace", "Spotlight dans le verre de l'île : apps, actions, calculs, notes, tâches, fichiers, web"),
+        ("Super + Maj + Espace", "Assistant vocal (Gemini Live) : parle, il répond et agit (apps, minuteur, musique, volume, web, écrire)"),
         ("Super + O", "Calculatrice : une ligne, résultat en grand, Entrée copie, ↑ historique"),
         ("Super + Maj + D", "Dictée façon macOS : parler, le texte est tapé dans le champ actif (Entrée insère, Échap annule)"),
         ("Super + Maj + W", "Outils d'écriture sur le texte sélectionné : corriger, reformuler, ton pro, résumer… Entrée remplace"),

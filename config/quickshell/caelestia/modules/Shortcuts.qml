@@ -24,7 +24,7 @@ Scope {
     }
 
     // Gouttes de verre de l'île (Spotlight, calculatrice, projection, presse-papiers…) : une seule à la fois
-    readonly property var drops: ["spotlight", "calculator", "display", "clipboard", "emoji", "keyhelp", "clock", "settings", "annotate", "dictation", "writing", "translate"]
+    readonly property var drops: ["spotlight", "calculator", "display", "clipboard", "emoji", "keyhelp", "clock", "settings", "annotate", "dictation", "writing", "translate", "siri"]
     function toggleDrop(kind: string): void {
         if (hasFullscreen)
             return;
@@ -180,6 +180,14 @@ Scope {
         name: "translate"
         description: qsTr("Traduction rapide (reprend le texte sélectionné)")
         onPressed: root.toggleDrop("translate")
+    }
+
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
+        name: "siri"
+        description: qsTr("Assistant vocal (Gemini Live) dans le verre de l'île")
+        onPressed: root.toggleDrop("siri")
     }
 
     // qmllint disable unresolved-type
