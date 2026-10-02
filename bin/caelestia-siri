@@ -134,12 +134,23 @@ def t_screen(question: str) -> dict:
         return {"erreur": "capture d'écran impossible"}
     try:
         client = genai.Client(api_key=CFG["api_key"])
-        res = client.models.generate_content(
-            model=CFG.get("vision_model", "gemini-flash-latest"),
-            contents=[types.Part.from_bytes(data=path.read_bytes(), mime_type="image/png"),
-                      f"Capture de l'écran de l'utilisateur (ignore le panneau de l'assistant au centre en haut). "
-                      f"Réponds en français, de façon précise et concise : {question or 'Que vois-tu à l écran ?'}"])
-        return {"description": (res.text or "")[:4000]}
+        image = types.Part.from_bytes(data=path.read_bytes(), mime_type="image/png")
+        prompt = ("Capture de l'écran de l'utilisateur (ignore le panneau de l'assistant au centre en haut). "
+                  f"Réponds en français, de façon précise et concise : {question or 'Que vois-tu à l écran ?'}")
+        last = ""
+        # Comme ANO : on passe au modèle suivant quand l'un est saturé (503) ou limité (429)
+        for model in CFG.get("vision_models") or ["gemini-flash-latest", "gemini-2.5-flash",
+                                                  "gemini-flash-lite-latest", "gemini-pro-latest"]:
+            try:
+                res = client.models.generate_content(
+                    model=model, contents=[image, prompt],
+                    config=types.GenerateContentConfig(
+                        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)))
+                if res.text:
+                    return {"description": res.text[:4000]}
+            except Exception as exc:
+                last = str(exc)[:200]
+        return {"erreur": f"vision indisponible : {last}"}
     finally:
         path.unlink(missing_ok=True)
 
@@ -176,6 +187,8 @@ ANO_TOOLS = {  # nom ANO → (module, fonction)
     "send_message": ("actions.send_message", "send_message"),
     "prayer_control": ("actions.prayer", "prayer_control"),
 }
+# Téléphone (ANO-Remote) : seul le processus ANO-GPT détient la liaison avec le téléphone
+ANO_RELAYED = {"phone_call", "phone_hangup", "phone_contacts", "phone_sms"}
 ANO_DECLS: list = []
 ANO_RUNTIME = None
 ANO_MEMORY: dict = {}
@@ -240,13 +253,20 @@ def load_ano() -> None:
 
     human_confirmation.bind(show=show, notify=lambda m: notify(CFG["name"], m),
                             log=lambda m: print(m, file=sys.stderr))
-    ANO_DECLS = [d for d in TOOL_DECLARATIONS if d["name"] in ANO_TOOLS]
+    ANO_DECLS = [d for d in TOOL_DECLARATIONS if d["name"] in ANO_TOOLS or d["name"] in ANO_RELAYED]
     ANO_RUNTIME = ActionRuntime(ANO_DECLS)
 
 
 def call_ano(name: str, args: dict) -> str:
     import importlib
     import inspect
+    if name in ANO_RELAYED:
+        from core.tool_bridge import AppUnavailable, call_app
+        try:
+            return call_app(name, args, timeout=50)
+        except AppUnavailable:
+            return ("ANO-GPT n'est pas lancé : le téléphone (ANO-Remote) n'est joignable que par lui. "
+                    "Propose à l'utilisateur de lancer ANO-GPT avec open_app, puis de réessayer.")
     mod, fn_name = ANO_TOOLS[name]
     fn = getattr(importlib.import_module(mod), fn_name)
     try:
@@ -290,6 +310,8 @@ ANO_LABELS = {
     "browser_control": "Navigateur…", "file_controller": "Fichiers…", "web_search": "Recherche…",
     "weather_report": "Météo…", "reminder": "Rappel…", "youtube_video": "YouTube…",
     "music_control": "Musique…", "email_control": "Mails…", "system_status": "État du système",
+    "phone_call": "Appel…", "phone_sms": "SMS…", "phone_contacts": "Contacts du téléphone…",
+    "phone_hangup": "Raccrocher…",
 }
 ARG_NAMES = {"nom": "name", "requete": "query", "duree": "duration", "libelle": "label",
              "niveau": "level", "actif": "active", "tout": "everything", "cible": "target",
@@ -327,7 +349,7 @@ def system_prompt() -> str:
         "(le SEUL outil pour fermer une application), shell_exec (n'importe quelle commande), computer_settings "
         "(volume, luminosité, Wi-Fi, Bluetooth…), computer_control (clavier, souris, clic), browser_control, "
         "file_controller, hypr_orchestrator, web_search, weather_report, reminder, youtube_video, music_control, "
-        "mails, agenda, contacts, GitHub… Ne dis JAMAIS que tu ne peux pas faire quelque chose sur l'ordinateur : "
+        "mails, agenda, contacts, GitHub, téléphone (phone_call, phone_sms par ANO-Remote)… Ne dis JAMAIS que tu ne peux pas faire quelque chose sur l'ordinateur : "
         "trouve l'outil adapté (enchaîne plusieurs appels si besoin). N'annonce JAMAIS qu'une action est faite "
         "si le résultat de l'outil ne le confirme pas : lis le résultat, et en cas d'échec dis-le et réessaie "
         "autrement. Si un outil répond qu'une confirmation est affichée, dis à l'utilisateur de cliquer sur "
@@ -675,7 +697,7 @@ class Assistant:
                 return "fermee"
 
     async def call_tool(self, name: str, args: dict) -> dict:
-        if name in ANO_TOOLS and ANO_RUNTIME is not None:
+        if (name in ANO_TOOLS or name in ANO_RELAYED) and ANO_RUNTIME is not None:
             emit(stage="tool", label=ANO_LABELS.get(name, name.replace("_", " ")))
             emit(stage="state", state="outil")
             try:

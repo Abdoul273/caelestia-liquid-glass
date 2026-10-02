@@ -485,6 +485,20 @@ Item {
                     scrollAnim.restart();
                 }
 
+                function scrollToTop(): void {
+                    follow = false;
+                    wheelTarget = originY;
+                    scrollAnim.duration = 420;
+                    scrollAnim.restart();
+                }
+
+                function scrollToBottom(): void {
+                    wheelTarget = Math.max(originY, originY + contentHeight - height);
+                    follow = true;
+                    scrollAnim.duration = 420;
+                    scrollAnim.restart();
+                }
+
                 NumberAnimation {
                     id: scrollAnim
 
@@ -493,6 +507,7 @@ Item {
                     to: thread.wheelTarget
                     duration: 220
                     easing.type: Easing.OutCubic
+                    onStopped: duration = 220
                 }
 
                 WheelHandler {
@@ -675,6 +690,76 @@ Item {
                         selectionColor: Qt.alpha("#5e5ce6", 0.4)
                         font.pixelSize: 17
                         wrapMode: TextEdit.Wrap
+                    }
+                }
+            }
+
+            // ── Flèches : tout en haut / tout en bas du fil ──
+            Column {
+                anchors.right: thread.right
+                anchors.rightMargin: -6
+                anchors.bottom: thread.bottom
+                anchors.bottomMargin: 4
+                spacing: 6
+                z: 2
+
+                Repeater {
+                    model: [
+                        {
+                            glyph: "󰁝",
+                            up: true
+                        },
+                        {
+                            glyph: "󰁅",
+                            up: false
+                        }
+                    ]
+
+                    Rectangle {
+                        id: arrow
+
+                        required property var modelData
+
+                        readonly property bool needed: thread.contentHeight > thread.height + 4 && (modelData.up ? thread.contentY > thread.originY + 4 : !thread.follow)
+
+                        width: 32
+                        height: 32
+                        radius: 16
+                        color: arrowMouse.containsMouse ? Qt.alpha(root.fg, 0.26) : Qt.alpha(Colours.palette.m3surface, 0.82)
+                        border.width: 1
+                        border.color: Qt.alpha(root.fg, 0.14)
+                        opacity: needed ? 1 : 0
+                        scale: needed ? 1 : 0.6
+                        visible: opacity > 0.01
+
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: 180
+                            }
+                        }
+                        Behavior on scale {
+                            NumberAnimation {
+                                duration: 220
+                                easing.type: Easing.OutBack
+                            }
+                        }
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: arrow.modelData.glyph
+                            font.family: root.glyphFont
+                            font.pixelSize: 18
+                            color: root.fg
+                        }
+
+                        MouseArea {
+                            id: arrowMouse
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: arrow.modelData.up ? thread.scrollToTop() : thread.scrollToBottom()
+                        }
                     }
                 }
             }
