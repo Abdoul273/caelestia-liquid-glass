@@ -186,6 +186,220 @@ def t_now() -> dict:
     return {"maintenant": now.strftime("%A %d %B %Y, %H:%M")}
 
 
+# Fenêtre active au moment où l'assistant a été appelé (« ferme ça », « mets-la en plein écran »)
+ACTIVE = {"address": ""}
+DEICTIC = {"", "ca", "cela", "ceci", "celle-ci", "celui-ci", "cette", "cette fenetre", "cette application",
+           "fenetre active", "active", "actuelle", "la fenetre", "l'application", "ici"}
+
+
+def hypr_clients() -> list:
+    try:
+        return json.loads(run("hyprctl", "clients", "-j")) or []
+    except ValueError:
+        return []
+
+
+def hypr(*args: str) -> str:
+    return run("hyprctl", "dispatch", *args)
+
+
+def find_windows(name: str) -> list:
+    q = fold(name).strip()
+    wins = [w for w in hypr_clients() if w.get("mapped", True) and w.get("address")]
+    if q in DEICTIC:
+        return [w for w in wins if w["address"] == ACTIVE["address"]]
+    scored = []
+    for w in wins:
+        fields = [fold(w.get(k) or "") for k in ("class", "initialClass", "title", "initialTitle")]
+        fields = [f.split(".")[-1] if k < 2 else f for k, f in enumerate(fields)]  # org.gnome.Nautilus → nautilus
+        s = max((100 if f == q else 80 if f.startswith(q) else 60 if q in f else 0) for f in fields)
+        if s:
+            scored.append((s, w))
+    if not scored:
+        return []
+    top = max(s for s, _ in scored)
+    return [w for s, w in scored if s == top]
+
+
+def label(w: dict) -> str:
+    return f"{w.get('class') or '?'} — {(w.get('title') or '')[:60]}"
+
+
+def t_close_app(name: str, everything: bool = True) -> dict:
+    wins = find_windows(name)
+    if not everything:
+        wins = wins[:1]
+    for w in wins:
+        hypr("closewindow", f"address:{w['address']}")
+    if wins:
+        time.sleep(0.6)
+        left = {w["address"] for w in hypr_clients()} & {w["address"] for w in wins}
+        return {"ok": True, "fermees": [label(w) for w in wins],
+                "info": "certaines demandent une confirmation dans l'application" if left else ""}
+    # Pas de fenêtre : processus en arrière-plan (lecteur, démon…)
+    q = re.sub(r"[^a-z0-9_.-]", "", fold(name))
+    if q and run("pgrep", "-ix", q):
+        run("pkill", "-ix", q)
+        return {"ok": True, "processus_arrete": q}
+    return {"ok": False, "erreur": f"aucune fenêtre ni processus « {name} » ouvert",
+            "fenetres_ouvertes": [label(w) for w in hypr_clients()][:20]}
+
+
+def t_window(action: str, target: str = "", workspace: int = 0) -> dict:
+    a = fold(action)
+    if a in ("lister", "liste"):
+        return {"fenetres": [f"{label(w)} (bureau {w.get('workspace', {}).get('id')})" for w in hypr_clients()]}
+    wins = find_windows(target)
+    if not wins:
+        return {"ok": False, "erreur": f"fenêtre « {target or 'active'} » introuvable"}
+    addr = f"address:{wins[0]['address']}"
+    if a in ("focus", "afficher", "aller"):
+        hypr("focuswindow", addr)
+    elif a in ("plein_ecran", "pleinecran"):
+        hypr("focuswindow", addr)
+        hypr("fullscreen", "0")
+    elif a in ("agrandir", "maximiser"):
+        hypr("focuswindow", addr)
+        hypr("fullscreen", "1")
+    elif a == "flottant":
+        hypr("togglefloating", addr)
+    elif a == "epingler":
+        hypr("focuswindow", addr)
+        hypr("pin", addr)
+    elif a in ("deplacer_bureau", "deplacer"):
+        hypr("movetoworkspacesilent", f"{workspace},{addr}")
+    elif a in ("minimiser", "cacher"):
+        hypr("movetoworkspacesilent", f"special:minimized,{addr}")
+    elif a == "fermer":
+        hypr("closewindow", addr)
+    else:
+        return {"ok": False, "erreur": f"action inconnue : {action}"}
+    return {"ok": True, "fenetre": label(wins[0])}
+
+
+def t_workspace(number: int) -> dict:
+    hypr("workspace", str(int(number)))
+    return {"ok": True}
+
+
+BLOCKED = re.compile("|".join([
+    r"\brm\s+-[a-z]*r[a-z]*\s+(?:-\S+\s+)*(?:/|/\*|~/?|\$HOME/?)(?:\s|$)", r"--no-preserve-root",
+    r"\bmkfs", r"\bdd\s+.*of=/dev/", r":\(\)\s*\{", r"\bwipefs\b", r">\s*/dev/(?:sd|nvme)",
+]), re.I)
+RISKY = re.compile("|".join([
+    r"\bsudo\b", r"\bdoas\b", r"\brm\s+-[a-z]*r", r"\bkillall\b", r"\bpkill\b",
+    r"\bsystemctl\s+(?:stop|disable|mask|poweroff|reboot)", r"\b(?:shutdown|reboot|poweroff)\b",
+    r"\bgit\s+(?:reset\s+--hard|push\s+.*--force|clean\s+-\w*f)", r"\bpacman\s+-R", r"\byay\s+-R",
+    r"\bchmod\s+-R\b", r"\bchown\s+-R\b", r"\bdd\b", r"\bmv\s+.*\s/dev/null",
+]), re.I)
+
+
+def t_shell(command: str, confirmed: bool = False) -> dict:
+    if BLOCKED.search(command):
+        return {"ok": False, "erreur": "commande destructrice refusée"}
+    if RISKY.search(command) and not confirmed:
+        return {"ok": False, "confirmation_requise": True,
+                "info": "commande sensible : demande à l'utilisateur s'il confirme, puis rappelle avec confirme=true"}
+    if "sudo" in command and "-A" not in command and "-n" not in command:
+        command = command.replace("sudo ", "sudo -n ", 1)  # pas de mot de passe à taper ici
+    try:
+        p = subprocess.run(["bash", "-lc", command], capture_output=True, text=True, timeout=45,
+                           cwd=HOME, start_new_session=True, stdin=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "erreur": "délai de 45 s dépassé (pour une application graphique, utilise ouvrir_application)"}
+    out = (p.stdout or "") + (("\n[stderr] " + p.stderr) if p.stderr.strip() else "")
+    if len(out) > 5000:
+        out = out[:2500] + "\n…\n" + out[-2500:]
+    return {"code_retour": p.returncode, "sortie": out.strip() or "(aucune sortie)"}
+
+
+def t_screen(question: str) -> dict:
+    from google import genai
+    from google.genai import types
+    path = Path(f"/tmp/caelestia-siri-{os.getpid()}.png")
+    mon = run("sh", "-c", "hyprctl monitors -j | python3 -c 'import json,sys;print(next(m[\"name\"] for m in json.load(sys.stdin) if m[\"focused\"]))'")
+    run("grim", *(["-o", mon] if mon and not mon.startswith("erreur") else []), str(path), timeout=6)
+    if not path.exists():
+        return {"erreur": "capture d'écran impossible"}
+    try:
+        client = genai.Client(api_key=CFG["api_key"])
+        res = client.models.generate_content(
+            model=CFG.get("vision_model", "gemini-flash-latest"),
+            contents=[types.Part.from_bytes(data=path.read_bytes(), mime_type="image/png"),
+                      f"Capture de l'écran de l'utilisateur (ignore le panneau de l'assistant au centre en haut). "
+                      f"Réponds en français, de façon précise et concise : {question or 'Que vois-tu à l écran ?'}"])
+        return {"description": (res.text or "")[:4000]}
+    finally:
+        path.unlink(missing_ok=True)
+
+
+def t_clipboard(action: str, text: str = "") -> dict:
+    if fold(action) in ("ecrire", "copier"):
+        subprocess.run(["wl-copy"], input=text, text=True, timeout=4)
+        return {"ok": True}
+    return {"contenu": run("wl-paste", "-n")[:4000]}
+
+
+def t_files(action: str, path: str) -> dict:
+    a = fold(action)
+    p = Path(os.path.expanduser(path))
+    if a == "chercher":
+        found = run("fd", "-i", "-H", "--max-results", "25", "-E", ".git", "-E", "node_modules", "-E", ".cache",
+                    path, str(HOME), timeout=10)
+        return {"resultats": found.splitlines() or ["rien trouvé"]}
+    if not p.is_absolute():
+        p = HOME / p
+    if a == "ouvrir":
+        if not p.exists():
+            return {"erreur": f"{p} n'existe pas"}
+        subprocess.Popen(["xdg-open", str(p)], start_new_session=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return {"ok": True}
+    if a == "lister":
+        items = sorted(p.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True)[:60]
+        return {"contenu": [x.name + ("/" if x.is_dir() else "") for x in items]}
+    if a == "lire":
+        return {"contenu": p.read_text(errors="replace")[:6000]}
+    return {"erreur": f"action inconnue : {action}"}
+
+
+def t_sysinfo() -> dict:
+    load = os.getloadavg()[0]
+    mem = {l.split(":")[0]: int(l.split()[1]) for l in open("/proc/meminfo") if ":" in l}
+    disk = os.statvfs(str(HOME))
+    bat = run("sh", "-c", "cat /sys/class/power_supply/BAT*/capacity /sys/class/power_supply/BAT*/status 2>/dev/null")
+    return {
+        "charge_cpu": f"{load:.1f} sur {os.cpu_count()} cœurs",
+        "memoire": f"{(mem['MemTotal'] - mem['MemAvailable']) / 2**20:.1f} Go utilisés sur {mem['MemTotal'] / 2**20:.1f}",
+        "disque_libre": f"{disk.f_bavail * disk.f_frsize / 2**30:.0f} Go",
+        "batterie": bat.replace("\n", " ") or "pas de batterie",
+        "wifi": run("sh", "-c", "nmcli -t -f active,ssid dev wifi | grep '^oui\\|^yes' | cut -d: -f2") or "non connecté",
+        "allume_depuis": run("uptime", "-p"),
+        "processus_gourmands": run("sh", "-c", "ps -eo comm,%cpu,%mem --sort=-%cpu | head -6"),
+    }
+
+
+def t_radio(device: str, active: bool) -> dict:
+    if "blue" in fold(device):
+        run("bluetoothctl", "power", "on" if active else "off")
+    else:
+        run("nmcli", "radio", "wifi", "on" if active else "off")
+    return {"ok": True}
+
+
+def t_reminder(message: str, delay: str = "", time_: str = "") -> dict:
+    cmd = ["systemd-run", "--user", "--collect", f"--unit=siri-rappel-{int(time.time())}"]
+    if time_:
+        hh = re.sub(r"\s*h\s*", ":", time_.strip()).rstrip(":")
+        cmd.append(f"--on-calendar={hh if ':' in hh else hh + ':00'}")
+    else:
+        d = re.sub(r"(\d+)\s*m(?:in)?\b", r"\1min", delay or "10min")
+        cmd.append(f"--on-active={d}")
+    cmd += ["notify-send", "-u", "critical", "-a", CFG["name"], "Rappel", message]
+    out = run(*cmd)
+    return {"ok": "Running" in out or not out.startswith("erreur"), "detail": out[:200]}
+
+
 TOOLS = {
     "ouvrir_application": (t_open_app, "Ouvre une application installée (Firefox, Fichiers, Terminal, Spotify…).",
                            {"nom": "string"}, "Ouverture de {nom}…"),
@@ -202,6 +416,25 @@ TOOLS = {
     "luminosite": (t_brightness, "Règle la luminosité de l'écran (1-100).", {"niveau": "integer"}, "Luminosité {niveau} %"),
     "ne_pas_deranger": (t_dnd, "Active ou désactive le mode Ne pas déranger.", {"actif": "boolean"}, "Ne pas déranger"),
     "date_heure": (t_now, "Date et heure actuelles.", {}, "Heure"),
+    "fermer_application": (t_close_app, "Ferme une application ou fenêtre ouverte (par son nom : firefox, spotify, kitty…). nom « active » = la fenêtre devant l'utilisateur quand il t'a appelé. tout=false pour une seule fenêtre.",
+                           {"nom": "string", "tout": "boolean?"}, "Fermeture de {nom}…"),
+    "fenetre": (t_window, "Gère les fenêtres : action lister, focus, plein_ecran, agrandir, flottant, epingler, deplacer_bureau (avec bureau), minimiser, fermer. cible = nom de l'appli ou « active ».",
+                {"action": "string", "cible": "string?", "bureau": "integer?"}, "Fenêtre : {action}"),
+    "bureau": (t_workspace, "Va sur le bureau virtuel numéro N.", {"numero": "integer"}, "Bureau {numero}"),
+    "commande_terminal": (t_shell, "Exécute une commande bash sur l'ordinateur (Arch Linux, Hyprland) et renvoie la sortie. Accès complet : tout ce qu'aucun autre outil ne couvre (fichiers, paquets, git, processus, réseau, réglages, hyprctl, playerctl…). confirme=true seulement après accord explicite de l'utilisateur pour une commande sensible.",
+                          {"commande": "string", "confirme": "boolean?"}, "Terminal : {commande}"),
+    "regarder_ecran": (t_screen, "Regarde l'écran de l'utilisateur et répond à une question sur ce qui s'y trouve (lire un texte, une erreur, expliquer, résumer).",
+                       {"question": "string"}, "Je regarde l'écran…"),
+    "presse_papiers": (t_clipboard, "Lit (action lire) ou remplit (action ecrire, avec texte) le presse-papiers.",
+                       {"action": "string", "texte": "string?"}, "Presse-papiers"),
+    "fichiers": (t_files, "Fichiers : action chercher (chemin = nom à chercher dans le dossier personnel), lister, lire ou ouvrir (chemin, ~ accepté).",
+                 {"action": "string", "chemin": "string"}, "Fichiers : {action}"),
+    "infos_systeme": (t_sysinfo, "Batterie, CPU, mémoire, disque, Wi-Fi, processus gourmands.", {}, "État du système"),
+    "wifi_bluetooth": (t_radio, "Active ou désactive le Wi-Fi ou le Bluetooth.", {"appareil": "string", "actif": "boolean"}, "{appareil}"),
+    "rappel": (t_reminder, "Programme une notification de rappel : delai (« 10m », « 2h ») OU heure (« 18:30 »).",
+               {"message": "string", "delai": "string?", "heure": "string?"}, "Rappel : {message}"),
+    "alimentation": (None, "Veille, eteindre, redemarrer ou deconnecter (exécuté après ta réponse). Pour eteindre/redemarrer/deconnecter, demande d'abord confirmation puis rappelle avec confirme=true.",
+                     {"action": "string", "confirme": "boolean?"}, "Alimentation : {action}"),
     "verrouiller": (None, "Verrouille l'écran (après avoir répondu).", {}, "Verrouillage"),
     "ecrire_texte": (None, "Tape un texte dans le champ où l'utilisateur était avant d'appeler l'assistant (rédiger un message, une réponse…). Le panneau se ferme.",
                      {"texte": "string"}, "Écriture…"),
@@ -209,7 +442,9 @@ TOOLS = {
                          {}, ""),
 }
 ARG_NAMES = {"nom": "name", "requete": "query", "duree": "duration", "libelle": "label",
-             "niveau": "level", "actif": "active"}
+             "niveau": "level", "actif": "active", "tout": "everything", "cible": "target",
+             "bureau": "workspace", "numero": "number", "commande": "command", "confirme": "confirmed",
+             "texte": "text", "chemin": "path", "appareil": "device", "delai": "delay", "heure": "time_"}
 
 
 def declarations(blocking: bool) -> list:
@@ -233,8 +468,15 @@ def system_prompt() -> str:
         f"Tu es {CFG['name']}, l'assistant vocal intégré au bureau Linux de l'utilisateur (Caelestia, Hyprland), "
         "comme Siri sur un Mac. Tu parles français naturellement, avec chaleur, et tu vas droit au but : "
         "réponses orales COURTES (une à trois phrases), sans listes ni Markdown, car tout est lu à voix haute. "
-        "Utilise les outils pour agir (applications, minuteur, musique, volume, luminosité, recherche web) "
-        "et confirme en quelques mots. Pour une information récente (actualité, météo, prix, sport), "
+        "Tu as un contrôle COMPLET de l'ordinateur grâce à tes outils : ouvrir/fermer des applications, gérer "
+        "les fenêtres et bureaux, regarder l'écran, fichiers, presse-papiers, réglages, rappels, et surtout "
+        "commande_terminal qui exécute n'importe quelle commande bash. Ne dis JAMAIS que tu ne peux pas faire "
+        "quelque chose sur l'ordinateur : trouve l'outil adapté ou passe par commande_terminal (enchaîne plusieurs "
+        "appels si besoin, vérifie le résultat). Agis directement sans demander la permission, sauf pour une "
+        "action irréversible (supprimer des données, éteindre) où tu demandes une confirmation courte. "
+        "« ça », « cette fenêtre » désignent la fenêtre active (cible « active »). Quand on te demande ce qu'il y a "
+        "à l'écran, d'expliquer une erreur visible ou de lire quelque chose, utilise regarder_ecran. "
+        "Confirme en quelques mots après avoir agi. Pour une information récente (actualité, météo, prix, sport), "
         "utilise recherche_web au lieu de deviner. Quand l'utilisateur demande d'écrire ou de rédiger quelque "
         "chose dans son champ, utilise ecrire_texte avec le texte final. Si l'utilisateur dit au revoir ou "
         f"merci c'est tout, réponds brièvement puis appelle fin_conversation.{city} Nous sommes le {now}."
@@ -312,6 +554,7 @@ class Assistant:
         if self.task and not self.task.done():
             return
         self.window = run("sh", "-c", "hyprctl activewindow -j | python3 -c 'import json,sys;print(json.load(sys.stdin).get(\"address\",\"\"))'")
+        ACTIVE["address"] = self.window
         self.exchanges = 0
         self.close_after_reply = None
         self.last_activity = time.monotonic()
@@ -539,6 +782,16 @@ class Assistant:
         if name == "verrouiller":
             self.close_after_reply = lambda: qs_ipc("lock", "lock")
             return {"ok": True, "info": "l'écran se verrouille après ta réponse"}
+        if name == "alimentation":
+            act = fold(args.get("action", ""))
+            cmds = {"veille": ["systemctl", "suspend"], "eteindre": ["systemctl", "poweroff"],
+                    "redemarrer": ["systemctl", "reboot"], "deconnecter": [str(HOME / ".local/bin/caelestia-logout")]}
+            if act not in cmds:
+                return {"erreur": "action : veille, eteindre, redemarrer ou deconnecter"}
+            if act != "veille" and not args.get("confirme"):
+                return {"confirmation_requise": True, "info": "demande confirmation à l'utilisateur"}
+            self.close_after_reply = lambda: subprocess.Popen(cmds[act], start_new_session=True)
+            return {"ok": True, "info": "exécuté après ta réponse"}
         if name == "ecrire_texte":
             text, window = args.get("texte", ""), self.window
             self.close_after_reply = lambda: subprocess.Popen(
@@ -547,7 +800,7 @@ class Assistant:
             return {"ok": True, "info": "le texte est tapé à la fermeture du panneau ; confirme en trois mots"}
         kwargs = {ARG_NAMES.get(k, k): v for k, v in args.items() if k in params}
         try:
-            return await asyncio.wait_for(asyncio.to_thread(fn, **kwargs), 18)
+            return await asyncio.wait_for(asyncio.to_thread(fn, **kwargs), 50)
         except asyncio.TimeoutError:
             return {"erreur": "délai dépassé"}
         except Exception as exc:
