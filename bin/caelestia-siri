@@ -9,10 +9,14 @@ Même chaîne que ANO-GPT : Gemini Live audio natif (gemini-3.8-live → 3.1-fla
 (la conversation continue d'une ouverture à l'autre pendant 15 min) et
 compression de contexte (pas de fin de session sur une longue conversation).
 
-Entrée : {"open":true} {"close":true} {"interrupt":true} {"text":"…"}
+Micro coupé par défaut, comme « Écrire à Siri » : on écrit, ou on active le micro
+pour UNE demande ({"mic":true}) ; il se recoupe après la réponse.
+Option "micro_par_defaut": true dans config.json pour l'ancien comportement.
+
+Entrée : {"open":true} {"close":true} {"interrupt":true} {"text":"…"} {"mic":true|false|"toggle"}
 Sortie : {"stage":"state","state":"connexion|ecoute|reflexion|parle|outil|erreur","detail"}
          {"stage":"level","v",who:"mic|voice"} {"stage":"user","text"} {"stage":"reply","text"}
-         {"stage":"tool","label"} {"stage":"idle"} (fin de conversation → le shell ferme)
+         {"stage":"tool","label"} {"stage":"mic","on"} {"stage":"idle"} (le shell ferme)
 """
 
 import asyncio
@@ -56,6 +60,7 @@ def load_config() -> dict:
         "voice": ano.get("live_voice") or "Charon",
         "language": ano.get("conversation_language") or "fr-FR",
         "city": ano.get("user_city") or "",
+        "micro_par_defaut": False,
     }
     try:
         cfg.update(json.loads(CONFIG.read_text()))
@@ -299,6 +304,8 @@ class Assistant:
         self.close_after_reply = None  # action différée à la fin de la phrase
         self.session = None
         self.file_source = None
+        self.mic_on = False
+        self.heard = False  # la demande en cours vient du micro
 
     # Commandes du shell
     def open(self):
@@ -308,7 +315,24 @@ class Assistant:
         self.exchanges = 0
         self.close_after_reply = None
         self.last_activity = time.monotonic()
+        self.mic_on = bool(CFG["micro_par_defaut"]) or self.file_source is not None
+        emit(stage="mic", on=self.mic_on)
         self.task = asyncio.create_task(self.run())
+
+    async def set_mic(self, on):
+        on = (not self.mic_on) if on == "toggle" else bool(on)
+        if on == self.mic_on:
+            return
+        self.mic_on = on
+        emit(stage="mic", on=on)
+        if on:
+            self.player.stop()  # parler coupe la réponse en cours
+            emit(stage="state", state="ecoute")
+        elif self.session:
+            try:  # le VAD serveur clôt tout de suite la phrase en cours
+                await self.session.send_realtime_input(audio_stream_end=True)
+            except Exception:
+                pass
 
     def close(self):
         if self.task and not self.task.done():
@@ -408,6 +432,8 @@ class Assistant:
         silence = b"\0" * MIC_CHUNK
         while True:
             pcm = await rec.stdout.readexactly(MIC_CHUNK)
+            if not self.mic_on:
+                continue  # micro coupé : rien n'est envoyé
             if self.player.speaking:
                 pcm = silence  # semi-duplex : l'assistant ne s'entend pas lui-même
             else:
@@ -426,6 +452,10 @@ class Assistant:
                 emit(stage="idle")
                 await asyncio.sleep(0.3)
                 action()
+                continue
+            # Fermeture auto seulement en mode mains libres (micro_par_defaut) :
+            # en mode écrit, on lit et on tape à son rythme
+            if not CFG["micro_par_defaut"] or self.file_source is not None:
                 continue
             limit = IDLE_AFTER_REPLY if self.exchanges else IDLE_BEFORE_ANY
             if time.monotonic() - self.last_activity > limit:
@@ -456,6 +486,7 @@ class Assistant:
                     if self.reply_text:  # nouvelle demande
                         self.user_text, self.reply_text = "", ""
                     self.user_text += sc.input_transcription.text
+                    self.heard = self.heard or self.mic_on
                     self.last_activity = time.monotonic()
                     emit(stage="user", text=self.user_text.strip())
                     emit(stage="state", state="reflexion")
@@ -481,6 +512,11 @@ class Assistant:
                     self.player.stop()
                 if sc.turn_complete:
                     self.exchanges += 1
+                    # Une demande vocale = un appui, comme Siri : le micro se recoupe
+                    if self.heard and not CFG["micro_par_defaut"] and self.file_source is None:
+                        self.mic_on = False
+                        emit(stage="mic", on=False)
+                    self.heard = False
                     self.last_activity = time.monotonic()
                     self.user_text = ""
                     emit(stage="state", state="ecoute")
@@ -540,6 +576,8 @@ async def serve():
             asst.interrupt()
         elif msg.get("text"):
             await asst.text(msg["text"])
+        elif "mic" in msg:
+            await asst.set_mic(msg["mic"])
 
 
 async def test_file(path: str):

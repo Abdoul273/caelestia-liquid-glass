@@ -9,8 +9,9 @@ import qs.services
 // Assistant vocal façon Siri (Super + Maj + Espace) : la goutte tombe de l'île, une orbe
 // réagit à la voix ; on parle, l'assistant répond à voix haute (Gemini Live, même chaîne
 // qu'ANO-GPT) et agit (apps, minuteur, musique, volume, recherche web, écrire dans le
-// champ…). Sans nouvelle demande après la réponse, la goutte se referme seule.
-// On peut aussi écrire sa demande. Moteur persistant : `caelestia-siri serve`.
+// champ…). Micro coupé par défaut, comme « Écrire à Siri » : on écrit sa demande, ou
+// on active le micro (bouton ou Tab) pour une demande vocale ; il se recoupe ensuite.
+// Moteur persistant : `caelestia-siri serve`.
 Item {
     id: root
 
@@ -48,7 +49,7 @@ Item {
     property string replyText: ""
     property string toolLabel: ""
     property real level: 0
-    property bool typing: typed.text !== "" || typed.activeFocus
+    property bool micOn
 
     function close(): void {
         screenState.siri = false;
@@ -75,6 +76,10 @@ Item {
         } else if (msg.stage === "reply") {
             replyText = msg.text;
             toolLabel = "";
+        } else if (msg.stage === "mic") {
+            micOn = msg.on;
+            if (!micOn)
+                level = 0;
         } else if (msg.stage === "tool") {
             toolLabel = msg.label;
         } else if (msg.stage === "state") {
@@ -86,6 +91,26 @@ Item {
         }
     }
 
+    function toggleMic(): void {
+        backend.send({
+            mic: "toggle"
+        });
+    }
+
+    // Échap : coupe d'abord la parole (ou le micro), puis ferme
+    function handleEscape(): void {
+        if (phase === "parle")
+            backend.send({
+                interrupt: true
+            });
+        else if (micOn)
+            backend.send({
+                mic: false
+            });
+        else
+            close();
+    }
+
     function statusText(): string {
         if (phase === "erreur")
             return qsTr("Indisponible : %1").arg(detail || qsTr("erreur inconnue"));
@@ -95,7 +120,9 @@ Item {
             return qsTr("Un instant…");
         if (phase === "reflexion")
             return "…";
-        return qsTr("Je vous écoute…");
+        if (micOn)
+            return qsTr("Je vous écoute…");
+        return qsTr("Que puis-je faire pour vous ?");
     }
 
     visible: morph > 0.001
@@ -136,13 +163,14 @@ Item {
             replyText = "";
             toolLabel = "";
             typed.text = "";
+            micOn = false;
             if (backend.running)
                 backend.send({
                     open: true
                 });
             else
                 backend.running = true;
-            content.forceActiveFocus();
+            typed.forceActiveFocus();
         } else {
             backend.send({
                 close: true
@@ -203,17 +231,10 @@ Item {
 
             Keys.onPressed: event => {
                 if (event.key === Qt.Key_Escape) {
-                    root.close();
+                    root.handleEscape();
                     event.accepted = true;
-                } else if (event.key === Qt.Key_Space && root.phase === "parle") {
-                    backend.send({
-                        interrupt: true
-                    });
-                    event.accepted = true;
-                } else if (event.text && event.text.trim() && !(event.modifiers & Qt.ControlModifier)) {
-                    // Taper une lettre ouvre la saisie écrite
-                    typed.forceActiveFocus();
-                    typed.text += event.text;
+                } else if (event.key === Qt.Key_Tab) {
+                    root.toggleMic();
                     event.accepted = true;
                 }
             }
@@ -342,31 +363,66 @@ Item {
                     lineHeight: 1.08
                 }
 
-                // Saisie écrite (apparaît dès qu'on tape)
+                // Saisie écrite (toujours là) + bouton micro
                 Item {
                     width: parent.width
-                    height: root.typing ? 34 : 0
-                    clip: true
-
-                    Behavior on height {
-                        NumberAnimation {
-                            duration: 180
-                        }
-                    }
+                    height: 38
 
                     Rectangle {
                         anchors.fill: parent
-                        radius: 17
+                        anchors.rightMargin: 46
+                        radius: 19
                         color: Qt.alpha(root.fg, 0.07)
+                    }
+
+                    // Micro : coupé par défaut, une demande vocale par appui (Tab)
+                    Rectangle {
+                        id: micBtn
+
+                        anchors.right: parent.right
+                        width: 38
+                        height: 38
+                        radius: 19
+                        color: root.micOn ? "#ff375f" : micMouse.containsMouse ? Qt.alpha(root.fg, 0.16) : Qt.alpha(root.fg, 0.08)
+                        scale: root.micOn ? 1 + root.level * 0.25 : 1
+
+                        Behavior on color {
+                            ColorAnimation {
+                                duration: 160
+                            }
+                        }
+                        Behavior on scale {
+                            NumberAnimation {
+                                duration: 100
+                            }
+                        }
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: root.micOn ? "󰍬" : "󰍭"
+                            font.family: root.glyphFont
+                            font.pixelSize: 19
+                            color: root.micOn ? "white" : root.fgDim
+                        }
+
+                        MouseArea {
+                            id: micMouse
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.toggleMic()
+                        }
                     }
 
                     TextInput {
                         id: typed
 
                         anchors.fill: parent
-                        anchors.leftMargin: 14
-                        anchors.rightMargin: 14
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 60
                         verticalAlignment: TextInput.AlignVCenter
+                        focus: true
                         color: root.fg
                         font.pixelSize: 15
                         clip: true
@@ -382,7 +438,10 @@ Item {
                                 text = "";
                                 event.accepted = true;
                             } else if (event.key === Qt.Key_Escape) {
-                                root.close();
+                                root.handleEscape();
+                                event.accepted = true;
+                            } else if (event.key === Qt.Key_Tab) {
+                                root.toggleMic();
                                 event.accepted = true;
                             }
                         }
@@ -390,7 +449,7 @@ Item {
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             visible: !typed.text
-                            text: qsTr("Écrire à l'assistant…")
+                            text: root.micOn ? qsTr("Parlez… (Tab pour couper le micro)") : qsTr("Écrire à l'assistant…  (Tab pour parler)")
                             color: Qt.alpha(root.fg, 0.38)
                             font: typed.font
                         }
