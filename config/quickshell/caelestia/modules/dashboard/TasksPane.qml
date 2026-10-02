@@ -17,6 +17,8 @@ ColumnLayout {
 
     // Filtre : "all", "today", "overdue"
     property string filter: "all"
+    // Mode surveillance (œil) : la saisie crée une tâche vérifiée sur internet
+    property bool watchMode
     readonly property list<var> shown: filter === "today" ? Tasks.sorted.filter(t => !t.done && Tasks.isToday(t)) : filter === "overdue" ? Tasks.sorted.filter(t => Tasks.isOverdue(t)) : Tasks.sorted
 
     function priorityColour(p: string): color {
@@ -58,9 +60,19 @@ ColumnLayout {
             anchors.verticalCenter: parent.verticalCenter
             anchors.leftMargin: Tokens.padding.large
 
-            text: "add_task"
-            color: input.activeFocus ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
+            text: root.watchMode ? "visibility" : "add_task"
+            color: root.watchMode || input.activeFocus ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
             fontStyle: Tokens.font.icon.builders.medium.scale(0.9).build()
+
+            MouseArea {
+                anchors.fill: parent
+                anchors.margins: -8
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    root.watchMode = !root.watchMode;
+                    input.forceActiveFocus();
+                }
+            }
         }
 
         TextInput {
@@ -79,7 +91,7 @@ ColumnLayout {
             clip: true
 
             onAccepted: {
-                Tasks.add(text);
+                root.watchMode ? Tasks.addWatch(text) : Tasks.add(text);
                 clear();
             }
 
@@ -93,7 +105,9 @@ ColumnLayout {
             StyledText {
                 anchors.verticalCenter: parent.verticalCenter
                 visible: !input.text
-                text: qsTr("Ajouter une tâche…   ! haute · !! urgente · demain")
+                width: parent.width
+                elide: Text.ElideRight
+                text: root.watchMode ? qsTr("Surveiller sur internet…   ex. iPhone 18 sous 900 € chaque jour") : qsTr("Ajouter une tâche…   ! haute · demain · surveille …   (œil : surveillance)")
                 color: Colours.palette.m3outline
                 font: input.font
             }
@@ -325,11 +339,48 @@ ColumnLayout {
                         }
                     }
 
+                    // Surveillance web : dernière vérification et résultat (clic : source ou vérifier maintenant)
+                    RowLayout {
+                        id: watchLine
+
+                        readonly property var st: Tasks.watchState[task.modelData.id] ?? {}
+                        readonly property bool found: task.modelData.found || st.status === "found"
+                        readonly property color colour: found ? Colours.palette.m3primary : st.status === "error" ? Colours.palette.m3error : Colours.palette.m3onSurfaceVariant
+
+                        Layout.fillWidth: true
+                        visible: task.modelData.watch
+                        spacing: 4
+
+                        MaterialIcon {
+                            Layout.alignment: Qt.AlignTop
+                            text: watchLine.found ? "check_circle" : watchLine.st.checking ? "travel_explore" : "visibility"
+                            color: watchLine.colour
+                            fill: watchLine.found ? 1 : 0
+                            fontStyle: Tokens.font.icon.builders.medium.scale(0.62).build()
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Tasks.watchLabel(task.modelData)
+                            color: watchLine.colour
+                            font: Tokens.font.label.small
+                            wrapMode: Text.Wrap
+                            maximumLineCount: watchLine.found ? 4 : 2
+                            elide: Text.ElideRight
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: watchLine.found && watchLine.st.url ? Qt.openUrlExternally(watchLine.st.url) : Tasks.checkNow(task.modelData.id)
+                            }
+                        }
+                    }
+
                     // Détails venus d'AuraTask : échéance, sous-tâches, catégorie
                     Row {
                         readonly property bool overdue: Tasks.isOverdue(task.modelData)
 
-                        visible: !task.done && (task.modelData.due > 0 || task.modelData.subTotal > 0 || task.modelData.category)
+                        visible: !task.done && !task.modelData.watch && (task.modelData.due > 0 || task.modelData.subTotal > 0 || task.modelData.category)
                         spacing: Tokens.spacing.medium
 
                         Meta {

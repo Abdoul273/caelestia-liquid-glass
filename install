@@ -309,7 +309,7 @@ install_files() {
     for unit in "$REPO_DIR"/config/systemd/user/*; do
         install_item "config/systemd/user/$(basename "$unit")" "$HOME/.config/systemd/user/$(basename "$unit")"
     done
-    ok "Services (bascule audio Bluetooth, verre de Nautilus)"
+    ok "Services (bascule audio Bluetooth, verre de Nautilus, surveillances web des tâches)"
 
     set_logout_command
 }
@@ -393,7 +393,7 @@ enable_services() {
     fi
     run "$HOME/.local/bin/caelestia-glass-gtk" >/dev/null
     run systemctl --user daemon-reload
-    run systemctl --user enable --now bt-audio-autoswitch.service caelestia-glass-gtk.path caelestia-login-sync.path
+    run systemctl --user enable --now bt-audio-autoswitch.service caelestia-glass-gtk.path caelestia-login-sync.path caelestia-watch.timer
     ok "Services activés"
 }
 

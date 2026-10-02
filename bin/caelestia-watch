@@ -1,0 +1,243 @@
+#!/usr/bin/env python3
+"""Tâches de surveillance d'AuraTask : vérifie sur internet si une condition est remplie.
+
+Une tâche AuraTask marquée du tag « surveillance » (créée depuis Super+Maj+T, mode 👁) est
+vérifiée toutes les N minutes (tag « chaque:N ») : recherche web (Google Actualités + DuckDuckGo,
+lecture des pages) puis Gemini juge si c'est arrivé.
+Quand la condition est remplie : notification, la tâche reçoit le tag « trouvé » et le résumé.
+
+  caelestia-watch            vérifie les surveillances dues (minuteur systemd, toutes les 5 min)
+  caelestia-watch now ID     vérifie tout de suite une tâche
+  caelestia-watch test "condition"   essai sans tâche
+État (dernière vérification, résultat) : ~/.local/state/caelestia/watches.json, lu par le shell.
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+import html
+import urllib.parse
+import urllib.error
+import urllib.request
+
+HOME = os.path.expanduser("~")
+STATE = f"{HOME}/.local/state/caelestia/watches.json"
+TASKS = f"{HOME}/.local/bin/auratask-tasks"
+# Clé Gemini : $GEMINI_API_KEY, sinon ~/.config/caelestia/gemini-api-key, sinon celle d'ANO-GPT
+KEY_FILE = f"{HOME}/.config/caelestia/gemini-api-key"
+KEYS = f"{HOME}/OUTILS/ANO-GPT/config/api_keys.json"
+# Gratuits avec la clé d'ANO-GPT ; le second sert de secours quand le premier est saturé
+MODELS = [os.environ.get("CAELESTIA_WATCH_MODEL", "gemini-3.8-flash"), "gemini-3.5-flash"]
+
+QUERIES = """Nous sommes le {date}. Pour vérifier sur le web la condition « {cond} »,
+donne 2 requêtes de recherche courtes et efficaces : une en anglais, une en français.
+Réponds UNIQUEMENT en JSON : {{"queries": ["...", "..."]}}"""
+
+JUDGE = """Nous sommes le {date}. Tu surveilles internet pour l'utilisateur.
+Condition à vérifier : « {cond} »
+
+Résultats de recherche récents (titre, date, lien, extrait) :
+{sources}
+
+D'après ces sources UNIQUEMENT, la condition est-elle remplie AUJOURD'HUI ?
+Une annonce de quelque chose « à venir », une rumeur ou une source non datée ne suffit pas : met = false.
+Réponds UNIQUEMENT avec un objet JSON, sans texte autour :
+{{"met": true/false, "confidence": "haute"|"moyenne"|"faible", "summary": "1 à 2 phrases en français sur la situation actuelle", "evidence": "courte citation exacte de la source qui le prouve", "url": "lien de cette source"}}"""
+
+UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/140 Safari/537.36"}
+
+
+def api_key():
+    if os.environ.get("GEMINI_API_KEY"):
+        return os.environ["GEMINI_API_KEY"]
+    if os.path.exists(KEY_FILE):
+        return open(KEY_FILE).read().strip()
+    if os.path.exists(KEYS):
+        return json.load(open(KEYS)).get("gemini_api_key", "")
+    raise RuntimeError(f"pas de clé Gemini : mets-la dans {KEY_FILE}")
+
+
+def gemini(prompt):
+    body = json.dumps({"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.1}}).encode()
+    err = None
+    for attempt in range(4):
+        model = MODELS[attempt % len(MODELS)]
+        req = urllib.request.Request(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+            data=body, headers={"Content-Type": "application/json", "x-goog-api-key": api_key()})
+        try:
+            with urllib.request.urlopen(req, timeout=120) as r:
+                data = json.load(r)
+            break
+        except urllib.error.HTTPError as e:  # saturé (503) ou quota par minute (429) : on réessaie
+            err = e
+            if e.code not in (429, 500, 503):
+                raise
+            time.sleep(5 * (attempt + 1))
+    else:
+        raise err
+    text = "".join(p.get("text", "") for p in data["candidates"][0]["content"]["parts"])
+    m = re.search(r"\{.*\}", text, re.S)
+    return json.loads(m.group(0)) if m else {}
+
+
+def get(url, limit=400_000):
+    req = urllib.request.Request(url, headers=UA)
+    with urllib.request.urlopen(req, timeout=20) as r:
+        return r.read(limit).decode("utf-8", "replace")
+
+
+def clean(h):
+    h = re.sub(r"<(script|style|noscript|svg|nav|footer|header)\b.*?</\1>", " ", h, flags=re.S | re.I)
+    return html.unescape(re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", h))).strip()
+
+
+def ddg(q):
+    page = get("https://html.duckduckgo.com/html/?q=" + urllib.parse.quote(q))
+    out = []
+    for m in re.finditer(r'class="result__a" href="([^"]+)"[^>]*>(.*?)</a>.*?class="result__snippet"[^>]*>(.*?)</a>', page, re.S):
+        url = urllib.parse.parse_qs(urllib.parse.urlparse(html.unescape(m.group(1))).query).get("uddg", [""])[0]
+        if url and "duckduckgo.com" not in url:
+            out.append({"title": clean(m.group(2)), "url": url, "date": "", "text": clean(m.group(3))})
+    return out[:5]
+
+
+def news(q):
+    rss = get(f"https://news.google.com/rss/search?q={urllib.parse.quote(q)}&hl=en-US&gl=US&ceid=US:en")
+    out = []
+    for item in re.findall(r"<item>(.*?)</item>", rss, re.S)[:5]:
+        f = lambda tag: html.unescape((re.search(rf"<{tag}>(.*?)</{tag}>", item, re.S) or [None, ""])[1])
+        out.append({"title": f("title"), "url": f("link"), "date": f("pubDate"), "text": clean(f("description"))[:200]})
+    return out
+
+
+def ask(cond, ctx=""):
+    date = time.strftime("%d/%m/%Y")
+    try:
+        queries = gemini(QUERIES.format(date=date, cond=cond)).get("queries") or [cond]
+    except Exception:
+        queries = [cond]
+    results, seen = [], set()
+    for q in queries[:2]:
+        for fn in (news, ddg):
+            try:
+                for r in fn(q):
+                    if r["url"] not in seen:
+                        seen.add(r["url"])
+                        results.append(r)
+            except Exception:
+                pass
+    if not results:
+        raise RuntimeError("aucun résultat de recherche (pas de connexion ?)")
+    # Lit les 3 premières pages web en entier : les extraits seuls sont souvent trop courts
+    pages = [r for r in results if "news.google.com" not in r["url"]][:3]
+    for r in pages:
+        try:
+            r["text"] = clean(get(r["url"]))[:3500]
+        except Exception:
+            pass
+    sources = "\n\n".join(f"[{i + 1}] {r['title']} — {r['date'] or 'date inconnue'}\n{r['url']}\n{r['text']}"
+                           for i, r in enumerate(results[:16]))
+    res = gemini(JUDGE.format(date=date, cond=cond, sources=sources)) or {"met": False, "summary": "réponse illisible"}
+    res["met"] = bool(res.get("met")) and res.get("confidence", "haute") == "haute" and bool(res.get("evidence"))
+    return res
+
+
+def load(path, default):
+    try:
+        return json.load(open(path))
+    except (OSError, ValueError):
+        return default
+
+
+def save_state(state):
+    os.makedirs(os.path.dirname(STATE), exist_ok=True)
+    tmp = STATE + ".tmp"
+    json.dump(state, open(tmp, "w"), ensure_ascii=False, indent=1)
+    os.replace(tmp, STATE)
+
+
+def every(task):
+    for t in task.get("tags", []):
+        if t.startswith("chaque:") and t[7:].isdigit():
+            return max(5, int(t[7:]))
+    return 60
+
+
+def notify(title, body):
+    subprocess.Popen(["notify-send", "-a", "Surveillance", "-u", "critical", "-i", "visibility", title, body])
+    sound = "/usr/share/sounds/freedesktop/stereo/complete.oga"
+    if os.path.exists(sound):
+        subprocess.Popen(["pw-play", sound])
+
+
+def mark_found(task, res):
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    task = dict(task)
+    task["tags"] = [t for t in task.get("tags", []) if t != "trouvé"] + ["trouvé"]
+    note = f"✅ Trouvé le {time.strftime('%d/%m/%Y à %H:%M')} : {res.get('summary', '')}"
+    if res.get("evidence"):
+        note += f"\n« {res['evidence']} »"
+    if res.get("url"):
+        note += f"\nSource : {res['url']}"
+    task["description"] = (task.get("description", "").rstrip() + "\n\n" + note).strip()
+    task["priority"] = "high"
+    task["updatedAt"] = now
+    subprocess.run([TASKS, "apply", json.dumps([{"type": "upsert", "task": task}])], capture_output=True)
+
+
+def check(task, state):
+    tid = task["id"]
+    entry = state.get(tid, {})
+    entry["checking"] = True
+    state[tid] = entry
+    save_state(state)
+    try:
+        res = ask(task["title"])
+        entry.update(status="found" if res["met"] else "waiting", summary=res.get("summary", ""),
+                     url=res.get("url", ""), error="")
+        if res["met"]:
+            notify(f"Surveillance : c'est arrivé ! 🎉", f"{task['title']}\n{res.get('summary', '')}")
+            mark_found(task, res)
+    except Exception as e:
+        entry.update(status="error", error=str(e)[:200])
+    entry["last"] = int(time.time() * 1000)
+    entry["checking"] = False
+    save_state(state)
+    return entry
+
+
+def watches():
+    out = subprocess.run([TASKS, "read"], capture_output=True, text=True).stdout
+    tasks = json.loads(out).get("tasks", []) if out.strip() else []
+    return [t for t in tasks if "surveillance" in t.get("tags", [])]
+
+
+def main():
+    args = sys.argv[1:]
+    if args[:1] == ["test"]:
+        print(json.dumps(ask(" ".join(args[1:])), ensure_ascii=False, indent=1))
+        return
+    state = load(STATE, {})
+    tasks = watches()
+    ids = {t["id"] for t in tasks}
+    for tid in [k for k in state if k not in ids]:  # tâches supprimées
+        del state[tid]
+    now = time.time() * 1000
+    for t in tasks:
+        e = state.get(t["id"], {})
+        if args[:1] == ["now"]:
+            due = t["id"] in args[1:]
+        else:
+            due = (not t.get("completed") and "trouvé" not in t.get("tags", [])
+                   and now - e.get("last", 0) >= every(t) * 60000 - 30000)
+        if due:
+            e = check(t, state)
+            print(f"{t['title']} → {e['status']} : {e.get('summary') or e.get('error')}")
+    save_state(state)
+
+
+if __name__ == "__main__":
+    main()

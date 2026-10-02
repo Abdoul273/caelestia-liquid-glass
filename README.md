@@ -141,7 +141,7 @@ Appuie sur **`Super + H`** : une ligne de recherche façon Spotlight tombe de l'
 | `Super + I` | Paramètres de Caelestia |
 | `Super + A` | Centre de contrôle |
 | `Super + Maj + N` | Notes rapides (synchronisées avec AetherNotes) |
-| `Super + Maj + T` | Tâches synchronisées avec AuraTask |
+| `Super + Maj + T` | Tâches synchronisées avec AuraTask ; l’œil (ou « surveille … ») crée une surveillance vérifiée sur internet (clé Gemini dans `~/.config/caelestia/gemini-api-key`) |
 | `Super + Maj + Q` | Quitter complètement l'app active (Super + Q ferme juste la fenêtre) |
 | `Super + Maj + F` | Concentration : active / arrête le dernier mode (Ne pas déranger, Travail, Sommeil) |
 | `Super + Retour arrière` | Éteindre / redémarrer / verrouiller |

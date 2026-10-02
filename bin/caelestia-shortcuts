@@ -63,7 +63,7 @@ SHORTCUTS = [
     ("Panneaux du shell", "󰕮", [
         ("Super + A", "Centre de contrôle : Wi-Fi, Bluetooth, VPN, son, écran, raccourcis rapides, session (le tableau de bord y est en bouton)"),
         ("Super + Maj + N", "Notes rapides, synchronisées avec AetherNotes"),
-        ("Super + Maj + T", "Tâches synchronisées avec AuraTask (! haute, !! urgente, demain)"),
+        ("Super + Maj + T", "Tâches AuraTask (! haute, !! urgente, demain) · œil ou « surveille … » : surveillance web"),
         ("Super + Maj + Q", "Quitter complètement l'app active (même en arrière-plan)"),
         ("Super + Maj + F", "Concentration : active / arrête le dernier mode"),
         ("Super + N | clic sur l'heure", "Centre de notifications dans la Dynamic Island (Tout effacer, Ne pas déranger)"),
