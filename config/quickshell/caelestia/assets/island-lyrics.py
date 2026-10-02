@@ -5,9 +5,11 @@ Usage : island-lyrics.py TITRE ARTISTE DUREE_S URL
 Sortie (stdout) : {"lines": [[secondes, "texte"], ...]} — liste vide si rien trouvé.
 
 Ordre de recherche :
-  1. cache de paroles d'Aura (morceau retrouvé dans sa base par chemin ou par titre) ;
-  2. fichier .lrc à côté du morceau ;
-  3. LRCLIB en ligne (résultat mis en cache, y compris « rien trouvé »).
+  1. Onde (morceau retrouvé dans sa base : cache de paroles, sinon son API locale qui
+     applique les mêmes variantes artiste/titre que l'app, sinon le .lrc) ;
+  2. cache de paroles d'Aura (morceau retrouvé dans sa base par chemin ou par titre) ;
+  3. fichier .lrc à côté du morceau ;
+  4. LRCLIB en ligne (résultat mis en cache, y compris « rien trouvé »).
 """
 
 import hashlib
@@ -23,6 +25,10 @@ from pathlib import Path
 HOME = Path.home()
 AURA_DB = HOME / ".local/share/com.abdoul273.aura/aura.db"
 AURA_LYRICS = HOME / ".cache/com.abdoul273.aura/lyrics"
+ONDE_DATA = Path(os.getenv("XDG_DATA_HOME", HOME / ".local/share")) / "onde"
+ONDE_DB = ONDE_DATA / "onde.db"
+ONDE_LYRICS = ONDE_DATA / "paroles"
+ONDE_API = f"http://127.0.0.1:{os.getenv('ONDE_PORT', '5070')}/api/paroles/"
 CACHE = HOME / ".cache/caelestia/island-lyrics"
 TAG = re.compile(r"\[(\d+):(\d+(?:[.:]\d+)?)\]")
 
@@ -89,6 +95,53 @@ def from_aura(title: str, artist: str, url: str) -> list | None:
     return None
 
 
+def from_onde(title: str, artist: str, duration: float, url: str) -> list | None:
+    """Paroles telles qu'Onde les affiche (même morceau, même source)."""
+    if not ONDE_DB.exists():
+        return None
+    try:
+        db = sqlite3.connect(f"file:{ONDE_DB}?mode=ro", uri=True, timeout=1)
+        rows = []
+        if url.startswith("file://"):
+            rows = db.execute("select id, chemin, artiste, duree from pistes where chemin = ?",
+                              (urllib.parse.unquote(url[7:]),)).fetchall()
+        if not rows:
+            rows = db.execute("select id, chemin, artiste, duree from pistes where titre = ?", (title,)).fetchall()
+        if not rows:
+            rows = db.execute("select id, chemin, artiste, duree from pistes where lower(titre) = lower(?)", (title,)).fetchall()
+        db.close()
+    except sqlite3.Error:
+        return None
+    if not rows:
+        return None
+    if artist:
+        rows = [r for r in rows if (r[2] or "").lower() == artist.lower()] or rows
+    if duration > 0:
+        rows.sort(key=lambda r: abs((r[3] or 0) - duration))
+    track_id, path = rows[0][:2]
+
+    cached = ONDE_LYRICS / f"{track_id}.json"
+    if cached.exists():
+        try:
+            synced = json.loads(cached.read_text()).get("synchro") or []
+            if synced:
+                return synced
+        except (OSError, ValueError):
+            pass
+    lrc = Path(path).with_suffix(".lrc")
+    if lrc.exists():
+        lines = parse_lrc(lrc.read_text(errors="ignore"))
+        if lines:
+            return lines
+    # pas encore en cache : on demande à Onde (s'il tourne), qui cherche et met en cache
+    try:
+        with urllib.request.urlopen(ONDE_API + str(track_id), timeout=12) as r:
+            synced = json.loads(r.read()).get("synchro") or []
+            return synced or []
+    except Exception:
+        return None
+
+
 def fetch(url: str):
     req = urllib.request.Request(url, headers={"User-Agent": "caelestia-island (github.com/Abdoul273/caelestia-liquid-glass)"})
     with urllib.request.urlopen(req, timeout=6) as r:
@@ -125,6 +178,11 @@ def main() -> None:
         duration = 0
     if not title:
         print('{"lines": []}')
+        return
+
+    lines = from_onde(title, artist, duration, url)
+    if lines is not None:  # morceau d'Onde : on affiche exactement ce qu'il affiche
+        print(json.dumps({"lines": lines}, ensure_ascii=False))
         return
 
     lines = from_aura(title, artist, url)
