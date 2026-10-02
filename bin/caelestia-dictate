@@ -1,0 +1,329 @@
+#!/usr/bin/env python3
+"""Dictée façon macOS pour Caelestia (Super + Maj + D).
+
+    caelestia-dictate                session pilotée par le shell (JSON lignes)
+    caelestia-dictate --file a.wav   test : transcrit un fichier comme s'il venait du micro
+
+Le shell lance une session à l'ouverture de la goutte. Sur la sortie standard :
+    {"stage":"state","state":"connexion|ecoute|parole|fin|erreur","detail":…}
+    {"stage":"level","v":0..1}
+    {"stage":"text","text":…}        texte confirmé + hypothèse en cours
+    {"stage":"done","text":…}        texte final (le shell ferme la goutte)
+Sur l'entrée standard : {"stop":true} (insérer) ou {"cancel":true}.
+
+À la fin, la fenêtre qui avait le focus à l'ouverture est refocalisée et le
+texte y est tapé (wtype ; repli wl-copy + Ctrl+V). Reconnaissance :
+gemini-3.5-transcribe-live comme ANO-GPT / Tartil (clé d'ANO-GPT).
+"""
+
+import asyncio
+import audioop
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+import wave
+from pathlib import Path
+
+HOME = Path.home()
+CONFIG = HOME / ".config/caelestia-dictate/config.json"
+DEFAULTS = {
+    "model": "models/gemini-3.5-transcribe-live",
+    "language": "fr-FR",
+    # VERBATIM = mots prononcés tels quels ; SMART = ponctuation/forme écrite
+    "mode": "SMART",
+    # "type" (wtype) ou "paste" (presse-papiers + Ctrl+V)
+    "insert": "type",
+    "api_key": "",
+}
+RATE = 16000
+CHUNK_MS = 100
+CHUNK = RATE * 2 * CHUNK_MS // 1000
+END_SILENCE_MS = 1300
+MAX_TURN_MS = 22_000
+PREROLL = 5
+
+
+def load_config() -> dict:
+    cfg = dict(DEFAULTS)
+    try:
+        cfg.update(json.loads(CONFIG.read_text()))
+    except (OSError, ValueError):
+        pass
+    if not cfg["api_key"]:
+        cfg["api_key"] = os.environ.get("GEMINI_API_KEY", "")
+    if not cfg["api_key"]:
+        try:
+            keys = json.loads((HOME / "OUTILS/ANO-GPT/config/api_keys.json").read_text())
+            cfg["api_key"] = keys.get("gemini_api_key") or keys.get("gemini_live_api_key") or ""
+        except (OSError, ValueError):
+            pass
+    return cfg
+
+
+def emit(**msg) -> None:
+    sys.stdout.write(json.dumps(msg, ensure_ascii=False) + "\n")
+    sys.stdout.flush()
+
+
+def active_window() -> str:
+    try:
+        out = subprocess.run(["hyprctl", "activewindow", "-j"], capture_output=True, text=True, timeout=2)
+        return json.loads(out.stdout).get("address", "") or ""
+    except Exception:
+        return ""
+
+
+def tidy(text: str) -> str:
+    text = " ".join(text.split())
+    # Typographie française : espace fine insécable avant ? ! : ;
+    text = re.sub(r"\s+([,.])", r"\1", text)
+    text = re.sub(r"\s*([?!:;])", "\u202f\\1", text)
+    return text.strip()
+
+
+def insert(text: str, window: str, how: str) -> None:
+    time.sleep(0.25)  # la goutte rend le clavier
+    if window:
+        subprocess.run(["hyprctl", "dispatch", "focuswindow", f"address:{window}"],
+                       capture_output=True, timeout=2)
+        time.sleep(0.12)
+    if how == "type":
+        if subprocess.run(["wtype", "-d", "4", "--", text], capture_output=True).returncode == 0:
+            return
+    subprocess.run(["wl-copy", "--", text])
+    time.sleep(0.1)
+    subprocess.run(["ydotool", "key", "29:1", "47:1", "47:0", "29:0"], capture_output=True)
+
+
+class Dictation:
+    def __init__(self, cfg: dict):
+        self.cfg = cfg
+        self.confirmed = ""
+        self.interim = ""
+        self.in_turn = False
+        self.turn_done = asyncio.Event()
+        self.turn_done.set()
+        self.stopping = False
+        self.session = None
+
+    def text(self) -> str:
+        return tidy(" ".join(filter(None, [self.confirmed, self.interim])))
+
+    async def read(self):
+        while True:
+            async for msg in self.session.receive():
+                sc = msg.server_content
+                interim = getattr(getattr(sc, "interim_input_transcription", None), "text", "") or ""
+                if interim.strip():
+                    self.interim = interim.strip()
+                    emit(stage="text", text=self.text())
+                done = getattr(getattr(sc, "input_transcription", None), "text", "") or ""
+                if done.strip():
+                    self.confirmed = " ".join(filter(None, [self.confirmed, done.strip()]))
+                    self.interim = ""
+                    emit(stage="text", text=self.text())
+                act = getattr(msg, "voice_activity", None)
+                ended = getattr(act, "voice_activity_type", None) == "ACTIVITY_END"
+                if (sc and sc.turn_complete) or ended:
+                    # Hypothèse jamais confirmée : on la garde
+                    if self.interim:
+                        self.confirmed = " ".join(filter(None, [self.confirmed, self.interim]))
+                        self.interim = ""
+                    self.turn_done.set()
+            await asyncio.sleep(0)
+
+    async def send(self, pcm: bytes):
+        from google.genai import types
+        await self.session.send_realtime_input(audio=types.Blob(data=pcm, mime_type=f"audio/pcm;rate={RATE}"))
+
+    async def start_turn(self, preroll):
+        from google.genai import types
+        await self.turn_done.wait()  # pas de chevauchement de tours (pas d'id côté protocole)
+        self.turn_done.clear()
+        self.in_turn = True
+        await self.session.send_realtime_input(activity_start=types.ActivityStart())
+        for p in preroll:
+            await self.send(p)
+        emit(stage="state", state="parole")
+
+    async def end_turn(self):
+        from google.genai import types
+        self.in_turn = False
+        await self.session.send_realtime_input(activity_end=types.ActivityEnd())
+        if not self.stopping:
+            emit(stage="state", state="ecoute")
+
+    async def run(self, chunks, commands) -> str | None:
+        from google import genai
+        from google.genai import types
+
+        cfg = self.cfg
+        if not cfg["api_key"]:
+            emit(stage="state", state="erreur", detail="Clé Gemini introuvable")
+            return None
+        config = types.LiveConnectConfig(
+            response_modalities=["TEXT"],
+            input_audio_transcription=types.AudioTranscriptionConfig(
+                language_codes=[cfg["language"]], mode=cfg["mode"]),
+            realtime_input_config=types.RealtimeInputConfig(
+                automatic_activity_detection=types.AutomaticActivityDetection(disabled=True)),
+        )
+        client = genai.Client(api_key=cfg["api_key"], http_options={"api_version": "v1beta"})
+        emit(stage="state", state="connexion")
+        audio_q: asyncio.Queue = asyncio.Queue()
+        early: list[bytes] = []  # parole avant la fin de la connexion : rien n'est perdu
+
+        async def pump():
+            async for c in chunks:
+                await audio_q.put(c)
+            await audio_q.put(None)
+
+        pump_task = asyncio.create_task(pump())
+        cancelled = False
+        try:
+            async with client.aio.live.connect(model=cfg["model"], config=config) as session:
+                self.session = session
+                reader = asyncio.create_task(self.read())
+                emit(stage="state", state="ecoute")
+                noise, loud_run, silence, turn_ms = 0.004, 0, 0, 0
+                preroll: list[bytes] = []
+                while not audio_q.empty() and len(early) < 300:
+                    early.append(audio_q.get_nowait())
+                backlog = list(early)
+                while True:
+                    if commands.done():
+                        break
+                    if backlog:
+                        pcm = backlog.pop(0)
+                    else:
+                        get = asyncio.create_task(audio_q.get())
+                        await asyncio.wait({get, commands}, return_when=asyncio.FIRST_COMPLETED)
+                        if not get.done():
+                            get.cancel()
+                            break
+                        pcm = get.result()
+                    if pcm is None:
+                        break
+                    rms = audioop.rms(pcm, 2) / 32768
+                    emit(stage="level", v=round(min(1.0, rms * 12), 3))
+                    loud = rms > max(0.008, noise * 2.5)
+                    if not self.in_turn:
+                        if not loud:
+                            noise = noise * 0.95 + rms * 0.05
+                        preroll = (preroll + [pcm])[-PREROLL:]
+                        loud_run = loud_run + 1 if loud else 0
+                        if loud_run >= 2:
+                            await self.start_turn(preroll)
+                            preroll, silence, turn_ms = [], 0, 0
+                        continue
+                    await self.send(pcm)
+                    turn_ms += CHUNK_MS
+                    silence = 0 if loud else silence + CHUNK_MS
+                    if silence >= END_SILENCE_MS or turn_ms >= MAX_TURN_MS:
+                        await self.end_turn()
+                        loud_run = 0
+                cmd = commands.result() if commands.done() else "stop"
+                cancelled = cmd == "cancel"
+                self.stopping = True
+                if not cancelled:
+                    emit(stage="state", state="fin")
+                    if self.in_turn:
+                        await self.end_turn()
+                    try:
+                        await asyncio.wait_for(self.turn_done.wait(), 4)
+                    except asyncio.TimeoutError:
+                        pass
+                reader.cancel()
+        except Exception as exc:  # réseau, clé, modèle…
+            emit(stage="state", state="erreur", detail=str(exc)[:160])
+            if not self.text():
+                return None
+        finally:
+            pump_task.cancel()
+            try:
+                await client.aio.aclose()
+            except Exception:
+                pass
+        return None if cancelled else self.text()
+
+
+async def mic_chunks(proc):
+    while True:
+        data = await proc.stdout.readexactly(CHUNK) if proc.stdout else b""
+        if not data:
+            return
+        yield data
+
+
+async def file_chunks(path: str):
+    with wave.open(path) as w:
+        pcm = w.readframes(w.getnframes())
+        if w.getframerate() != RATE or w.getnchannels() != 1:
+            pcm, _ = audioop.ratecv(audioop.tomono(pcm, 2, 0.5, 0.5) if w.getnchannels() == 2 else pcm,
+                                    2, 1, w.getframerate(), RATE, None)
+    pcm += b"\0" * (RATE * 2 * 2)  # 2 s de silence pour clore la phrase
+    for i in range(0, len(pcm) - CHUNK + 1, CHUNK):
+        yield pcm[i:i + CHUNK]
+        await asyncio.sleep(CHUNK_MS / 1000)
+
+
+async def stdin_commands() -> str:
+    loop = asyncio.get_running_loop()
+    reader = asyncio.StreamReader()
+    await loop.connect_read_pipe(lambda: asyncio.StreamReaderProtocol(reader), sys.stdin)
+    while True:
+        line = await reader.readline()
+        if not line:
+            return "stop"  # le shell a fermé le tube : on insère
+        try:
+            msg = json.loads(line)
+        except ValueError:
+            continue
+        if msg.get("cancel"):
+            return "cancel"
+        if msg.get("stop"):
+            return "stop"
+
+
+async def main() -> int:
+    cfg = load_config()
+    dict_ = Dictation(cfg)
+    if len(sys.argv) > 2 and sys.argv[1] == "--file":
+        never = asyncio.get_running_loop().create_future()
+        text = await dict_.run(file_chunks(sys.argv[2]), never)
+        print("RÉSULTAT :", text)
+        return 0
+
+    window = active_window()
+    rec = await asyncio.create_subprocess_exec(
+        "pw-record", "--rate", str(RATE), "--channels", "1", "--format", "s16",
+        "--latency", f"{CHUNK_MS}ms", "--media-role", "Communication", "-",
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+
+    async def chunks():
+        try:
+            async for c in mic_chunks(rec):
+                yield c
+        except asyncio.IncompleteReadError:
+            return
+
+    commands = asyncio.create_task(stdin_commands())
+    try:
+        text = await dict_.run(chunks(), commands)
+    finally:
+        if rec.returncode is None:
+            rec.terminate()
+    emit(stage="done", text=text or "")
+    if text:
+        insert(text, window, cfg["insert"])
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(asyncio.run(main()))
+    except KeyboardInterrupt:
+        sys.exit(130)

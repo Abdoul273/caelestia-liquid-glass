@@ -198,6 +198,7 @@ rebind("SUPER + Period", hl.dsp.global("caelestia:emoji")) -- Emojis dans le ver
 rebind("SUPER + P", hl.dsp.global("caelestia:display")) -- Projection dans le verre du shell
 rebind("SUPER + Space", hl.dsp.global("caelestia:spotlight")) -- Spotlight dans le verre du shell
 rebind("SUPER + O", hl.dsp.global("caelestia:calculator")) -- Calculatrice dans le verre du shell
+rebind("SUPER + SHIFT + D", hl.dsp.global("caelestia:dictation")) -- Dictée façon macOS : texte tapé dans le champ actif
 -- Terminal kitty déroulant (Super + `) : réglages dans ~/.config/kitty/quick-access-terminal.conf
 hl.layer_rule({ match = { namespace = "kitty-quick-access" }, blur = true, ignore_alpha = 0, animation = "slide top" })
 rebind("SUPER + grave", hl.dsp.exec_cmd("kitten quick-access-terminal"))

@@ -73,6 +73,11 @@ Region {
     }
 
     R {
+        panel: root.panels.dictation
+        width: root.panels.dictation.visible ? panel.width : 0
+    }
+
+    R {
         panel: root.panels.calculator
         width: root.panels.calculator.visible ? panel.width : 0
     }

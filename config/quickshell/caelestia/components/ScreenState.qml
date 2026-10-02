@@ -17,6 +17,7 @@ PersistentProperties {
     property bool controlCenter
     property bool spotlight
     property bool calculator
+    property bool dictation
     property bool display
     property bool annotate
     property string annotatePath

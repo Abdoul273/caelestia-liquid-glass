@@ -72,7 +72,7 @@ StyledWindow {
     name: "drawers"
     WlrLayershell.exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: (fsTransitionProg > 0 && contentItem.Config.general.showOverFullscreen) || (hasSpecialWorkspace && hasFullscreenOnNormalWs) ? WlrLayer.Overlay : WlrLayer.Top
-    WlrLayershell.keyboardFocus: screenState.launcher || screenState.session || screenState.notesActive || screenState.controlCenter || screenState.spotlight || screenState.calculator || screenState.display || screenState.clipboard || screenState.emoji || screenState.keyhelp || screenState.clock || screenState.settings || screenState.annotate ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: screenState.launcher || screenState.session || screenState.notesActive || screenState.controlCenter || screenState.spotlight || screenState.calculator || screenState.dictation || screenState.display || screenState.clipboard || screenState.emoji || screenState.keyhelp || screenState.clock || screenState.settings || screenState.annotate ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
     mask: hasFullscreen ? emptyRegion : regions
 
@@ -119,7 +119,7 @@ StyledWindow {
         active: {
             const s = root.screenState;
             const conf = root.contentItem.Config;
-            if ((s.launcher && conf.launcher.enabled) || (s.session && conf.session.enabled) || (s.sidebar && conf.sidebar.enabled) || s.controlCenter || s.spotlight || s.calculator || s.display || s.clipboard || s.emoji || s.keyhelp || s.clock || s.settings || s.annotate)
+            if ((s.launcher && conf.launcher.enabled) || (s.session && conf.session.enabled) || (s.sidebar && conf.sidebar.enabled) || s.controlCenter || s.spotlight || s.calculator || s.dictation || s.display || s.clipboard || s.emoji || s.keyhelp || s.clock || s.settings || s.annotate)
                 return true;
             if (!conf.dashboard.showOnHover && s.dashboard && conf.dashboard.enabled)
                 return true;
@@ -136,6 +136,7 @@ StyledWindow {
             root.screenState.controlCenter = false;
             root.screenState.spotlight = false;
             root.screenState.calculator = false;
+            root.screenState.dictation = false;
             root.screenState.display = false;
             root.screenState.annotate = false;
             root.screenState.settings = false;
@@ -285,6 +286,22 @@ StyledWindow {
             implicitWidth: cp.curW
             y: cp.visible ? cp.curTop + root.borderThickness : -400
             implicitHeight: cp.visible ? Math.max(0, cp.curBottom - cp.curTop) : 0
+        }
+
+        // Dictée : même goutte
+        PanelBg {
+            id: dictationBg
+
+            readonly property var dp: panels.dictation
+
+            panel: panels.dictation
+            deformAmount: 0.1
+            visible: dp.visible
+            radius: dp.curR
+            x: dp.curX + bar.implicitWidth
+            implicitWidth: dp.curW
+            y: dp.visible ? dp.curTop + root.borderThickness : -400
+            implicitHeight: dp.visible ? Math.max(0, dp.curBottom - dp.curTop) : 0
         }
 
         // Projection : même goutte
@@ -697,6 +714,9 @@ StyledWindow {
             }
             display.transform: Matrix4x4 {
                 matrix: displayBg.deformMatrix
+            }
+            dictation.transform: Matrix4x4 {
+                matrix: dictationBg.deformMatrix
             }
             calculator.transform: Matrix4x4 {
                 matrix: calcBg.deformMatrix

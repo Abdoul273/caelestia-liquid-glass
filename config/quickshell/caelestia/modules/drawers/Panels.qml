@@ -43,6 +43,7 @@ Item {
     readonly property alias dock: dock
     readonly property alias spotlight: spotlight
     readonly property alias calculator: calculator
+    readonly property alias dictation: dictation
     readonly property alias display: display
     readonly property alias annotate: annotate
     readonly property alias settings: settings
@@ -176,6 +177,18 @@ Item {
     // Calculatrice : une ligne comme Spotlight, à la même place
     SpotlightModule.Calculator {
         id: calculator
+
+        screen: root.screen
+        screenState: root.screenState
+        island: island
+
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: Math.round(parent.height * 0.2)
+    }
+
+    // Dictée (Super + Maj + D) : même goutte, le texte dicté s'affiche en direct
+    SpotlightModule.Dictation {
+        id: dictation
 
         screen: root.screen
         screenState: root.screenState

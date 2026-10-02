@@ -24,7 +24,7 @@ Scope {
     }
 
     // Gouttes de verre de l'île (Spotlight, calculatrice, projection, presse-papiers…) : une seule à la fois
-    readonly property var drops: ["spotlight", "calculator", "display", "clipboard", "emoji", "keyhelp", "clock", "settings", "annotate"]
+    readonly property var drops: ["spotlight", "calculator", "display", "clipboard", "emoji", "keyhelp", "clock", "settings", "annotate", "dictation"]
     function toggleDrop(kind: string): void {
         if (hasFullscreen)
             return;
@@ -156,6 +156,14 @@ Scope {
         name: "calculator"
         description: qsTr("Ouvrir/Fermer la calculatrice")
         onPressed: root.toggleDrop("calculator")
+    }
+
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
+        name: "dictation"
+        description: qsTr("Dictée : parler, puis le texte est tapé dans le champ actif")
+        onPressed: root.toggleDrop("dictation")
     }
 
     // qmllint disable unresolved-type
