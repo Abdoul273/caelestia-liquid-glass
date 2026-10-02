@@ -13,7 +13,7 @@ Micro coupé par défaut, comme « Écrire à Siri » : on écrit, ou on active 
 pour UNE demande ({"mic":true}) ; il se recoupe après la réponse.
 Option "micro_par_defaut": true dans config.json pour l'ancien comportement.
 
-Entrée : {"open":true} {"close":true} {"interrupt":true} {"text":"…"} {"mic":true|false|"toggle"}
+Entrée : {"open":true} {"close":true} {"interrupt":true} {"reset":true} {"text":"…"} {"mic":true|false|"toggle"}
 Sortie : {"stage":"state","state":"connexion|ecoute|reflexion|parle|outil|erreur","detail"}
          {"stage":"level","v",who:"mic|voice"} {"stage":"user","text"} {"stage":"reply","text"}
          {"stage":"tool","label"} {"stage":"mic","on"} {"stage":"idle"} (le shell ferme)
@@ -698,6 +698,12 @@ async def serve():
             asst.close()
         elif msg.get("interrupt"):
             asst.interrupt()
+        elif msg.get("reset"):  # nouvelle conversation : Gemini repart de zéro
+            asst.handle = None
+            if asst.task and not asst.task.done():
+                asst.close()
+                await asyncio.sleep(0.2)
+                asst.open()
         elif msg.get("text"):
             await asst.text(msg["text"])
         elif "mic" in msg:
