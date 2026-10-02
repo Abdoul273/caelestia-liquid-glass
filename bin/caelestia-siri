@@ -124,6 +124,34 @@ def t_now() -> dict:
     return {"maintenant": now.strftime("%A %d %B %Y, %H:%M")}
 
 
+def t_location() -> dict:
+    """Position la plus précise connue : GPS du téléphone (ANO-Remote) → dernier GPS → IP."""
+    sys.path.insert(0, str(ANO))
+    from core.geolocation import get_last_known_gps, get_user_location
+    gps = get_last_known_gps()
+    if gps:
+        lat, lon = gps["lat"], gps["lon"]
+        out = {"source": "GPS du téléphone (ANO-Remote)", "lat": lat, "lon": lon,
+               "precision_m": gps.get("accuracy_m"), "carte": f"https://www.openstreetmap.org/?mlat={lat}&mlon={lon}#map=17/{lat}/{lon}"}
+        age = gps["age_s"]
+        if age > 20 * 60:
+            out["attention"] = (f"relevé vieux de {age / 3600:.0f} h" if age < 172800 else f"relevé vieux de {age / 86400:.0f} jours") + \
+                " : ouvrir ANO-Remote sur le téléphone avec ANO-GPT lancé pour une position à jour"
+        try:
+            import urllib.request
+            req = urllib.request.Request(
+                f"https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&accept-language=fr&lat={lat}&lon={lon}",
+                headers={"User-Agent": "caelestia-siri"})
+            with urllib.request.urlopen(req, timeout=8) as r:
+                out["adresse"] = json.load(r).get("display_name", "")
+        except Exception:
+            pass
+        return out
+    loc = get_user_location(force_refresh=True)
+    return {"source": loc.get("source", "ip"), "ville": loc.get("city"), "pays": loc.get("country_name"),
+            "info": "pas de GPS : position approximative"}
+
+
 def t_screen(question: str) -> dict:
     from google import genai
     from google.genai import types
@@ -293,6 +321,8 @@ TOOLS = {
     "minuteur": (t_timer, "Lance un minuteur dans l'île. duree au format « 5m », « 1h30m », « 45s ».",
                  {"duree": "string", "libelle": "string?"}, "Minuteur {duree}"),
     "ne_pas_deranger": (t_dnd, "Active ou désactive le mode Ne pas déranger.", {"actif": "boolean"}, "Ne pas déranger"),
+    "ma_position": (t_location, "Position précise de l'utilisateur (GPS du téléphone, adresse, quartier, lien de carte). À utiliser pour « où suis-je », « ma position », « où exactement ». Si le relevé est ancien, dis-le.",
+                    {}, "Localisation…"),
     "date_heure": (t_now, "Date et heure actuelles.", {}, "Heure"),
     "regarder_ecran": (t_screen, "Regarde l'écran de l'utilisateur et répond à une question sur ce qui s'y trouve (lire un texte, une erreur, expliquer, résumer).",
                        {"question": "string"}, "Je regarde l'écran…"),
@@ -340,7 +370,7 @@ def declarations(blocking: bool) -> list:
 
 def system_prompt() -> str:
     now = dt.datetime.now().strftime("%A %d %B %Y, %H:%M")
-    city = f" L'utilisateur est à {CFG['city']}." if CFG["city"] else ""
+    city = f" Ville par défaut de l'utilisateur : {CFG['city']} (approximatif)." if CFG["city"] else ""
     return (
         f"Tu es {CFG['name']}, l'assistant vocal intégré au bureau Linux de l'utilisateur (Caelestia, Hyprland), "
         "comme Siri sur un Mac. Tu parles français naturellement, avec chaleur, et tu vas droit au but : "
@@ -357,6 +387,8 @@ def system_prompt() -> str:
         "Pour les fenêtres et bureaux (focus, plein écran, déplacer, aller au bureau N), utilise shell_exec "
         "ou hypr_orchestrator. Quand on te demande ce qu'il y a "
         "à l'écran, d'expliquer une erreur visible ou de lire quelque chose, utilise regarder_ecran. "
+        "Pour toute question sur la position de l'utilisateur (où suis-je, où exactement, mon quartier), "
+        "appelle ma_position au lieu de te fier à la ville par défaut. "
         "Confirme en quelques mots après avoir agi. Pour une information récente (actualité, météo, prix, sport), "
         "utilise web_search au lieu de deviner. Quand l'utilisateur demande d'écrire ou de rédiger quelque "
         "chose dans son champ, utilise ecrire_texte avec le texte final. Si l'utilisateur dit au revoir ou "
