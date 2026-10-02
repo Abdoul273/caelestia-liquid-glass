@@ -73,6 +73,16 @@ Region {
     }
 
     R {
+        panel: root.panels.writing
+        width: root.panels.writing.visible ? panel.width : 0
+    }
+
+    R {
+        panel: root.panels.translate
+        width: root.panels.translate.visible ? panel.width : 0
+    }
+
+    R {
         panel: root.panels.dictation
         width: root.panels.dictation.visible ? panel.width : 0
     }

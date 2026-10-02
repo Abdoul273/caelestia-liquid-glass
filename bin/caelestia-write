@@ -1,0 +1,222 @@
+#!/usr/bin/env python3
+"""Outils d'écriture et traduction façon macOS pour Caelestia.
+
+    caelestia-write serve      serveur JSON lignes pour le shell
+    caelestia-write test …     essai en terminal : test <action|traduire:LANGUE> "texte"
+
+Requêtes (une par ligne) :
+    {"selection":true}                       → {"stage":"selection","text","window"}
+    {"seq","op":"rewrite","action","text","instruction"?}
+    {"seq","op":"translate","text","target"} → {"stage":"chunk","seq","text","source"?} … {"stage":"end","seq"}
+    {"insert":texte,"window":adresse}        → refocalise la fenêtre et tape le texte
+    {"copy":texte}
+Gemini (clé d'ANO-GPT, ou ~/.config/caelestia-write/config.json, ou GEMINI_API_KEY).
+"""
+
+import json
+import os
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
+
+HOME = Path.home()
+CONFIG = HOME / ".config/caelestia-write/config.json"
+DEFAULTS = {
+    # Modèles « lite » : ~1 s (les flash complets mettent 6 à 17 s)
+    "models": ["models/gemini-3.5-flash-lite", "models/gemini-3.1-flash-lite", "models/gemini-flash-lite-latest"],
+    "insert": "type",  # "type" (wtype) ou "paste" (presse-papiers + Ctrl+V)
+    "api_key": "",
+}
+
+ACTIONS = {
+    "corriger": "Corrige uniquement l'orthographe, la grammaire, la conjugaison et la ponctuation. Ne change ni le sens, ni le ton, ni le style, ni la langue.",
+    "reformuler": "Reformule le texte pour qu'il soit plus clair et plus fluide, en gardant le sens, le ton et la langue.",
+    "pro": "Réécris le texte sur un ton professionnel et courtois, adapté à un contexte de travail, dans la même langue.",
+    "amical": "Réécris le texte sur un ton chaleureux et amical, naturel, dans la même langue.",
+    "concis": "Rends le texte nettement plus court et direct en gardant toutes les informations importantes, dans la même langue.",
+    "resumer": "Résume le texte en quelques phrases, dans la même langue.",
+    "points": "Transforme le texte en liste à puces claire (une idée par puce, tiret « - »), dans la même langue.",
+    "libre": "Applique au texte la modification demandée par l'utilisateur.",
+}
+RULES = (
+    "Tu es un outil d'écriture intégré au système. Réponds UNIQUEMENT avec le texte final, "
+    "sans introduction, sans guillemets autour, sans commentaire ni explication, sans Markdown "
+    "(sauf les tirets d'une liste demandée). Garde les retours à la ligne utiles. "
+    "Typographie française si le texte est en français."
+)
+
+
+def load_config() -> dict:
+    cfg = dict(DEFAULTS)
+    try:
+        cfg.update(json.loads(CONFIG.read_text()))
+    except (OSError, ValueError):
+        pass
+    cfg["api_key"] = cfg["api_key"] or os.environ.get("GEMINI_API_KEY", "")
+    if not cfg["api_key"]:
+        try:
+            keys = json.loads((HOME / "OUTILS/ANO-GPT/config/api_keys.json").read_text())
+            cfg["api_key"] = keys.get("gemini_api_key") or ""
+        except (OSError, ValueError):
+            pass
+    return cfg
+
+
+CFG = load_config()
+_client = None
+_lock = threading.Lock()
+_out = threading.Lock()
+
+
+def emit(**msg) -> None:
+    with _out:
+        sys.stdout.write(json.dumps(msg, ensure_ascii=False) + "\n")
+        sys.stdout.flush()
+
+
+def client():
+    global _client
+    with _lock:
+        if _client is None:
+            from google import genai
+            _client = genai.Client(api_key=CFG["api_key"])
+    return _client
+
+
+def prompt_for(req: dict) -> str:
+    text = req.get("text", "")
+    if req.get("op") == "translate":
+        target = req.get("target") or "auto"
+        if target == "auto":
+            goal = ("Si le texte est en français, traduis-le en anglais ; sinon traduis-le en français.")
+        else:
+            goal = f"Traduis le texte en {target}."
+        return (f"{goal} Traduction naturelle et idiomatique, même ton, même mise en forme. "
+                "Première ligne : uniquement le nom en français de la langue source (ex. « Anglais »), "
+                "puis une ligne vide, puis la traduction seule.\n\nTexte :\n" + text)
+    action = req.get("action", "corriger")
+    task = ACTIONS.get(action, ACTIONS["corriger"])
+    if action == "traduire":
+        task = f"Traduis le texte en {req.get('target') or 'anglais'}, naturellement, même ton."
+    extra = req.get("instruction", "").strip()
+    if extra:
+        task += f"\nDemande de l'utilisateur : {extra}"
+    return f"{task}\n\nTexte :\n{text}"
+
+
+def generate(req: dict, seq: int) -> None:
+    from google.genai import types
+    if not CFG["api_key"]:
+        emit(stage="error", seq=seq, text="Clé Gemini introuvable")
+        return
+    config = types.GenerateContentConfig(
+        system_instruction=RULES, temperature=0.3,
+        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True))
+    last = ""
+    for model in CFG["models"]:
+        try:
+            acc = ""
+            for part in client().models.generate_content_stream(
+                    model=model, contents=prompt_for(req), config=config):
+                if seq != current_seq:
+                    return  # requête remplacée par une plus récente
+                acc += part.text or ""
+                emit(**shape(req, seq, acc))
+            emit(stage="end", seq=seq, **{k: v for k, v in shape(req, seq, acc).items() if k in ("text", "source")})
+            return
+        except Exception as exc:  # modèle indisponible, réseau…
+            last = str(exc)
+    emit(stage="error", seq=seq, text=last[:200] or "Gemini indisponible")
+
+
+def shape(req: dict, seq: int, acc: str) -> dict:
+    if req.get("op") != "translate":
+        return {"stage": "chunk", "seq": seq, "text": acc.strip()}
+    head, sep, body = acc.partition("\n")
+    if not sep:
+        return {"stage": "chunk", "seq": seq, "text": "", "source": head.strip(" «»\"*")}
+    return {"stage": "chunk", "seq": seq, "text": body.strip(), "source": head.strip(" «»\"*")}
+
+
+def selection() -> dict:
+    window = ""
+    try:
+        out = subprocess.run(["hyprctl", "activewindow", "-j"], capture_output=True, text=True, timeout=2)
+        window = json.loads(out.stdout).get("address", "") or ""
+    except Exception:
+        pass
+    text = ""
+    try:
+        out = subprocess.run(["wl-paste", "--primary", "--no-newline", "--type", "text/plain"],
+                             capture_output=True, text=True, timeout=1.5)
+        text = out.stdout if out.returncode == 0 else ""
+    except Exception:
+        pass
+    return {"stage": "selection", "text": text[:20000], "window": window}
+
+
+def insert(text: str, window: str) -> None:
+    time.sleep(0.25)  # la goutte rend le clavier
+    if window:
+        subprocess.run(["hyprctl", "dispatch", "focuswindow", f"address:{window}"],
+                       capture_output=True, timeout=2)
+        time.sleep(0.12)
+    if CFG["insert"] == "type" and "\n" not in text:
+        if subprocess.run(["wtype", "-d", "3", "--", text], capture_output=True).returncode == 0:
+            return
+    # Plusieurs lignes : coller (Entrée tapée enverrait le message dans une messagerie)
+    subprocess.run(["wl-copy", "--", text])
+    time.sleep(0.1)
+    subprocess.run(["ydotool", "key", "29:1", "47:1", "47:0", "29:0"], capture_output=True)
+
+
+current_seq = -1
+
+
+def serve() -> None:
+    global current_seq
+    # Client prêt avant la première demande (l'import de google.genai prend ~1 s)
+    threading.Thread(target=lambda: CFG["api_key"] and client(), daemon=True).start()
+    for line in sys.stdin:
+        try:
+            req = json.loads(line)
+        except ValueError:
+            continue
+        if req.get("selection"):
+            emit(**selection())
+        elif "insert" in req:
+            threading.Thread(target=insert, args=(req["insert"], req.get("window", "")), daemon=True).start()
+        elif "copy" in req:
+            subprocess.Popen(["wl-copy", "--", req["copy"]])
+        elif "seq" in req:
+            current_seq = req["seq"]
+            if req.get("text", "").strip():
+                threading.Thread(target=generate, args=(req, req["seq"]), daemon=True).start()
+            else:
+                emit(stage="end", seq=req["seq"], text="")
+
+
+def main() -> int:
+    global current_seq
+    if len(sys.argv) > 1 and sys.argv[1] == "serve":
+        serve()
+        return 0
+    if len(sys.argv) > 3 and sys.argv[1] == "test":
+        what, text = sys.argv[2], sys.argv[3]
+        current_seq = 1
+        if what.startswith("traduire:"):
+            req = {"op": "translate", "target": what.split(":", 1)[1], "text": text}
+        else:
+            req = {"op": "rewrite", "action": what, "text": text}
+        t = time.time()
+        generate(req, 1)
+        print(f"({time.time() - t:.1f} s)", file=sys.stderr)
+        return 0
+    print(__doc__)
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

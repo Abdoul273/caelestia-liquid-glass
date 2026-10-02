@@ -18,6 +18,8 @@ PersistentProperties {
     property bool spotlight
     property bool calculator
     property bool dictation
+    property bool writing
+    property bool translate
     property bool display
     property bool annotate
     property string annotatePath

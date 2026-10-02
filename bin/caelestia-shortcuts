@@ -27,6 +27,8 @@ SHORTCUTS = [
         ("Super + Espace", "Spotlight dans le verre de l'île : apps, actions, calculs, notes, tâches, fichiers, web"),
         ("Super + O", "Calculatrice : une ligne, résultat en grand, Entrée copie, ↑ historique"),
         ("Super + Maj + D", "Dictée façon macOS : parler, le texte est tapé dans le champ actif (Entrée insère, Échap annule)"),
+        ("Super + Maj + W", "Outils d'écriture sur le texte sélectionné : corriger, reformuler, ton pro, résumer… Entrée remplace"),
+        ("Super + Alt + T", "Traduction rapide : reprend la sélection, Tab change la langue, Entrée insère dans le champ"),
         ("Super + Maj + O", "Horloge : minuteur, chrono, pomodoro, alarmes (reliée à la Dynamic Island)"),
         ("Super + Tab", "Mission Control : voir toutes les fenêtres et bureaux"),
         ("Super + H", "Rechercher un raccourci (Entrée le déclenche)"),

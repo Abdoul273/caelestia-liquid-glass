@@ -53,6 +53,8 @@ Verre translucide partout, Mission Control, Spotlight, animations fluides façon
 - **Spotlight** (`Super + Espace`) : **lance tes apps** (la meilleure en grand, Entrée pour l'ouvrir), actions du système (verrouiller, veille, éteindre, paramètres, Horloge…), **fichiers** de ton dossier perso, calculs et conversions, puis suggestions Google, fiche Wikipédia et résultats web.
 - **Calculatrice** (`Super + O`) : une seule ligne dans le verre de l'île ; le résultat apparaît en grand pendant que tu tapes (`12,5 × 4 + 20 %`), Entrée le copie, ↑ rappelle l'historique.
 - **Dictée** (`Super + Maj + D`) : clique dans un champ, appuie sur le raccourci et parle ; le texte s'affiche en direct dans le verre de l'île, puis Entrée (ou le même raccourci) le tape dans le champ, Échap annule. Reconnaissance Gemini (`gemini-3.5-transcribe-live`, ponctuation automatique) : mettre la clé dans `~/.config/caelestia-dictate/config.json` (`{"api_key": "…"}`) ou la variable `GEMINI_API_KEY`. Il faut `python-google-genai`, `wtype` et `pw-record`.
+- **Outils d'écriture** (`Super + Maj + W`) : sélectionne du texte n'importe où ; la goutte propose Corriger, Reformuler, Professionnel, Amical, Concis, Résumer, Points clés, En anglais, ou une consigne libre (« ajoute un emoji »…). Le résultat arrive en direct, Entrée remplace la sélection, Ctrl+C copie.
+- **Traduction** (`Super + Alt + T`) : une ligne comme Spotlight, reprend la sélection, traduit pendant que tu tapes (Auto = français ↔ anglais, Tab pour une autre langue) ; Entrée insère la traduction dans le champ. Mêmes réglages Gemini que la dictée (`~/.config/caelestia-write/config.json` ou `GEMINI_API_KEY`).
 - **Horloge** (`Super + Maj + O`) : minuteur avec anneau, chronomètre à cadran et tours, pomodoro automatique et alarmes. Tout tourne dans la Dynamic Island : le minuteur continue et l'alarme sonne même app fermée.
 - **Aperçu rapide** : dans Nautilus, sélectionne un fichier et appuie sur **Espace**.
 - **Indicateur de bureau** en verre pendant les changements de bureau.
@@ -137,6 +139,8 @@ Appuie sur **`Super + H`** : une ligne de recherche façon Spotlight tombe de l'
 | `Super + Espace` | Recherche façon Spotlight |
 | `Super + O` | Calculatrice |
 | `Super + Maj + D` | Dictée dans le champ actif |
+| `Super + Maj + W` | Outils d'écriture (sélection) |
+| `Super + Alt + T` | Traduction rapide |
 | `Super + Maj + O` | Horloge (minuteur, chrono, pomodoro, alarmes) |
 | `Super + Tab` | Mission Control |
 | `Super + H` | Tous les raccourcis |

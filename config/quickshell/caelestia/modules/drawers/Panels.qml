@@ -44,6 +44,8 @@ Item {
     readonly property alias spotlight: spotlight
     readonly property alias calculator: calculator
     readonly property alias dictation: dictation
+    readonly property alias writing: writing
+    readonly property alias translate: translate
     readonly property alias display: display
     readonly property alias annotate: annotate
     readonly property alias settings: settings
@@ -177,6 +179,30 @@ Item {
     // Calculatrice : une ligne comme Spotlight, à la même place
     SpotlightModule.Calculator {
         id: calculator
+
+        screen: root.screen
+        screenState: root.screenState
+        island: island
+
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: Math.round(parent.height * 0.2)
+    }
+
+    // Outils d'écriture (Super + Maj + W) : même goutte, sur le texte sélectionné
+    SpotlightModule.WritingTools {
+        id: writing
+
+        screen: root.screen
+        screenState: root.screenState
+        island: island
+
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: Math.round(parent.height * 0.2)
+    }
+
+    // Traduction (Super + Alt + T) : une ligne comme Spotlight
+    SpotlightModule.Translate {
+        id: translate
 
         screen: root.screen
         screenState: root.screenState

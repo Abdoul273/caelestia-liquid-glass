@@ -72,7 +72,7 @@ StyledWindow {
     name: "drawers"
     WlrLayershell.exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: (fsTransitionProg > 0 && contentItem.Config.general.showOverFullscreen) || (hasSpecialWorkspace && hasFullscreenOnNormalWs) ? WlrLayer.Overlay : WlrLayer.Top
-    WlrLayershell.keyboardFocus: screenState.launcher || screenState.session || screenState.notesActive || screenState.controlCenter || screenState.spotlight || screenState.calculator || screenState.dictation || screenState.display || screenState.clipboard || screenState.emoji || screenState.keyhelp || screenState.clock || screenState.settings || screenState.annotate ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: screenState.launcher || screenState.session || screenState.notesActive || screenState.controlCenter || screenState.spotlight || screenState.calculator || screenState.dictation || screenState.writing || screenState.translate || screenState.display || screenState.clipboard || screenState.emoji || screenState.keyhelp || screenState.clock || screenState.settings || screenState.annotate ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
     mask: hasFullscreen ? emptyRegion : regions
 
@@ -119,7 +119,7 @@ StyledWindow {
         active: {
             const s = root.screenState;
             const conf = root.contentItem.Config;
-            if ((s.launcher && conf.launcher.enabled) || (s.session && conf.session.enabled) || (s.sidebar && conf.sidebar.enabled) || s.controlCenter || s.spotlight || s.calculator || s.dictation || s.display || s.clipboard || s.emoji || s.keyhelp || s.clock || s.settings || s.annotate)
+            if ((s.launcher && conf.launcher.enabled) || (s.session && conf.session.enabled) || (s.sidebar && conf.sidebar.enabled) || s.controlCenter || s.spotlight || s.calculator || s.dictation || s.writing || s.translate || s.display || s.clipboard || s.emoji || s.keyhelp || s.clock || s.settings || s.annotate)
                 return true;
             if (!conf.dashboard.showOnHover && s.dashboard && conf.dashboard.enabled)
                 return true;
@@ -137,6 +137,8 @@ StyledWindow {
             root.screenState.spotlight = false;
             root.screenState.calculator = false;
             root.screenState.dictation = false;
+            root.screenState.writing = false;
+            root.screenState.translate = false;
             root.screenState.display = false;
             root.screenState.annotate = false;
             root.screenState.settings = false;
@@ -286,6 +288,38 @@ StyledWindow {
             implicitWidth: cp.curW
             y: cp.visible ? cp.curTop + root.borderThickness : -400
             implicitHeight: cp.visible ? Math.max(0, cp.curBottom - cp.curTop) : 0
+        }
+
+        // Outils d'écriture : même goutte
+        PanelBg {
+            id: writingBg
+
+            readonly property var dp: panels.writing
+
+            panel: panels.writing
+            deformAmount: 0.1
+            visible: dp.visible
+            radius: dp.curR
+            x: dp.curX + bar.implicitWidth
+            implicitWidth: dp.curW
+            y: dp.visible ? dp.curTop + root.borderThickness : -400
+            implicitHeight: dp.visible ? Math.max(0, dp.curBottom - dp.curTop) : 0
+        }
+
+        // Traduction : même goutte
+        PanelBg {
+            id: translateBg
+
+            readonly property var dp: panels.translate
+
+            panel: panels.translate
+            deformAmount: 0.1
+            visible: dp.visible
+            radius: dp.curR
+            x: dp.curX + bar.implicitWidth
+            implicitWidth: dp.curW
+            y: dp.visible ? dp.curTop + root.borderThickness : -400
+            implicitHeight: dp.visible ? Math.max(0, dp.curBottom - dp.curTop) : 0
         }
 
         // Dictée : même goutte
@@ -714,6 +748,12 @@ StyledWindow {
             }
             display.transform: Matrix4x4 {
                 matrix: displayBg.deformMatrix
+            }
+            writing.transform: Matrix4x4 {
+                matrix: writingBg.deformMatrix
+            }
+            translate.transform: Matrix4x4 {
+                matrix: translateBg.deformMatrix
             }
             dictation.transform: Matrix4x4 {
                 matrix: dictationBg.deformMatrix
