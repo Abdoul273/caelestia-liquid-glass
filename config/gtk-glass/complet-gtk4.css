@@ -217,3 +217,26 @@ toast {
   box-shadow: inset 0 1px alpha(white, 0.12), 0 8px 24px alpha(black, 0.35);
   border-radius: 14px;
 }
+/* ---------------------------------------------------------------------------
+ *  Flou d'arrière-plan (GTK 4.22+, backdrop-filter) : les boîtes de dialogue
+ *  libadwaita sont dessinées dans la fenêtre, le flou du compositeur ne les
+ *  atteint pas. On floute donc nous-mêmes ce qu'il y a derrière, façon macOS.
+ * ------------------------------------------------------------------------- */
+/* Voile derrière le dialogue : assombrit et adoucit toute la fenêtre */
+window.background:not(.caelestia-tool) floating-sheet > dimming,
+window.background:not(.caelestia-tool) bottom-sheet > dimming {
+  background-color: alpha(black, 0.28);
+  backdrop-filter: blur(6px) saturate(115%);
+}
+/* Le dialogue lui-même : verre dépoli épais, couleurs avivées */
+window.background:not(.caelestia-tool) floating-sheet > sheet,
+window.background:not(.caelestia-tool) bottom-sheet > sheet,
+window.background:not(.caelestia-tool) dialog.floating sheet,
+window.background:not(.caelestia-tool) dialog.alert sheet {
+  backdrop-filter: blur(36px) saturate(180%) brightness(85%);
+}
+/* Toasts et barre d'état flottante de Nautilus */
+window.background:not(.caelestia-tool) toast,
+window.background:not(.caelestia-tool) .floating-bar {
+  backdrop-filter: blur(20px) saturate(160%);
+}

@@ -118,3 +118,26 @@ window.nautilus-window popover > arrow {
   background-color: {{pop:0.82}};
   box-shadow: inset 0 1px alpha(white, 0.08), 0 8px 24px alpha(black, 0.30);
 }
+/* ---------------------------------------------------------------------------
+ *  Flou d'arrière-plan (GTK 4.22+, backdrop-filter) : les boîtes de dialogue
+ *  libadwaita sont dessinées dans la fenêtre, le flou du compositeur ne les
+ *  atteint pas. On floute donc nous-mêmes ce qu'il y a derrière, façon macOS.
+ * ------------------------------------------------------------------------- */
+/* Voile derrière le dialogue : assombrit et adoucit toute la fenêtre */
+window.nautilus-window floating-sheet > dimming,
+window.nautilus-window bottom-sheet > dimming {
+  background-color: alpha(black, 0.28);
+  backdrop-filter: blur(6px) saturate(115%);
+}
+/* Le dialogue lui-même : verre dépoli épais, couleurs avivées */
+window.nautilus-window floating-sheet > sheet,
+window.nautilus-window bottom-sheet > sheet,
+window.nautilus-window dialog.floating sheet,
+window.nautilus-window dialog.alert sheet {
+  backdrop-filter: blur(36px) saturate(180%) brightness(85%);
+}
+/* Toasts et barre d'état flottante de Nautilus */
+window.nautilus-window toast,
+window.nautilus-window .floating-bar {
+  backdrop-filter: blur(20px) saturate(160%);
+}
