@@ -23,8 +23,8 @@ Sortie : {"stage":"state","state":"connexion|ecoute|reflexion|parle|outil|erreur
 import asyncio
 import datetime as dt
 import json
-import re
 import os
+import re
 import subprocess
 import sys
 import time
@@ -96,8 +96,11 @@ def emit(**msg) -> None:
 
 def run(*cmd: str, timeout: float = 4) -> str:
     try:
-        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout).stdout.strip()
-    except Exception as exc:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
+        if result.returncode:
+            return f"erreur : code {result.returncode} : {(result.stderr or result.stdout).strip()[:300]}"
+        return result.stdout.strip()
+    except (OSError, subprocess.TimeoutExpired) as exc:
         return f"erreur : {exc}"
 
 
@@ -114,13 +117,92 @@ def fold(s: str) -> str:
 
 
 def t_timer(duration: str, label: str = "") -> dict:
-    qs_ipc("island", "timerFor", duration, label)
-    return {"ok": True, "duree": duration}
+    if not re.fullmatch(r"(?:\s*\d+(?:[.,]\d+)?\s*(?:h|min|m|sec|s)?)+\s*", duration):
+        return {"ok": False, "erreur": "Durée invalide : utilise 5m, 1h30m ou 45s."}
+    seconds = sum(float(n.replace(",", ".")) * {"h": 3600, "m": 60, "min": 60,
+                  "s": 1, "sec": 1, "": 60}[unit]
+                  for n, unit in re.findall(r"(\d+(?:[.,]\d+)?)\s*(h|min|m|sec|s)?", duration))
+    if seconds <= 0:
+        return {"ok": False, "erreur": "La durée doit être positive."}
+    started = time.time() * 1000
+    result = qs_ipc("island", "timerFor", duration, label)
+    if result.startswith("erreur :"):
+        return {"ok": False, "erreur": result}
+    # Le shell publie son état par écriture atomique, parfois après le retour IPC.
+    for _ in range(8):
+        try:
+            state = json.loads((HOME / ".local/state/caelestia/island-clock.json").read_text())
+            if (state.get("kind") == "timer" and state.get("label") == label
+                    and state.get("total") == seconds and state.get("paused") == 0
+                    and state.get("end", 0) >= started + seconds * 1000 - 100):
+                return {"ok": True, "verifie": True, "duree": duration}
+        except (OSError, ValueError, TypeError):
+            pass
+        time.sleep(0.05)
+    return {"ok": False, "erreur": "Commande envoyée, mais le minuteur actif n'a pas pu être vérifié. Ne le relance pas automatiquement."}
 
 
 def t_dnd(active: bool) -> dict:
-    qs_ipc("notifs", "enableDnd" if active else "disableDnd")
-    return {"ok": True}
+    result = qs_ipc("notifs", "enableDnd" if active else "disableDnd")
+    if result.startswith("erreur :"):
+        return {"ok": False, "erreur": result}
+    actual = qs_ipc("notifs", "isDndEnabled").lower()
+    if actual != str(active).lower():
+        return {"ok": False, "erreur": "État Ne pas déranger non confirmé.", "etat_lu": actual}
+    return {"ok": True, "verifie": True, "actif": active}
+
+
+def t_level(target: str, action: str = "lire", level: int | None = None) -> dict:
+    """Réglages locaux bornés, sans interprétation supplémentaire par ANO."""
+    if action not in {"lire", "regler", "augmenter", "diminuer", "couper", "retablir"}:
+        return {"ok": False, "erreur": "Action inconnue."}
+    if target == "luminosite" and action in {"couper", "retablir"}:
+        return {"ok": False, "erreur": "Couper/rétablir concerne uniquement le son."}
+    if level is not None and (isinstance(level, bool) or not isinstance(level, (int, float))
+                              or not 0 <= level <= 100):
+        return {"ok": False, "erreur": "Le niveau doit être un nombre entre 0 et 100."}
+    if action == "regler" and level is None:
+        return {"ok": False, "erreur": "Indique le niveau à régler."}
+    cmd = ("wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@") if target == "volume" else ("brightnessctl", "-m")
+
+    def read():
+        output = run(*cmd, timeout=2)
+        if target == "volume":
+            match = re.fullmatch(r"Volume:\s*(\d+(?:\.\d+)?)(?:\s+\[MUTED\])?", output)
+            if match:
+                return float(match[1]) * 100, "[MUTED]" in output
+        else:
+            fields = output.split(",")
+            if len(fields) == 5 and fields[2].isdigit() and fields[4].isdigit() and int(fields[4]) > 0:
+                return int(fields[2]) / int(fields[4]) * 100, False
+        raise ValueError(f"État {target} illisible : {output[:200]}")
+
+    before, muted = read()
+    expected = before
+    if action in {"couper", "retablir"}:
+        muted = action == "couper"
+        result = run("wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "1" if muted else "0", timeout=2)
+    elif action != "lire":
+        delta = 10 if level is None else level
+        expected = max(0, min(100, level if action == "regler" else before + delta * (1 if action == "augmenter" else -1)))
+        result = (run("wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{expected}%", timeout=2)
+                  if target == "volume" else run("brightnessctl", "set", f"{expected}%", timeout=2))
+    else:
+        return {"ok": True, "verifie": True, "niveau": round(before), "muet": muted}
+    if result.startswith("erreur :"):
+        return {"ok": False, "erreur": result}
+    actual, actual_muted = read()
+    verified = abs(actual - expected) <= 2 and (target != "volume" or actual_muted == muted)
+    return {"ok": verified, "verifie": verified, "niveau": round(actual), "muet": actual_muted,
+            "info": "État relu après la commande." if verified else "Le réglage demandé n'est pas confirmé : annonce seulement l'état lu."}
+
+
+def t_volume(action: str = "lire", level: int | None = None) -> dict:
+    return t_level("volume", action, level)
+
+
+def t_brightness(action: str = "lire", level: int | None = None) -> dict:
+    return t_level("luminosite", action, level)
 
 
 def t_now() -> dict:
@@ -345,7 +427,8 @@ def call_ano(name: str, args: dict) -> str:
     kwargs = {k: v for k, v in offer.items() if takes_all or k in sig.parameters}
     if "parameters" not in sig.parameters and not takes_all:
         kwargs = {}
-    return str(fn(**kwargs) or "Fait.")
+    result = fn(**kwargs)
+    return str(result) if result is not None and result != "" else "Résultat absent : action non confirmée. Vérifie l'état réel avant d'annoncer une réussite."
 
 
 # ── ANO Remote sans ANO-GPT ───────────────────────────────────────────────────
@@ -583,6 +666,10 @@ async def phone_relay_main():
 
 
 TOOLS = {
+    "volume": (t_volume, "Outil direct et rapide pour le volume : action lire, regler, augmenter, diminuer, couper ou retablir. niveau entre 0 et 100 ; pour augmenter/diminuer, c'est l'écart (10 par défaut). Relit le résultat réel. À privilégier sur computer_settings ou shell_exec.",
+               {"action": "string", "niveau": "number?"}, "Volume"),
+    "luminosite": (t_brightness, "Outil direct et rapide pour la luminosité : action lire, regler, augmenter ou diminuer. niveau entre 0 et 100 ; pour augmenter/diminuer, c'est l'écart (10 par défaut). Relit le résultat réel. À privilégier sur computer_settings ou shell_exec.",
+                   {"action": "string", "niveau": "number?"}, "Luminosité"),
     "minuteur": (t_timer, "Lance un minuteur dans l'île. duree au format « 5m », « 1h30m », « 45s ».",
                  {"duree": "string", "libelle": "string?"}, "Minuteur {duree}"),
     "ne_pas_deranger": (t_dnd, "Active ou désactive le mode Ne pas déranger.", {"actif": "boolean"}, "Ne pas déranger"),
@@ -649,6 +736,11 @@ def system_prompt() -> str:
         "si le résultat de l'outil ne le confirme pas : lis le résultat, et en cas d'échec dis-le et réessaie "
         "autrement. Si un outil répond qu'une confirmation est affichée, dis à l'utilisateur de cliquer sur "
         "Confirmer dans la notification. Agis directement sans demander la permission. "
+        "Pour le volume et la luminosité, privilégie les outils directs volume et luminosite : un seul appel "
+        "suffit, ils relisent eux-mêmes le réglage. Si ok=false ou erreur est présent, n'annonce pas de réussite. "
+        "Pour toute question sur l'état du système, appelle system_state avant de répondre. Après une autre "
+        "modification du système, vérifie son effet avec system_state (topic adapté) ou un outil de lecture "
+        "avant de confirmer. Une action différée est seulement programmée : annonce ce qui va se passer. "
         "Pour les fenêtres et bureaux (focus, plein écran, déplacer, aller au bureau N), utilise shell_exec "
         "ou hypr_orchestrator. Quand on te demande ce qu'il y a "
         "à l'écran, d'expliquer une erreur visible ou de lire quelque chose, utilise regarder_ecran. "
@@ -1016,15 +1108,23 @@ class Assistant:
                 return "fermee"
 
     async def call_tool(self, name: str, args: dict) -> dict:
+        started = time.monotonic()
+        try:
+            return await self._call_tool(name, args)
+        finally:
+            # Nom et durée uniquement : aucune donnée personnelle dans la mesure.
+            print(f"[latence] outil={name} duree_ms={(time.monotonic() - started) * 1000:.0f}", file=sys.stderr)
+
+    async def _call_tool(self, name: str, args: dict) -> dict:
         if (name in ANO_TOOLS or name in ANO_RELAYED) and ANO_RUNTIME is not None:
             emit(stage="tool", label=ANO_LABELS.get(name, name.replace("_", " ")))
             emit(stage="state", state="outil")
             try:
                 return {"result": await asyncio.wait_for(asyncio.to_thread(call_ano, name, args), 120)}
             except asyncio.TimeoutError:
-                return {"result": "Délai dépassé : vérifie l'état avant d'annoncer un résultat."}
+                return {"ok": False, "result": "Délai dépassé : vérifie l'état avant d'annoncer un résultat. Ne relance pas automatiquement : l'action peut encore terminer."}
             except Exception as exc:
-                return {"result": f"Échec : {str(exc)[:300]}"}
+                return {"ok": False, "result": f"Échec : {str(exc)[:300]}"}
         spec = TOOLS.get(name)
         if not spec:
             return {"erreur": "outil inconnu"}
@@ -1039,7 +1139,7 @@ class Assistant:
             return {"ok": True}
         if name == "verrouiller":
             self.close_after_reply = lambda: qs_ipc("lock", "lock")
-            return {"ok": True, "info": "l'écran se verrouille après ta réponse"}
+            return {"programme": True, "info": "l'écran se verrouille après ta réponse ; pas encore exécuté"}
         if name == "alimentation":
             act = fold(args.get("action", ""))
             cmds = {"veille": ["systemctl", "suspend"], "eteindre": ["systemctl", "poweroff"],
@@ -1049,13 +1149,13 @@ class Assistant:
             if act != "veille" and not args.get("confirme"):
                 return {"confirmation_requise": True, "info": "demande confirmation à l'utilisateur"}
             self.close_after_reply = lambda: subprocess.Popen(cmds[act], start_new_session=True)
-            return {"ok": True, "info": "exécuté après ta réponse"}
+            return {"programme": True, "info": "exécuté après ta réponse ; pas encore exécuté"}
         if name == "ecrire_texte":
             text, window = args.get("texte", ""), self.window
             self.close_after_reply = lambda: subprocess.Popen(
                 [str(HOME / ".local/bin/caelestia-write"), "insert-text", window, text],
                 start_new_session=True)
-            return {"ok": True, "info": "le texte est tapé à la fermeture du panneau ; confirme en trois mots"}
+            return {"programme": True, "info": "le texte sera tapé à la fermeture du panneau ; pas encore exécuté"}
         kwargs = {ARG_NAMES.get(k, k): v for k, v in args.items() if k in params}
         try:
             return await asyncio.wait_for(asyncio.to_thread(fn, **kwargs), 50)
