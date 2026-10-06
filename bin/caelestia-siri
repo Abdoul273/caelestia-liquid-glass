@@ -42,6 +42,7 @@ CHUNK_MS = 64
 MIC_CHUNK = MIC_RATE * 2 * CHUNK_MS // 1000
 HANDLE_TTL = 900  # au-delà, Gemini a oublié la session
 SESSION_FILE = HOME / ".cache/caelestia-siri/session.json"  # survit aux redémarrages du moteur
+ROUTINES_FILE = HOME / ".config/caelestia-siri/routines.json"
 IDLE_AFTER_REPLY = 8.0
 IDLE_BEFORE_ANY = 14.0
 
@@ -203,6 +204,76 @@ def t_volume(action: str = "lire", level: int | None = None) -> dict:
 
 def t_brightness(action: str = "lire", level: int | None = None) -> dict:
     return t_level("luminosite", action, level)
+
+
+def routine_steps(text: str) -> list:
+    """Valide toute la recette avant de modifier quoi que ce soit."""
+    steps = json.loads(text)
+    allowed = {"volume", "luminosite", "ne_pas_deranger", "minuteur", "open_app", "system_state"}
+    if not isinstance(steps, list) or not 1 <= len(steps) <= 10:
+        raise ValueError("Une routine doit contenir entre 1 et 10 étapes.")
+    for step in steps:
+        if not isinstance(step, dict) or set(step) != {"outil", "arguments"}:
+            raise ValueError("Chaque étape doit préciser outil et arguments.")
+        tool, args = step["outil"], step["arguments"]
+        if not isinstance(tool, str) or tool not in allowed or not isinstance(args, dict):
+            raise ValueError("Outil de routine non pris en charge.")
+        if tool in {"volume", "luminosite"}:
+            actions = {"lire", "regler", "augmenter", "diminuer"}
+            if tool == "volume":
+                actions |= {"couper", "retablir"}
+            level = args.get("niveau")
+            if (set(args) - {"action", "niveau"} or args.get("action") not in actions
+                    or (args["action"] == "regler" and level is None)
+                    or (level is not None and (isinstance(level, bool) or not isinstance(level, (int, float))
+                                               or not 0 <= level <= 100))):
+                raise ValueError("Réglage de routine invalide.")
+        elif tool == "ne_pas_deranger":
+            if set(args) != {"actif"} or not isinstance(args["actif"], bool):
+                raise ValueError("Précise actif=true ou false.")
+        elif tool == "minuteur":
+            if (set(args) - {"duree", "libelle"} or not isinstance(args.get("duree"), str)
+                    or not isinstance(args.get("libelle", ""), str)
+                    or not re.fullmatch(r"(?:\s*\d+(?:[.,]\d+)?\s*(?:h|min|m|sec|s)?)+\s*", args["duree"])
+                    or not any(float(n.replace(",", ".")) > 0 for n in re.findall(r"\d+(?:[.,]\d+)?", args["duree"]))):
+                raise ValueError("Durée du minuteur invalide.")
+        elif tool == "open_app":
+            if set(args) != {"name"} or not isinstance(args["name"], str) or not args["name"].strip():
+                raise ValueError("Précise uniquement le nom de l'application à ouvrir.")
+        elif set(args) != {"topic"} or not isinstance(args["topic"], str):
+            raise ValueError("Précise le sujet de l'état système à lire.")
+    return steps
+
+
+def routine_store(action: str, name: str = "", recipe: str = "") -> dict:
+    if not isinstance(name, str):
+        raise ValueError("Le nom de la routine doit être du texte.")
+    routines = {"travail": [{"outil": "ne_pas_deranger", "arguments": {"actif": True}}]}
+    if ROUTINES_FILE.exists():
+        saved = json.loads(ROUTINES_FILE.read_text())
+        if not isinstance(saved, dict):
+            raise ValueError("Le fichier de routines est invalide ; il a été conservé.")
+        for key, steps in saved.items():
+            routines[key] = routine_steps(json.dumps(steps))
+    name = fold(name).strip()
+    name = {"mode travail": "travail", "je vais dormir": "sommeil", "prepare ma reunion": "reunion"}.get(name, name)
+    if action == "enregistrer":
+        if not name or len(name) > 80:
+            raise ValueError("Donne un nom court à la routine.")
+        routines[name] = routine_steps(recipe)
+        ROUTINES_FILE.parent.mkdir(parents=True, exist_ok=True)
+        temporary = ROUTINES_FILE.with_suffix(".tmp")
+        temporary.write_text(json.dumps(routines, ensure_ascii=False, indent=2) + "\n")
+        temporary.chmod(0o600)
+        temporary.replace(ROUTINES_FILE)
+        return {"ok": True, "nom": name, "etapes": routines[name], "info": "Routine enregistrée, aucune action exécutée."}
+    if action not in {"lire", "lancer"}:
+        raise ValueError("Action : lire, enregistrer ou lancer.")
+    if not name and action == "lire":
+        return {"ok": True, "routines": routines}
+    if name not in routines:
+        return {"ok": False, "configuration_requise": True, "info": "Routine inconnue : demande les actions souhaitées avant de l'enregistrer."}
+    return {"ok": True, "nom": name, "etapes": routines[name]}
 
 
 def t_now() -> dict:
@@ -666,6 +737,8 @@ async def phone_relay_main():
 
 
 TOOLS = {
+    "routine_personnelle": (None, "Routines personnelles persistantes. action=lire pour consulter, enregistrer pour mémoriser une recette explicitement demandée par l'utilisateur (sans l'exécuter), lancer pour l'exécuter. nom : travail, sommeil, reunion ou nom choisi. recette : chaîne JSON contenant une liste d'étapes {outil, arguments}. Outils acceptés : volume/luminosite (action, niveau), ne_pas_deranger (actif), minuteur (duree, libelle), open_app (name uniquement), system_state (topic). Un minuteur ne programme PAS un arrêt de musique ni un réveil : ne promettre que les étapes prises en charge. Ne jamais inventer des applications, un volume ou un horaire. Arrêt au premier échec avec bilan des étapes effectuées.",
+                           {"action": "string", "nom": "string?", "recette": "string?"}, "Routine {nom}"),
     "volume": (t_volume, "Outil direct et rapide pour le volume : action lire, regler, augmenter, diminuer, couper ou retablir. niveau entre 0 et 100 ; pour augmenter/diminuer, c'est l'écart (10 par défaut). Relit le résultat réel. À privilégier sur computer_settings ou shell_exec.",
                {"action": "string", "niveau": "number?"}, "Volume"),
     "luminosite": (t_brightness, "Outil direct et rapide pour la luminosité : action lire, regler, augmenter ou diminuer. niveau entre 0 et 100 ; pour augmenter/diminuer, c'est l'écart (10 par défaut). Relit le résultat réel. À privilégier sur computer_settings ou shell_exec.",
@@ -741,6 +814,10 @@ def system_prompt() -> str:
         "Pour toute question sur l'état du système, appelle system_state avant de répondre. Après une autre "
         "modification du système, vérifie son effet avec system_state (topic adapté) ou un outil de lecture "
         "avant de confirmer. Une action différée est seulement programmée : annonce ce qui va se passer. "
+        "Pour « mode travail », « je vais dormir », « prépare ma réunion » ou une routine nommée, utilise "
+        "routine_personnelle. Consulte les recettes si nécessaire. Pour les modifier, mémorise uniquement "
+        "les étapes choisies par l'utilisateur ; enregistrer ne les lance pas. Si une routine échoue, annonce "
+        "les étapes réussies et l'étape en échec, sans relancer toute la routine. "
         "Pour les fenêtres et bureaux (focus, plein écran, déplacer, aller au bureau N), utilise shell_exec "
         "ou hypr_orchestrator. Quand on te demande ce qu'il y a "
         "à l'écran, d'expliquer une erreur visible ou de lire quelque chose, utilise regarder_ecran. "
@@ -837,6 +914,7 @@ class Assistant:
         self.retried = False
         self.force_reconnect = False
         self.phone_turn = False  # la demande vient d'ANO Remote : la réponse y repart
+        self.routine_lock = asyncio.Lock()
 
     # Commandes du shell
     def open(self):
@@ -1116,6 +1194,12 @@ class Assistant:
             print(f"[latence] outil={name} duree_ms={(time.monotonic() - started) * 1000:.0f}", file=sys.stderr)
 
     async def _call_tool(self, name: str, args: dict) -> dict:
+        if name == "routine_personnelle":
+            # Une seconde demande ne doit pas exécuter les mêmes étapes en parallèle.
+            if self.routine_lock.locked():
+                return {"ok": False, "erreur": "Une routine est déjà en cours ; attends son bilan."}
+            async with self.routine_lock:
+                return await self.run_routine(args)
         if (name in ANO_TOOLS or name in ANO_RELAYED) and ANO_RUNTIME is not None:
             emit(stage="tool", label=ANO_LABELS.get(name, name.replace("_", " ")))
             emit(stage="state", state="outil")
@@ -1163,6 +1247,37 @@ class Assistant:
             return {"erreur": "délai dépassé"}
         except Exception as exc:
             return {"erreur": str(exc)[:200]}
+
+    async def run_routine(self, args: dict) -> dict:
+        action = args.get("action", "lire")
+        emit(stage="state", state="outil")
+        try:
+            plan = await asyncio.to_thread(routine_store, action, args.get("nom", ""), args.get("recette", ""))
+        except (OSError, ValueError, TypeError) as exc:
+            return {"ok": False, "erreur": str(exc)[:200]}
+        if action != "lancer" or not plan.get("ok"):
+            return plan
+        results = []
+        for step in plan["etapes"]:
+            tool = step["outil"]
+            result = await self.call_tool(tool, step["arguments"])
+            if tool == "open_app":
+                # ANO relit déjà les fenêtres réelles avant ces réponses de réussite.
+                text = str(result.get("result", ""))
+                verified = (result.get("ok") is not False
+                            and not re.search(r"échec|erreur|impossible|non confirm|indisponible", text, re.IGNORECASE)
+                            and bool(re.search(r"est (?:déjà )?ouvert|était déjà ouvert|Site ouvert dans Google Chrome", text)))
+            elif tool == "system_state":
+                text = str(result.get("result", ""))
+                verified = bool(text) and result.get("ok") is not False and not re.search(
+                    r"échec|erreur|non confirmée|inconnu|indisponible", text, re.IGNORECASE)
+            else:
+                verified = result.get("ok") is True and result.get("verifie") is True
+            results.append({"outil": tool, "verifie": verified, "resultat": result})
+            if not verified:
+                return {"ok": False, "nom": plan["nom"], "bilan": results,
+                        "restantes": plan["etapes"][len(results):], "info": "Routine arrêtée : ne confirme que les étapes vérifiées. Ne relance pas automatiquement."}
+        return {"ok": True, "nom": plan["nom"], "bilan": results}
 
 
 async def serve():
