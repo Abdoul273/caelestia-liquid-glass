@@ -141,3 +141,18 @@ window.nautilus-window toast,
 window.nautilus-window .floating-bar {
   backdrop-filter: blur(20px) saturate(160%);
 }
+
+/* ---------------------------------------------------------------------------
+ *  Flou du compositeur (GTK 4.24+) : GTK envoie lui-même sa zone de flou à
+ *  Hyprland (ext-background-effect) d'après les backdrop-filter, et Hyprland
+ *  ne floute plus que cette zone. On la demande donc sur toute la fenêtre et
+ *  sur les menus, pour le même flou que kitty, le shell et les applis Qt.
+ *  Le fond quasi invisible est nécessaire : sans lui GTK ignore la demande.
+ * ------------------------------------------------------------------------- */
+window.nautilus-window > * {
+  background-color: alpha(black, 0.01);
+  backdrop-filter: blur(20px);
+}
+window.nautilus-window popover > contents {
+  backdrop-filter: blur(20px);
+}
