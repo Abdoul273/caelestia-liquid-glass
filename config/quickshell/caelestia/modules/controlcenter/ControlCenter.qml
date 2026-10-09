@@ -1334,13 +1334,13 @@ Item {
                     visible: root.page === "bt"
                     clip: true
                     spacing: 4
-                    model: [...Bluetooth.devices.values].filter(d => d.paired || d.connected || (root.adapter?.discovering && d.name)).sort((a, b) => (b.connected - a.connected) || (b.paired - a.paired) || a.name.localeCompare(b.name))
+                    model: [...Bluetooth.devices.values].filter(d => d.bonded || d.trusted || d.paired || d.connected || (root.adapter?.discovering && d.name)).sort((a, b) => (b.connected - a.connected) || (b.paired - a.paired) || a.name.localeCompare(b.name))
 
                     delegate: Rectangle {
                         id: dev
 
                         required property BluetoothDevice modelData
-                        readonly property bool busy: modelData.state === BluetoothDeviceState.Connecting || modelData.state === BluetoothDeviceState.Disconnecting
+                        readonly property bool busy: Bluez.isBusy(modelData)
 
                         width: btList.width
                         height: 52
@@ -1388,7 +1388,7 @@ Item {
                                 font.weight: dev.modelData.connected ? Font.DemiBold : Font.Normal
                             }
                             StyledText {
-                                text: dev.busy ? qsTr("Patiente…") : dev.modelData.connected ? qsTr("Connecté") : dev.modelData.paired ? qsTr("Associé") : qsTr("Disponible")
+                                text: dev.busy ? qsTr("Patiente…") : dev.modelData.connected ? qsTr("Connecté") : (dev.modelData.paired || dev.modelData.bonded || dev.modelData.trusted) ? qsTr("Associé") : qsTr("Disponible")
                                 color: root.fgDim
                                 font.pointSize: 8
                             }
@@ -1409,15 +1409,8 @@ Item {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                const d = dev.modelData;
-                                if (d.connected)
-                                    d.disconnect();
-                                else if (d.paired)
-                                    d.connect();
-                                else
-                                    d.pair();
-                            }
+                            enabled: !dev.busy
+                            onClicked: Bluez.toggleConnection(dev.modelData)
                         }
                     }
 

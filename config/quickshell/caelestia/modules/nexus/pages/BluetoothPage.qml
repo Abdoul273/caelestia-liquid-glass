@@ -45,7 +45,7 @@ PageBase {
             placeholderText: root.btEnabled ? qsTr("Aucun appareil enregistré") : qsTr("Bluetooth désactivé")
 
             model: ScriptModel {
-                values: Bluetooth.devices.values.filter(d => d.bonded).sort((a, b) => (b.connected - a.connected) || a.name.localeCompare(b.name)) // qmllint disable unresolved-type
+                values: Bluetooth.devices.values.filter(d => d.bonded || d.trusted || d.paired || d.connected).sort((a, b) => (b.connected - a.connected) || a.name.localeCompare(b.name)) // qmllint disable unresolved-type
             }
 
             delegate: StyledRect {
@@ -53,7 +53,7 @@ PageBase {
 
                 required property BluetoothDevice modelData
                 readonly property bool connected: modelData && modelData.state === BluetoothDeviceState.Connected // qmllint disable unresolved-type
-                readonly property bool loading: modelData && (modelData.state === BluetoothDeviceState.Connecting || modelData.state === BluetoothDeviceState.Disconnecting) // qmllint disable unresolved-type
+                readonly property bool loading: Bluez.isBusy(modelData) // qmllint disable unresolved-type
                 property real textOpacity: loading ? 0.5 : 1
 
                 anchors.left: savedList.list.contentItem.left
@@ -73,7 +73,7 @@ PageBase {
                     onClicked: {
                         if (!device.modelData || device.loading)
                             return;
-                        device.modelData.connected = !device.connected;
+                        Bluez.toggleConnection(device.modelData);
                     }
                 }
 

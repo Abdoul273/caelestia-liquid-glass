@@ -15,12 +15,12 @@ PageBase {
 
     readonly property BluetoothDevice device: nState.selectedBtDevice
     readonly property bool connected: device?.state === BluetoothDeviceState.Connected // qmllint disable unresolved-type
-    readonly property bool loading: device?.state === BluetoothDeviceState.Connecting || device?.state === BluetoothDeviceState.Disconnecting // qmllint disable unresolved-type
+    readonly property bool loading: Bluez.isBusy(device) // qmllint disable unresolved-type
 
     readonly property string statusText: {
         if (!device)
             return "";
-        let s = connected ? qsTr("Connecté") : (device.bonded ? qsTr("Appairé") : qsTr("Non appairé"));
+        let s = connected ? qsTr("Connecté") : ((device.bonded || device.trusted || device.paired) ? qsTr("Appairé") : qsTr("Non appairé"));
         if (connected && device.batteryAvailable)
             s += " • " + Math.round(device.battery * 100) + "%";
         return s;
@@ -101,7 +101,7 @@ PageBase {
                 implicitWidth: connectBtnContent.implicitWidth + Tokens.padding.extraLarge * 2
                 implicitHeight: connectBtnContent.implicitHeight + Tokens.padding.medium * 2
 
-                onClicked: root.device.connected = !root.connected
+                onClicked: Bluez.toggleConnection(root.device)
 
                 AnimLoader {
                     id: connectBtnContent

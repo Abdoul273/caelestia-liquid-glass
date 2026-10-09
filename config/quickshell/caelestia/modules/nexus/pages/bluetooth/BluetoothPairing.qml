@@ -74,7 +74,7 @@ PageBase {
             list.anchors.top: scanIndicator.bottom
 
             model: ScriptModel {
-                values: Bluetooth.devices.values.filter(d => !d.bonded).sort((a, b) => (b.pairing - a.pairing) || a.name.localeCompare(b.name)) // qmllint disable unresolved-type
+                values: Bluetooth.devices.values.filter(d => !d.bonded && !d.trusted).sort((a, b) => (b.pairing - a.pairing) || a.name.localeCompare(b.name)) // qmllint disable unresolved-type
             }
 
             delegate: Item {
@@ -82,7 +82,7 @@ PageBase {
 
                 required property BluetoothDevice modelData
                 required property int index
-                property real textOpacity: modelData?.pairing ? 0.5 : 1
+                property real textOpacity: Bluez.isBusy(modelData) ? 0.5 : 1
                 property bool wasPairing
 
                 anchors.left: deviceList.list.contentItem.left
@@ -108,11 +108,11 @@ PageBase {
                     radius: Tokens.rounding.extraSmall
                     bottomLeftRadius: newDevice.index === deviceList?.list.count - 1 ? Tokens.rounding.extraLarge : radius
                     bottomRightRadius: newDevice.index === deviceList?.list.count - 1 ? Tokens.rounding.extraLarge : radius
-                    disabled: newDevice.modelData?.pairing ?? false
+                    disabled: Bluez.isBusy(newDevice.modelData)
 
                     onClicked: {
-                        newDevice.modelData?.pair();
                         newDevice.wasPairing = true;
+                        Bluez.connectDevice(newDevice.modelData);
                     }
                 }
 

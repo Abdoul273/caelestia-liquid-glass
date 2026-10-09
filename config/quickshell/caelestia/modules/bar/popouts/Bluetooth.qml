@@ -69,7 +69,7 @@ ColumnLayout {
             id: device
 
             required property BluetoothDevice modelData
-            readonly property bool loading: modelData.state === BluetoothDeviceState.Connecting || modelData.state === BluetoothDeviceState.Disconnecting // qmllint disable unresolved-type
+            readonly property bool loading: Bluez.isBusy(modelData) // qmllint disable unresolved-type
 
             Layout.fillWidth: true
             Layout.rightMargin: Tokens.padding.extraSmall
@@ -128,7 +128,7 @@ ColumnLayout {
                 StateLayer {
                     color: device.modelData.state === BluetoothDeviceState.Connected ? Colours.palette.m3onPrimary : Colours.palette.m3onSurface // qmllint disable unresolved-type
                     disabled: device.loading
-                    onClicked: device.modelData.connected = !device.modelData.connected
+                    onClicked: Bluez.toggleConnection(device.modelData)
                 }
 
                 MaterialIcon {
@@ -152,7 +152,7 @@ ColumnLayout {
             Loader {
                 visible: status === Loader.Ready
                 asynchronous: true
-                active: device.modelData.bonded
+                active: device.modelData.bonded || device.modelData.trusted
                 sourceComponent: Item {
                     implicitWidth: connectBtn.implicitWidth
                     implicitHeight: connectBtn.implicitHeight
