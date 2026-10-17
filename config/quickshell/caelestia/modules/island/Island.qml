@@ -723,11 +723,28 @@ Item {
     onCapsLockChanged: if (capsKnown && ready) blip(capsLock ? "keyboard_capslock_badge" : "keyboard_capslock", capsLock ? qsTr("Verr. Maj activé") : qsTr("Verr. Maj désactivé"), "", capsLock)
 
     readonly property string wifiName: Nmcli.active?.ssid ?? ""
+    property bool wifiKnown: false
+    property bool wifiOn: false
+    property string wifiSsid: ""
+    readonly property int wifiStrength: Nmcli.active?.strength ?? 88
+    readonly property int wifiFreq: Nmcli.active?.frequency ?? 5180
+    readonly property string wifiBand: wifiFreq >= 5900 ? "6 GHz" : wifiFreq >= 4900 ? "5 GHz" : wifiFreq > 0 ? "2,4 GHz" : "Wi-Fi"
+    readonly property bool wifiSecure: Nmcli.active?.isSecure ?? true
+
     onWifiNameChanged: {
+        if (!wifiKnown) {
+            wifiKnown = true;
+            wifiOn = wifiName !== "";
+            if (wifiName)
+                wifiSsid = wifiName;
+            return;
+        }
+        if (!ready)
+            return;
+        wifiOn = wifiName !== "";
         if (wifiName)
-            blip("wifi", wifiName, qsTr("Connecté"), true);
-        else
-            blip("wifi_off", qsTr("Wi-Fi"), qsTr("Déconnecté"), false);
+            wifiSsid = wifiName;
+        flash("wifi", wifiOn ? 4000 : 2300);
     }
 
     readonly property bool vpnOn: VPN.connected
@@ -1287,6 +1304,8 @@ Item {
             return "agentDone";
         if (pulse === "bt" && btDevice)
             return "bt";
+        if (pulse === "wifi")
+            return "wifi";
         if (pulse === "charge")
             return "charge";
         if (pulse === "blip")
@@ -1373,6 +1392,8 @@ Item {
             return Qt.size(460, 100);
         case "bt":
             return btOn ? Qt.size(400, 76) : Qt.size(330, 48);
+        case "wifi":
+            return wifiOn ? Qt.size(420, 78) : Qt.size(340, 50);
         case "charge":
             return chargePlugged ? Qt.size(420, 78) : Qt.size(330, 48);
         case "player":
@@ -1406,7 +1427,7 @@ Item {
 
     property real w: target.width
     property real h: target.height
-    readonly property real radius: Math.min(h / 2, mode === "player" || mode === "info" || mode === "perf" || mode === "notif" || mode === "bt" || mode === "shot" || mode === "clock" || mode === "drop" || mode === "toast" || mode === "done" || mode === "alarm" || mode === "count" || mode === "recordFull" || mode === "callFull" || mode === "transferFull" || mode === "taskDue" || mode === "fileDone" || mode === "caffeine" || mode === "center" || mode === "agents" || mode === "perm" || mode === "agentDone" || (mode === "charge" && chargePlugged) ? 32 : h / 2)
+    readonly property real radius: Math.min(h / 2, mode === "player" || mode === "info" || mode === "perf" || mode === "notif" || mode === "bt" || mode === "wifi" || mode === "shot" || mode === "clock" || mode === "drop" || mode === "toast" || mode === "done" || mode === "alarm" || mode === "count" || mode === "recordFull" || mode === "callFull" || mode === "transferFull" || mode === "taskDue" || mode === "fileDone" || mode === "caffeine" || mode === "center" || mode === "agents" || mode === "perm" || mode === "agentDone" || (mode === "charge" && chargePlugged) ? 32 : h / 2)
 
     function flash(kind: string, ms: int): void {
         if (!ready)
@@ -1778,6 +1799,11 @@ Item {
         function testAlarm(label: string): void {
             root.ringAlarm(label || qsTr("Alarme"), Time.format("HH:mm"));
         }
+        function testWifi(ssid: string): void {
+            root.wifiSsid = ssid || root.wifiName || "Fibre-5G";
+            root.wifiOn = ssid !== "off";
+            root.flash("wifi", root.wifiOn ? 4000 : 2300);
+        }
         function state(): string {
             root.saveClock();
             return "ok";
@@ -1786,12 +1812,63 @@ Item {
 
     // Petit rebond quand un évènement arrive
     onPulseChanged: {
-        if (pulse === "notif" || pulse === "toast" || pulse === "charge" || pulse === "bt" || pulse === "shot")
+        if (pulse === "notif" || pulse === "toast" || pulse === "charge" || pulse === "bt" || pulse === "wifi" || pulse === "shot")
             bump.restart();
         if (pulse === "done")
             doneShake.restart();
         if (pulse === "bt" && btOn)
             btIntro.restart();
+        if (pulse === "wifi" && wifiOn)
+            wifiIntro.restart();
+    }
+
+    // Arrivée du Wi-Fi : l'orbe surgit, trois arcs radar balaient, les barres et la jauge se remplissent
+    property real wifiPop: 1
+    property real wifiWave: 1
+    property real wifiRing: 1
+
+    SequentialAnimation {
+        id: wifiIntro
+
+        ScriptAction {
+            script: {
+                root.wifiPop = 0;
+                root.wifiWave = 0;
+                root.wifiRing = 0;
+            }
+        }
+        PauseAnimation {
+            duration: 100
+        }
+        ParallelAnimation {
+            NumberAnimation {
+                target: root
+                property: "wifiPop"
+                to: 1
+                duration: 600
+                easing.type: Easing.OutBack
+                easing.overshoot: 2.3
+            }
+            NumberAnimation {
+                target: root
+                property: "wifiWave"
+                to: 1
+                duration: 1650
+                easing.type: Easing.OutCubic
+            }
+            SequentialAnimation {
+                PauseAnimation {
+                    duration: 220
+                }
+                NumberAnimation {
+                    target: root
+                    property: "wifiRing"
+                    to: 1
+                    duration: 1050
+                    easing.type: Easing.OutCubic
+                }
+            }
+        }
     }
 
     // Arrivée des écouteurs : l'icône surgit, deux ondes partent, l'anneau de batterie se remplit
@@ -2574,6 +2651,230 @@ Item {
                     scale: root.btRing
                     fontStyle: Tokens.font.icon.size(14).build()
                     fill: 1
+                }
+            }
+        }
+
+        // ── Wi-Fi : ondes radar expansives, barres dynamiques, fréquence et anneau de signal ──
+        Face {
+            active: root.mode === "wifi"
+
+            Item {
+                id: wifiIconBox
+
+                anchors.left: parent.left
+                anchors.leftMargin: root.wifiOn ? 22 : 18
+                anchors.verticalCenter: parent.verticalCenter
+                width: root.wifiOn ? 46 : 30
+                height: width
+
+                // Trois ondes radar qui partent de l'orbe Wi-Fi
+                Repeater {
+                    model: 3
+
+                    Rectangle {
+                        required property int index
+                        readonly property real t: Math.max(0, Math.min(1, root.wifiWave * 1.35 - index * 0.22))
+
+                        anchors.centerIn: parent
+                        width: parent.width * (1 + t * 0.95)
+                        height: width
+                        radius: width / 2
+                        color: "transparent"
+                        border.width: 2
+                        border.color: index === 0 ? root.green : root.accent
+                        opacity: root.wifiOn && t > 0 && t < 1 ? (1 - t) * 0.75 : 0
+                    }
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: width / 2
+                    color: root.wifiOn ? Qt.alpha(root.accent, 0.22) : Qt.alpha(root.red, 0.16)
+                    border.width: root.wifiOn ? 1 : 0
+                    border.color: Qt.alpha(root.accent, 0.35)
+                    scale: 0.4 + 0.6 * root.wifiPop
+
+                    MaterialIcon {
+                        anchors.centerIn: parent
+                        text: !root.wifiOn ? "wifi_off" : root.wifiStrength >= 75 ? "wifi" : root.wifiStrength >= 45 ? "network_wifi_3_bar" : "network_wifi_2_bar"
+                        color: root.wifiOn ? root.accent : root.red
+                        fontStyle: Tokens.font.icon.size(root.wifiOn ? 21 : 15).build()
+                        fill: 1
+                    }
+                }
+            }
+
+            Column {
+                anchors.left: wifiIconBox.right
+                anchors.leftMargin: 14
+                anchors.right: wifiRight.left
+                anchors.rightMargin: 12
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 3
+
+                Row {
+                    width: parent.width
+                    spacing: 6
+
+                    StyledText {
+                        width: Math.min(implicitWidth, parent.width - (wifiBandPill.visible ? wifiBandPill.width + 8 : 0))
+                        elide: Text.ElideRight
+                        text: root.wifiOn ? (root.wifiSsid || root.wifiName || qsTr("Wi-Fi")) : qsTr("Wi-Fi coupé")
+                        color: root.fg
+                        font.pointSize: root.wifiOn ? 11 : 10
+                        font.weight: Font.DemiBold
+                    }
+
+                    // Pastille de bande (5 GHz / 2,4 GHz / 6 GHz)
+                    Rectangle {
+                        id: wifiBandPill
+
+                        visible: root.wifiOn
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: bandTxt.implicitWidth + 10
+                        height: 17
+                        radius: 8.5
+                        color: Qt.alpha(root.accent, 0.18)
+                        scale: 0.6 + 0.4 * root.wifiRing
+                        opacity: root.wifiRing
+
+                        StyledText {
+                            id: bandTxt
+
+                            anchors.centerIn: parent
+                            text: root.wifiBand
+                            color: root.accent
+                            font.pointSize: 7.5
+                            font.weight: Font.Bold
+                        }
+                    }
+                }
+
+                Row {
+                    visible: root.wifiOn
+                    spacing: 5
+
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 6
+                        height: 6
+                        radius: 3
+                        color: root.green
+                    }
+
+                    StyledText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: root.wifiSecure ? qsTr("Connecté · Sécurisé") : qsTr("Connecté · Ouvert")
+                        color: root.fgDim
+                        font.pointSize: 8.5
+                    }
+                }
+            }
+
+            Item {
+                id: wifiRight
+
+                anchors.right: parent.right
+                anchors.rightMargin: 20
+                anchors.verticalCenter: parent.verticalCenter
+                width: root.wifiOn ? 78 : wifiOffLbl.implicitWidth
+                height: 42
+
+                StyledText {
+                    id: wifiOffLbl
+
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: !root.wifiOn
+                    text: qsTr("Déconnecté")
+                    color: root.red
+                    font.pointSize: 9
+                    font.weight: Font.DemiBold
+                }
+
+                // 4 barres de signal progressives animées
+                Row {
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: root.wifiOn
+                    spacing: 3
+                    height: 20
+
+                    Repeater {
+                        model: 4
+
+                        Rectangle {
+                            required property int index
+                            readonly property bool lit: root.wifiStrength >= (index + 1) * 20
+                            readonly property real barGrow: Math.max(0, Math.min(1, root.wifiRing * 1.4 - index * 0.14))
+
+                            anchors.bottom: parent.bottom
+                            width: 4
+                            height: (6 + index * 4.5) * (0.25 + 0.75 * barGrow)
+                            radius: 2
+                            color: lit ? (root.wifiStrength < 35 ? "#ff9f0a" : root.green) : root.fgFaint
+                        }
+                    }
+                }
+
+                // Anneau de qualité du signal en %
+                Item {
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: root.wifiOn
+                    width: 42
+                    height: 42
+
+                    Shape {
+                        anchors.fill: parent
+                        preferredRendererType: Shape.CurveRenderer
+
+                        ShapePath {
+                            strokeWidth: 3.5
+                            strokeColor: root.fgFaint
+                            fillColor: "transparent"
+                            capStyle: ShapePath.RoundCap
+
+                            PathAngleArc {
+                                centerX: 21
+                                centerY: 21
+                                radiusX: 18
+                                radiusY: 18
+                                startAngle: -90
+                                sweepAngle: 360
+                            }
+                        }
+
+                        ShapePath {
+                            readonly property color ringCol: root.wifiStrength < 35 ? "#ff9f0a" : root.green
+
+                            strokeWidth: 3.5
+                            strokeColor: ringCol
+                            fillColor: "transparent"
+                            capStyle: ShapePath.RoundCap
+
+                            PathAngleArc {
+                                centerX: 21
+                                centerY: 21
+                                radiusX: 18
+                                radiusY: 18
+                                startAngle: -90
+                                sweepAngle: 360 * root.wifiRing * Math.max(0.08, root.wifiStrength / 100)
+                            }
+                        }
+                    }
+
+                    StyledText {
+                        anchors.centerIn: parent
+                        text: `${Math.round(root.wifiStrength * root.wifiRing)}`
+                        color: root.fg
+                        font.pointSize: 8.5
+                        font.weight: Font.Bold
+                        font.features: {
+                            "tnum": 1
+                        }
+                    }
                 }
             }
         }

@@ -341,9 +341,12 @@ if np.mean(np.array(capm.n)[:, 1]) < 0:
     capm.n = [[-a, -b, -c] for a, b, c in capm.n]
     capm.i = np.array(capm.i).reshape(-1, 3)[:, [0, 2, 1]].flatten().tolist()
 
-meshes["buds"] = bud.merge(bud.mirrored_x())
-meshes["budRings"] = ring.merge(ring.mirrored_x())
-meshes["budCaps"] = capm.merge(capm.mirrored_x())
+meshes["budL"] = bud
+meshes["budR"] = bud.mirrored_x()
+meshes["budRingL"] = ring
+meshes["budRingR"] = ring.mirrored_x()
+meshes["budCapL"] = capm
+meshes["budCapR"] = capm.mirrored_x()
 
 
 # ── Détails de face : port USB-C, voyant, encoche du couvercle ──

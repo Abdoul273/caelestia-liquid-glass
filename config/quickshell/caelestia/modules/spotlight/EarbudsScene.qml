@@ -5,16 +5,19 @@ import QtQuick3D
 import QtQuick3D.Helpers
 import "../../assets/earbuds/earbuds-model.js" as M
 
-// Scène 3D temps réel des écouteurs CETW572 (boîtier galet + deux écouteurs à crochet),
-// inspirée de AirPodsDesktop : rotation fluide 60 fps, ouverture de la charnière
-// au ressort, lévitation douce des écouteurs quand connectés, glisser pour tourner.
+// Scène 3D temps réel des écouteurs (boîtier galet + écouteur gauche BX012 + écouteur droit CETW572),
+// inspirée de AirPodsDesktop : rotation fluide 60 fps, ouverture de la charnière au ressort,
+// lévitation et LEDs indépendantes pour chaque écouteur selon qu'il est connecté ou rangé.
 Item {
     id: root
 
     property bool active: false
-    property bool connected: false
+    property bool leftConnected: false
+    property bool rightConnected: false
+    readonly property bool connected: leftConnected || rightConnected
     property real lidOpen: 1
-    property real budsLift: 0
+    property real leftLift: 0
+    property real rightLift: 0
     property real pitch: 22
     property real yaw: 0
     property bool dragging: false
@@ -65,7 +68,7 @@ Item {
         }
     }
 
-    // Pulsation des LEDs bleues des écouteurs
+    // Pulsation des LEDs bleues des écouteurs actifs
     property real ledPulse: 0.85
     SequentialAnimation on ledPulse {
         running: root.active
@@ -90,10 +93,18 @@ Item {
         }
     }
 
-    Behavior on budsLift {
+    Behavior on leftLift {
         SpringAnimation {
             spring: 3.0
-            damping: 0.30
+            damping: 0.29
+            epsilon: 0.002
+        }
+    }
+
+    Behavior on rightLift {
+        SpringAnimation {
+            spring: 3.0
+            damping: 0.29
             epsilon: 0.002
         }
     }
@@ -257,11 +268,32 @@ Item {
             cullMode: Material.NoCulling
         }
 
+        // LED du boîtier
         PrincipledMaterial {
-            id: matLed
+            id: matCaseLed
 
             baseColor: "#60a5fa"
             emissiveFactor: Qt.vector3d(0.35 * root.ledPulse, 0.72 * root.ledPulse, 1.0 * root.ledPulse)
+            roughness: 0.1
+        }
+
+        // LED écouteur gauche (BX012) : brille intensément quand connecté, veille douce au boîtier
+        PrincipledMaterial {
+            id: matLedLeft
+
+            readonly property real k: root.leftConnected ? root.ledPulse : 0.15
+            baseColor: root.leftConnected ? "#60a5fa" : "#1e293b"
+            emissiveFactor: Qt.vector3d(0.35 * k, 0.72 * k, 1.0 * k)
+            roughness: 0.1
+        }
+
+        // LED écouteur droit (CETW572) : brille intensément quand connecté, veille douce au boîtier
+        PrincipledMaterial {
+            id: matLedRight
+
+            readonly property real k: root.rightConnected ? root.ledPulse : 0.15
+            baseColor: root.rightConnected ? "#60a5fa" : "#1e293b"
+            emissiveFactor: Qt.vector3d(0.35 * k, 0.72 * k, 1.0 * k)
             roughness: 0.1
         }
 
@@ -283,16 +315,28 @@ Item {
             Component.onCompleted: root.buildMesh(this, "lidOuter")
         }
         ProceduralMesh {
-            id: geoBuds
-            Component.onCompleted: root.buildMesh(this, "buds")
+            id: geoBudL
+            Component.onCompleted: root.buildMesh(this, "budL")
         }
         ProceduralMesh {
-            id: geoBudRings
-            Component.onCompleted: root.buildMesh(this, "budRings")
+            id: geoBudR
+            Component.onCompleted: root.buildMesh(this, "budR")
         }
         ProceduralMesh {
-            id: geoBudCaps
-            Component.onCompleted: root.buildMesh(this, "budCaps")
+            id: geoBudRingL
+            Component.onCompleted: root.buildMesh(this, "budRingL")
+        }
+        ProceduralMesh {
+            id: geoBudRingR
+            Component.onCompleted: root.buildMesh(this, "budRingR")
+        }
+        ProceduralMesh {
+            id: geoBudCapL
+            Component.onCompleted: root.buildMesh(this, "budCapL")
+        }
+        ProceduralMesh {
+            id: geoBudCapR
+            Component.onCompleted: root.buildMesh(this, "budCapR")
         }
         ProceduralMesh {
             id: geoPortRim
@@ -351,41 +395,60 @@ Item {
                 source: "#Sphere"
                 position: Qt.vector3d(0, -3.1, 31.05)
                 scale: Qt.vector3d(0.013, 0.013, 0.006)
-                materials: [matLed]
+                materials: [matCaseLed]
             }
 
-            // ── Écouteurs gauche & droit dans leurs logements (avec lévitation douce) ──
+            // ── Écouteur Gauche (BX012) : lévitation indépendante s'il est connecté ──
             Node {
-                id: budsGroup
+                id: leftBudNode
 
-                position: Qt.vector3d(0, root.budsLift * 9.5, root.budsLift * 2.0)
-                eulerRotation.x: root.budsLift * 14
+                position: Qt.vector3d(-root.leftLift * 2.2, root.leftLift * 10.5, root.leftLift * 2.5)
+                eulerRotation: Qt.vector3d(root.leftLift * 14, 0, root.leftLift * 6)
 
                 Model {
-                    geometry: geoBuds
+                    geometry: geoBudL
                     materials: [matBud]
                 }
                 Model {
-                    geometry: geoBudRings
+                    geometry: geoBudRingL
                     materials: [matSilver]
                 }
                 Model {
-                    geometry: geoBudCaps
+                    geometry: geoBudCapL
                     materials: [matCap]
                 }
-
-                // Petites LEDs bleues sur la tranche basse des deux boutons (comme sur la photo 3)
                 Model {
                     source: "#Sphere"
                     position: Qt.vector3d(-21.2, 1.0, 20.3)
                     scale: Qt.vector3d(0.014, 0.011, 0.014)
-                    materials: [matLed]
+                    materials: [matLedLeft]
+                }
+            }
+
+            // ── Écouteur Droit (CETW572) : lévitation indépendante s'il est connecté ──
+            Node {
+                id: rightBudNode
+
+                position: Qt.vector3d(root.rightLift * 2.2, root.rightLift * 10.5, root.rightLift * 2.5)
+                eulerRotation: Qt.vector3d(root.rightLift * 14, 0, -root.rightLift * 6)
+
+                Model {
+                    geometry: geoBudR
+                    materials: [matBud]
+                }
+                Model {
+                    geometry: geoBudRingR
+                    materials: [matSilver]
+                }
+                Model {
+                    geometry: geoBudCapR
+                    materials: [matCap]
                 }
                 Model {
                     source: "#Sphere"
                     position: Qt.vector3d(21.2, 1.0, 20.3)
                     scale: Qt.vector3d(0.014, 0.011, 0.014)
-                    materials: [matLed]
+                    materials: [matLedRight]
                 }
             }
 
@@ -445,18 +508,22 @@ Item {
         }
         onDoubleClicked: {
             if (root.lidOpen > 0.5) {
-                root.budsLift = 0;
+                root.leftLift = 0;
+                root.rightLift = 0;
                 root.lidOpen = 0;
             } else {
                 root.lidOpen = 1;
-                root.budsLift = root.connected ? 0.35 : 0;
+                root.leftLift = root.leftConnected ? 0.42 : 0;
+                root.rightLift = root.rightConnected ? 0.42 : 0;
             }
         }
         onWheel: wheel => {
             const delta = wheel.angleDelta.y > 0 ? 0.15 : -0.15;
             root.lidOpen = Math.max(0, Math.min(1.1, root.lidOpen + delta));
-            if (root.lidOpen < 0.4)
-                root.budsLift = 0;
+            if (root.lidOpen < 0.4) {
+                root.leftLift = 0;
+                root.rightLift = 0;
+            }
         }
     }
 }
