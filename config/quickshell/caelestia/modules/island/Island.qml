@@ -3827,17 +3827,57 @@ Item {
                 anchors.left: parent.left
                 anchors.leftMargin: 26
                 anchors.top: parent.top
-                anchors.topMargin: 20
-                width: 44
-                height: 44
-                radius: 22
-                color: Qt.alpha("#0a84ff", 0.2)
+                anchors.topMargin: 18
+                width: 46
+                height: 46
+                radius: 14
+                color: Qt.alpha("#0a84ff", 0.12)
+                border.width: 0.5
+                border.color: Qt.alpha("#0a84ff", 0.32)
+
+                Shape {
+                    anchors.centerIn: parent
+                    width: 36
+                    height: 36
+                    preferredRendererType: Shape.CurveRenderer
+
+                    ShapePath {
+                        strokeWidth: 2.2
+                        strokeColor: Qt.alpha("#0a84ff", 0.2)
+                        fillColor: "transparent"
+
+                        PathAngleArc {
+                            centerX: 18
+                            centerY: 18
+                            radiusX: 15
+                            radiusY: 15
+                            startAngle: 135
+                            sweepAngle: 270
+                        }
+                    }
+
+                    ShapePath {
+                        strokeWidth: 2.4
+                        strokeColor: "#38bdf8"
+                        fillColor: "transparent"
+                        capStyle: ShapePath.RoundCap
+
+                        PathAngleArc {
+                            centerX: 18
+                            centerY: 18
+                            radiusX: 15
+                            radiusY: 15
+                            startAngle: 135
+                            sweepAngle: root.transferProgress >= 0 ? 270 * Math.max(0.04, root.transferProgress) : 90
+                        }
+                    }
+                }
 
                 MaterialIcon {
                     anchors.centerIn: parent
                     text: root.transfer?.kind === "copy" ? "content_copy" : root.transfer?.kind === "upload" ? "cloud_upload" : "download"
-                    color: "#0a84ff"
-                    fontStyle: Tokens.font.icon.size(19).build()
+                    color: "#38bdf8"
+                    fontStyle: Tokens.font.icon.size(17).build()
                     fill: 1
                 }
             }
@@ -3850,12 +3890,37 @@ Item {
                 anchors.verticalCenter: trBadge.verticalCenter
                 spacing: 1
 
+                Row {
+                    spacing: 6
+
+                    StyledText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: root.transfer?.kind === "copy" ? qsTr("COPIE SYSTÈME") : root.transfer?.kind === "upload" ? qsTr("SYNCHRO DRIVE") : qsTr("TRANSFERT")
+                        color: "#38bdf8"
+                        font.pointSize: 7.2
+                        font.weight: Font.Bold
+                        font.letterSpacing: 0.7
+                    }
+
+                    StyledText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: root.transferProgress >= 0
+                        text: `${Math.round(root.transferProgress * 100)}%`
+                        color: root.fgDim
+                        font.pointSize: 7.5
+                        font.weight: Font.Bold
+                        font.features: {
+                            "tnum": 1
+                        }
+                    }
+                }
+
                 StyledText {
                     width: parent.width
                     elide: Text.ElideMiddle
                     text: root.transfer?.name ?? ""
                     color: root.fg
-                    font.pointSize: 11.5
+                    font.pointSize: 11
                     font.weight: Font.Bold
                 }
                 StyledText {
@@ -3867,19 +3932,19 @@ Item {
                             return "";
                         if (t.paused)
                             return t.total > 0 ? qsTr("En pause · %1 sur %2").arg(root.fmtBytes(t.done)).arg(root.fmtBytes(t.total)) : qsTr("Envoi sur Drive en pause");
-                        const parts = t.kind === "upload" ? [t.count ? qsTr("Drive · fichier %1").arg(t.count) : qsTr("Envoi sur Drive")] : [];
-                        parts.push(t.total > 0 ? qsTr("%1 sur %2").arg(root.fmtBytes(t.done)).arg(root.fmtBytes(t.total)) : root.fmtBytes(t.done));
+                        const parts = t.kind === "upload" ? [t.count ? qsTr("Fichier %1").arg(t.count) : qsTr("Drive")] : [];
+                        parts.push(t.total > 0 ? qsTr("%1 / %2").arg(root.fmtBytes(t.done)).arg(root.fmtBytes(t.total)) : root.fmtBytes(t.done));
                         if (t.speed > 0)
                             parts.push(`${root.fmtBytes(t.speed)}/s`);
                         const eta = root.transferEta(t);
                         if (eta)
-                            parts.push(qsTr("encore %1").arg(eta));
+                            parts.push(qsTr("reste %1").arg(eta));
                         if (root.transfers.length > 1)
                             parts.push(qsTr("+%1").arg(root.transfers.length - 1));
                         return parts.join(" · ");
                     }
                     color: root.fgDim
-                    font.pointSize: 9
+                    font.pointSize: 8.8
                     font.features: {
                         "tnum": 1
                     }
@@ -3892,6 +3957,7 @@ Item {
                 anchors.right: parent.right
                 anchors.rightMargin: 24
                 anchors.verticalCenter: trBadge.verticalCenter
+                spacing: 8
 
                 ShotButton {
                     visible: root.transfer?.kind === "upload"
@@ -3906,17 +3972,19 @@ Item {
                 }
             }
 
-            // Barre de progression (ou vague qui passe si la taille est inconnue)
+            // Barre de progression optique biseautée
             Rectangle {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.leftMargin: 26
                 anchors.rightMargin: 26
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: 22
+                anchors.bottomMargin: 20
                 height: 6
                 radius: 3
-                color: root.fgFaint
+                color: Qt.alpha(root.fg, 0.08)
+                border.width: 0.5
+                border.color: Qt.alpha(root.fg, 0.14)
                 clip: true
 
                 Rectangle {
@@ -3924,7 +3992,12 @@ Item {
                     width: parent.width * Math.max(0, root.transferProgress)
                     height: parent.height
                     radius: 3
-                    color: "#0a84ff"
+
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0.0; color: "#0a84ff" }
+                        GradientStop { position: 1.0; color: "#38bdf8" }
+                    }
 
                     Behavior on width {
                         NumberAnimation {
@@ -3940,7 +4013,13 @@ Item {
                     width: parent.width * 0.3
                     height: parent.height
                     radius: 3
-                    color: "#0a84ff"
+
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0.0; color: "transparent" }
+                        GradientStop { position: 0.5; color: "#38bdf8" }
+                        GradientStop { position: 1.0; color: "transparent" }
+                    }
 
                     NumberAnimation on x {
                         running: root.mode === "transferFull" && root.transferProgress < 0 && !root.transfer?.paused
@@ -5196,14 +5275,54 @@ Item {
                 anchors.verticalCenterOffset: -4
                 width: 48
                 height: 48
-                radius: 24
-                color: Qt.alpha(root.accent, 0.22)
+                radius: 14
+                color: Qt.alpha(root.accent, 0.12)
+                border.width: 0.5
+                border.color: Qt.alpha(root.accent, 0.34)
+
+                Shape {
+                    anchors.centerIn: parent
+                    width: 38
+                    height: 38
+                    preferredRendererType: Shape.CurveRenderer
+
+                    ShapePath {
+                        strokeWidth: 2
+                        strokeColor: Qt.alpha(root.accent, 0.22)
+                        fillColor: "transparent"
+
+                        PathAngleArc {
+                            centerX: 19
+                            centerY: 19
+                            radiusX: 15.5
+                            radiusY: 15.5
+                            startAngle: 135
+                            sweepAngle: 270
+                        }
+                    }
+
+                    ShapePath {
+                        strokeWidth: 2.2
+                        strokeColor: root.accent
+                        fillColor: "transparent"
+                        capStyle: ShapePath.RoundCap
+
+                        PathAngleArc {
+                            centerX: 19
+                            centerY: 19
+                            radiusX: 15.5
+                            radiusY: 15.5
+                            startAngle: 135
+                            sweepAngle: 270
+                        }
+                    }
+                }
 
                 MaterialIcon {
                     anchors.centerIn: parent
                     text: "coffee"
                     color: root.accent
-                    fontStyle: Tokens.font.icon.size(20).build()
+                    fontStyle: Tokens.font.icon.size(18).build()
                     fill: 1
                 }
             }
@@ -5217,19 +5336,26 @@ Item {
                 spacing: 1
 
                 StyledText {
+                    text: IdleInhibitor.until > 0 ? qsTr("MAINTIEN TEMPORISÉ") : qsTr("ANTI-VEILLE CONTINU")
+                    color: root.accent
+                    font.pointSize: 7.2
+                    font.weight: Font.Bold
+                    font.letterSpacing: 0.7
+                }
+                StyledText {
                     width: parent.width
                     elide: Text.ElideRight
                     text: qsTr("L'écran reste allumé")
                     color: root.fg
-                    font.pointSize: 12
+                    font.pointSize: 11.5
                     font.weight: Font.Bold
                 }
                 StyledText {
                     width: parent.width
                     elide: Text.ElideRight
-                    text: IdleInhibitor.until > 0 ? qsTr("Encore %1 · jusqu'à %2").arg(IdleInhibitor.remainingText()).arg(Qt.formatTime(new Date(IdleInhibitor.until), "HH:mm")) : qsTr("Sans limite · depuis %1").arg(Qt.formatTime(IdleInhibitor.enabledSince, "HH:mm"))
+                    text: IdleInhibitor.until > 0 ? qsTr("Encore %1 · jusqu'à %2").arg(IdleInhibitor.remainingText()).arg(Qt.formatTime(new Date(IdleInhibitor.until), "HH:mm")) : qsTr("Sans limite · actif depuis %1").arg(Qt.formatTime(IdleInhibitor.enabledSince, "HH:mm"))
                     color: root.fgDim
-                    font.pointSize: 9
+                    font.pointSize: 8.8
                     font.features: {
                         "tnum": 1
                     }
@@ -5242,7 +5368,7 @@ Item {
                 anchors.right: parent.right
                 anchors.rightMargin: 26
                 anchors.verticalCenter: caffBadge.verticalCenter
-                spacing: 10
+                spacing: 8
 
                 ShotButton {
                     visible: IdleInhibitor.until > 0
@@ -5414,28 +5540,57 @@ Item {
                 anchors.left: parent.left
                 anchors.leftMargin: 26
                 anchors.top: parent.top
-                anchors.topMargin: 18
+                anchors.topMargin: 16
                 spacing: 8
 
-                MaterialIcon {
+                Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
-                    text: "smart_toy"
-                    color: root.accent
-                    fontStyle: Tokens.font.icon.size(16).build()
-                    fill: 1
+                    width: 24
+                    height: 24
+                    radius: 7
+                    color: Qt.alpha(root.accent, 0.14)
+                    border.width: 0.5
+                    border.color: Qt.alpha(root.accent, 0.34)
+
+                    MaterialIcon {
+                        anchors.centerIn: parent
+                        text: "smart_toy"
+                        color: root.accent
+                        fontStyle: Tokens.font.icon.size(13.5).build()
+                        fill: 1
+                    }
                 }
+
                 StyledText {
                     anchors.verticalCenter: parent.verticalCenter
-                    text: qsTr("Agents")
+                    text: qsTr("AGENTS IA")
                     color: root.fg
-                    font.pointSize: 11.5
-                    font.weight: Font.Bold
-                }
-                StyledText {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: Agents.working > 0 ? qsTr("%1 au travail").arg(Agents.working) : qsTr("en attente")
-                    color: root.fgDim
                     font.pointSize: 9.5
+                    font.weight: Font.Bold
+                    font.letterSpacing: 0.7
+                }
+
+                Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: agStatusText.implicitWidth + 12
+                    height: 18
+                    radius: 6
+                    color: Agents.working > 0 ? Qt.alpha(root.accent, 0.14) : Qt.alpha(root.fg, 0.07)
+                    border.width: 0.5
+                    border.color: Agents.working > 0 ? Qt.alpha(root.accent, 0.3) : Qt.alpha(root.fg, 0.14)
+
+                    StyledText {
+                        id: agStatusText
+
+                        anchors.centerIn: parent
+                        text: Agents.working > 0 ? qsTr("%1 actif(s)").arg(Agents.working) : qsTr("en veille")
+                        color: Agents.working > 0 ? root.accent : root.fgDim
+                        font.pointSize: 8
+                        font.weight: Font.DemiBold
+                        font.features: {
+                            "tnum": 1
+                        }
+                    }
                 }
             }
 
@@ -5450,18 +5605,20 @@ Item {
                     visible: Agents.shown.length > 3
                     text: qsTr("+%1").arg(Agents.shown.length - 3)
                     color: root.fgDim
-                    font.pointSize: 9.5
+                    font.pointSize: 9
+                    font.weight: Font.Bold
                 }
 
                 // « Nettoyer » : retire d'un coup les agents qui ont fini
                 Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                     visible: Agents.doneShown > 0
-                    width: cleanRow.implicitWidth + 20
-                    height: 26
-                    radius: 13
+                    width: cleanRow.implicitWidth + 18
+                    height: 24
+                    radius: 8
                     color: "transparent"
-                    // Verre liquide (iOS 27) sous le contenu
+                    border.width: 0.5
+                    border.color: Qt.alpha(root.fg, 0.16)
                     GlassControl {
                         anchors.fill: parent
                         radius: parent.radius
@@ -5490,14 +5647,14 @@ Item {
                             anchors.verticalCenter: parent.verticalCenter
                             text: "cleaning_services"
                             color: root.fg
-                            fontStyle: Tokens.font.icon.size(12).build()
+                            fontStyle: Tokens.font.icon.size(11.5).build()
                             fill: 1
                         }
                         StyledText {
                             anchors.verticalCenter: parent.verticalCenter
                             text: Agents.doneShown > 1 ? qsTr("Nettoyer (%1)").arg(Agents.doneShown) : qsTr("Nettoyer")
                             color: root.fg
-                            font.pointSize: 9
+                            font.pointSize: 8.5
                             font.weight: Font.DemiBold
                         }
                     }
@@ -5517,9 +5674,9 @@ Item {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: agHead.bottom
-                anchors.topMargin: 10
-                anchors.leftMargin: 14
-                anchors.rightMargin: 14
+                anchors.topMargin: 8
+                anchors.leftMargin: 18
+                anchors.rightMargin: 18
 
                 Repeater {
                     model: Agents.shown.slice(0, 3)
@@ -5532,21 +5689,35 @@ Item {
                         readonly property bool waiting: modelData.status === "waiting"
                         readonly property bool done: !working && !waiting
                         readonly property color tint: Agents.kindColour(modelData.kind)
+                        readonly property color stateCol: waiting ? "#ff9f0a" : working ? tint : root.green
 
                         width: parent?.width ?? 0
                         height: 52
 
                         Rectangle {
                             anchors.fill: parent
-                            anchors.topMargin: 3
-                            anchors.bottomMargin: 3
-                            radius: 16
-                            color: Qt.alpha(root.fg, agArea.pressed ? 0.14 : agArea.containsMouse ? 0.08 : 0)
+                            anchors.topMargin: 2.5
+                            anchors.bottomMargin: 2.5
+                            radius: 13
+                            color: Qt.alpha(root.fg, agArea.pressed ? 0.13 : agArea.containsMouse ? 0.08 : 0.04)
+                            border.width: 0.5
+                            border.color: Qt.alpha(agRow.stateCol, agArea.containsMouse ? 0.34 : 0.15)
 
                             Behavior on color {
                                 ColorAnimation {
                                     duration: 120
                                 }
+                            }
+
+                            // Filet latéral d'état matériel
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.leftMargin: 5
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 2.5
+                                height: 22
+                                radius: 1.25
+                                color: agRow.stateCol
                             }
                         }
 
@@ -5554,9 +5725,9 @@ Item {
                             id: agSpin
 
                             anchors.left: parent.left
-                            anchors.leftMargin: 12
+                            anchors.leftMargin: 15
                             anchors.verticalCenter: parent.verticalCenter
-                            tint: agRow.waiting ? "#ff9f0a" : agRow.working ? agRow.tint : root.green
+                            tint: agRow.stateCol
                             spinning: agRow.working && root.mode === "agents"
                             done: !agRow.working && !agRow.waiting
                             letter: agRow.modelData.kind === "codex" ? "X" : "C"
@@ -5575,7 +5746,7 @@ Item {
                                 elide: Text.ElideRight
                                 text: `${agRow.modelData.project}${agRow.modelData.title ? " · " + agRow.modelData.title : ""}`
                                 color: root.fg
-                                font.pointSize: 10
+                                font.pointSize: 9.8
                                 font.weight: Font.DemiBold
                             }
                             StyledText {
@@ -5583,7 +5754,7 @@ Item {
                                 elide: Text.ElideRight
                                 text: agRow.waiting ? qsTr("Attend ta réponse") : agRow.working ? (agRow.modelData.tool || qsTr("Réfléchit…")) : (agRow.modelData.reply || qsTr("Prêt"))
                                 color: agRow.waiting ? "#ff9f0a" : root.fgDim
-                                font.pointSize: 9
+                                font.pointSize: 8.8
                             }
                         }
 
@@ -5615,7 +5786,7 @@ Item {
                                 anchors.right: parent.right
                                 text: Agents.elapsed(agRow.modelData.since)
                                 color: agRow.working ? agRow.tint : root.fgDim
-                                font.pointSize: 9.5
+                                font.pointSize: 9.2
                                 font.weight: Font.Bold
                                 font.features: {
                                     "tnum": 1
@@ -5626,7 +5797,7 @@ Item {
                                 visible: agRow.modelData.files > 0
                                 text: qsTr("%n fichier(s)", "", agRow.modelData.files)
                                 color: root.fgDim
-                                font.pointSize: 8
+                                font.pointSize: 7.8
                             }
                         }
 
@@ -5824,13 +5995,84 @@ Item {
 
         // ── minuteur / chronomètre au survol ──
         Face {
+            id: clockFace
+
+            readonly property color clockTone: root.pomoOn && root.pomoPhase === "rest" ? root.green : "#ff9f0a"
+            readonly property real clockRatio: root.clockTotal > 0 ? Math.max(0, Math.min(1, root.clockValue / root.clockTotal)) : ((root.clockValue % 60000) / 60000)
+
             active: root.mode === "clock"
             slide: root.pageSlide("clock")
 
-            Column {
-                x: 30
+            // Cadran chronographe vectoriel 270° à gauche
+            Rectangle {
+                id: clockDial
+
+                anchors.left: parent.left
+                anchors.leftMargin: 26
                 y: 22
-                width: clockButtons.x - x - 20
+                width: 52
+                height: 52
+                radius: 16
+                color: Qt.alpha(clockFace.clockTone, 0.11)
+                border.width: 0.5
+                border.color: Qt.alpha(clockFace.clockTone, 0.32)
+
+                Shape {
+                    anchors.centerIn: parent
+                    width: 40
+                    height: 40
+                    preferredRendererType: Shape.CurveRenderer
+
+                    ShapePath {
+                        strokeWidth: 2.6
+                        strokeColor: Qt.alpha(clockFace.clockTone, 0.2)
+                        fillColor: "transparent"
+                        capStyle: ShapePath.RoundCap
+
+                        PathAngleArc {
+                            centerX: 20
+                            centerY: 20
+                            radiusX: 16.5
+                            radiusY: 16.5
+                            startAngle: 135
+                            sweepAngle: 270
+                        }
+                    }
+
+                    ShapePath {
+                        strokeWidth: 2.8
+                        strokeColor: clockFace.clockTone
+                        fillColor: "transparent"
+                        capStyle: ShapePath.RoundCap
+
+                        PathAngleArc {
+                            centerX: 20
+                            centerY: 20
+                            radiusX: 16.5
+                            radiusY: 16.5
+                            startAngle: 135
+                            sweepAngle: Math.max(4, 270 * clockFace.clockRatio)
+                        }
+                    }
+                }
+
+                MaterialIcon {
+                    anchors.centerIn: parent
+                    text: root.pomoOn ? "timelapse" : root.clockKind === "timer" ? "timer" : "timer_play"
+                    color: clockFace.clockTone
+                    fontStyle: Tokens.font.icon.size(18).build()
+                    fill: 1
+                    opacity: root.clockPaused > 0 ? 0.5 : 1
+                }
+            }
+
+            Column {
+                anchors.left: clockDial.right
+                anchors.leftMargin: 14
+                anchors.right: clockButtons.left
+                anchors.rightMargin: 16
+                anchors.verticalCenter: clockDial.verticalCenter
+                spacing: 0
 
                 // Libellé entier : sur deux lignes s'il ne tient pas sur une (au-delà « … »)
                 StyledText {
@@ -5842,19 +6084,21 @@ Item {
                     elide: Text.ElideRight
                     text: {
                         if (root.pomoOn)
-                            return qsTr("Pomodoro · %1 · session %2").arg(root.clockLabel).arg(root.pomoRound);
+                            return qsTr("POMODORO · %1 · SESSION %2").arg(root.clockLabel.toUpperCase()).arg(root.pomoRound);
                         if (root.clockKind === "timer")
-                            return root.clockLabel ? qsTr("Minuteur · %1").arg(root.clockLabel) : qsTr("Minuteur");
-                        return root.laps.length > 0 ? qsTr("Chronomètre · %1 tours").arg(root.laps.length) : qsTr("Chronomètre");
+                            return root.clockLabel ? qsTr("MINUTEUR · %1").arg(root.clockLabel.toUpperCase()) : qsTr("MINUTEUR");
+                        return root.laps.length > 0 ? qsTr("CHRONOMÈTRE · %1 TOURS").arg(root.laps.length) : qsTr("CHRONOMÈTRE");
                     }
-                    color: root.fgDim
-                    font.pointSize: 9
-                    font.weight: Font.Medium
+                    color: clockFace.clockTone
+                    font.pointSize: 7.5
+                    font.weight: Font.Bold
+                    font.letterSpacing: 0.7
                 }
                 StyledText {
                     text: root.fmtClock(root.clockValue)
-                    color: root.pomoOn && root.pomoPhase === "rest" ? root.green : "#ff9f0a"
-                    font.pointSize: 30
+                    color: root.fg
+                    opacity: root.clockPaused > 0 ? 0.6 : 1
+                    font.pointSize: 27
                     font.weight: Font.Bold
                     font.features: {
                         "tnum": 1
@@ -5867,8 +6111,8 @@ Item {
 
                 anchors.right: parent.right
                 anchors.rightMargin: 26
-                y: 38
-                spacing: 10
+                anchors.verticalCenter: clockDial.verticalCenter
+                spacing: 8
 
                 ShotButton {
                     visible: root.clockKind === "timer"
@@ -5891,6 +6135,26 @@ Item {
                 ShotButton {
                     icon: "open_in_new"
                     onClicked: root.openClockApp()
+                }
+            }
+
+            // Piste linéaire horlogère en bas du cadran
+            Rectangle {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: 26
+                anchors.rightMargin: 26
+                y: 86
+                height: 4
+                radius: 2
+                color: Qt.alpha(root.fg, 0.08)
+                clip: true
+
+                Rectangle {
+                    width: parent.width * clockFace.clockRatio
+                    height: parent.height
+                    radius: 2
+                    color: clockFace.clockTone
                 }
             }
         }
@@ -7288,55 +7552,86 @@ Item {
             slide: root.pageSlide("recordFull")
 
             Rectangle {
-                id: recFullDot
+                id: recBadge
 
                 anchors.left: parent.left
                 anchors.leftMargin: 24
                 anchors.verticalCenter: parent.verticalCenter
-                width: 12
-                height: 12
-                radius: 6
-                color: root.red
+                width: 44
+                height: 44
+                radius: 13
+                color: Qt.alpha(root.red, Recorder.paused ? 0.08 : 0.14)
+                border.width: 0.5
+                border.color: Qt.alpha(root.red, Recorder.paused ? 0.22 : 0.38)
 
-                SequentialAnimation on opacity {
-                    running: root.mode === "recordFull" && !Recorder.paused
-                    loops: Animation.Infinite
-                    NumberAnimation {
-                        to: 0.3
-                        duration: 700
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 24
+                    height: 24
+                    radius: 12
+                    color: "transparent"
+                    border.width: 1.5
+                    border.color: Qt.alpha(root.red, Recorder.paused ? 0.25 : 0.45)
+                }
+
+                Rectangle {
+                    id: recFullDot
+
+                    anchors.centerIn: parent
+                    width: 11
+                    height: 11
+                    radius: Recorder.paused ? 3 : 5.5
+                    color: root.red
+
+                    Behavior on radius {
+                        NumberAnimation {
+                            duration: 200
+                        }
                     }
-                    NumberAnimation {
-                        to: 1
-                        duration: 700
+
+                    SequentialAnimation on opacity {
+                        running: root.mode === "recordFull" && !Recorder.paused
+                        loops: Animation.Infinite
+                        NumberAnimation {
+                            to: 0.32
+                            duration: 700
+                        }
+                        NumberAnimation {
+                            to: 1
+                            duration: 700
+                        }
                     }
                 }
             }
 
             Column {
-                anchors.left: recFullDot.right
-                anchors.leftMargin: 12
-                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: recBadge.right
+                anchors.leftMargin: 14
+                anchors.verticalCenter: recBadge.verticalCenter
+                spacing: 1
 
+                StyledText {
+                    text: (Recorder.paused ? qsTr("Capture en pause") : qsTr("Enregistrement studio")).toUpperCase()
+                    color: Recorder.paused ? root.fgDim : root.red
+                    font.pointSize: 7.2
+                    font.weight: Font.Bold
+                    font.letterSpacing: 0.7
+                }
                 StyledText {
                     text: root.fmtTime(Recorder.elapsed)
                     color: root.fg
-                    font.pointSize: 18
+                    font.pointSize: 19
                     font.weight: Font.Bold
                     font.features: {
                         "tnum": 1
                     }
                 }
-                StyledText {
-                    text: Recorder.paused ? qsTr("En pause") : qsTr("Enregistrement")
-                    color: root.fgDim
-                    font.pointSize: 8.5
-                }
             }
 
             Row {
                 anchors.right: parent.right
-                anchors.rightMargin: 20
-                anchors.verticalCenter: parent.verticalCenter
+                anchors.rightMargin: 22
+                anchors.verticalCenter: recBadge.verticalCenter
                 spacing: 8
 
                 ShotButton {
@@ -7389,13 +7684,17 @@ Item {
             Rectangle {
                 id: callBadge
 
+                readonly property color callTint: root.callMuted ? root.red : root.green
+
                 anchors.left: parent.left
                 anchors.leftMargin: 26
                 anchors.verticalCenter: parent.verticalCenter
                 width: 48
                 height: 48
-                radius: 24
-                color: Qt.alpha(root.callMuted ? root.red : root.green, 0.22)
+                radius: 14
+                color: Qt.alpha(callTint, 0.12)
+                border.width: 0.5
+                border.color: Qt.alpha(callTint, 0.34)
 
                 Behavior on color {
                     ColorAnimation {
@@ -7403,11 +7702,47 @@ Item {
                     }
                 }
 
+                Shape {
+                    anchors.fill: parent
+                    preferredRendererType: Shape.CurveRenderer
+
+                    ShapePath {
+                        fillColor: "transparent"
+                        strokeColor: Qt.alpha(root.fg, 0.1)
+                        strokeWidth: 2.6
+                        capStyle: ShapePath.RoundCap
+
+                        PathAngleArc {
+                            centerX: 24
+                            centerY: 24
+                            radiusX: 16.5
+                            radiusY: 16.5
+                            startAngle: 135
+                            sweepAngle: 270
+                        }
+                    }
+                    ShapePath {
+                        fillColor: "transparent"
+                        strokeColor: callBadge.callTint
+                        strokeWidth: 2.6
+                        capStyle: ShapePath.RoundCap
+
+                        PathAngleArc {
+                            centerX: 24
+                            centerY: 24
+                            radiusX: 16.5
+                            radiusY: 16.5
+                            startAngle: 135
+                            sweepAngle: root.callMuted ? 60 : 270
+                        }
+                    }
+                }
+
                 MaterialIcon {
                     anchors.centerIn: parent
                     text: root.camInUse ? "videocam" : "call"
-                    color: root.callMuted ? root.red : root.green
-                    fontStyle: Tokens.font.icon.size(20).build()
+                    color: callBadge.callTint
+                    fontStyle: Tokens.font.icon.size(17).build()
                     fill: 1
                 }
             }
@@ -7423,17 +7758,26 @@ Item {
                 StyledText {
                     width: parent.width
                     elide: Text.ElideRight
+                    text: (root.callMuted ? qsTr("Micro coupé") : root.camInUse ? qsTr("Visioconférence") : qsTr("Liaison audio")).toUpperCase()
+                    color: root.callMuted ? root.red : root.green
+                    font.pointSize: 7.2
+                    font.weight: Font.Bold
+                    font.letterSpacing: 0.7
+                }
+                StyledText {
+                    width: parent.width
+                    elide: Text.ElideRight
                     text: root.callTitle
                     color: root.fg
-                    font.pointSize: 12
+                    font.pointSize: 11.5
                     font.weight: Font.Bold
                 }
                 StyledText {
                     width: parent.width
                     elide: Text.ElideRight
-                    text: `${root.fmtLong(root.callElapsed)} · ${root.callMuted ? qsTr("micro coupé") : root.camInUse ? qsTr("visio") : qsTr("appel")}${root.callWindow && root.callAppName && !root.callTitle.includes(root.callAppName) ? " · " + root.callAppName : ""}`
-                    color: root.callMuted ? root.red : root.fgDim
-                    font.pointSize: 9
+                    text: `${root.fmtLong(root.callElapsed)}${root.callWindow && root.callAppName && !root.callTitle.includes(root.callAppName) ? " · " + root.callAppName : ""}`
+                    color: root.fgDim
+                    font.pointSize: 8.8
                     font.features: {
                         "tnum": 1
                     }
@@ -7783,90 +8127,167 @@ Item {
 
             Column {
                 anchors.left: parent.left
-                anchors.leftMargin: 30
-                y: 24
+                anchors.leftMargin: 28
+                y: 22
+                spacing: 2
 
-                StyledText {
-                    text: Time.format("HH:mm")
-                    color: root.fg
-                    font.pointSize: 26
-                    font.weight: Font.Bold
-                    font.features: {
-                        "tnum": 1
+                Row {
+                    spacing: 1
+
+                    StyledText {
+                        anchors.baseline: infoMinTxt.baseline
+                        text: Time.format("HH")
+                        color: root.fg
+                        font.pointSize: 26
+                        font.weight: Font.Bold
+                        font.features: {
+                            "tnum": 1
+                        }
+                    }
+                    StyledText {
+                        anchors.baseline: infoMinTxt.baseline
+                        text: ":"
+                        color: root.accent
+                        font.pointSize: 24
+                        font.weight: Font.Bold
+                        opacity: (Time.date.getSeconds() % 2 === 0) ? 0.95 : 0.35
+
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: 420
+                                easing.type: Easing.InOutSine
+                            }
+                        }
+                    }
+                    StyledText {
+                        id: infoMinTxt
+
+                        text: Time.format("mm")
+                        color: root.fg
+                        font.pointSize: 26
+                        font.weight: Font.Bold
+                        font.features: {
+                            "tnum": 1
+                        }
+                    }
+                    Rectangle {
+                        anchors.verticalCenter: infoMinTxt.verticalCenter
+                        anchors.verticalCenterOffset: 2
+                        width: infoSecTxt.implicitWidth + 9
+                        height: 17
+                        radius: 5
+                        color: Qt.alpha(root.fg, 0.06)
+                        border.width: 0.5
+                        border.color: Qt.alpha(root.fg, 0.14)
+
+                        StyledText {
+                            id: infoSecTxt
+
+                            anchors.centerIn: parent
+                            text: Time.format("ss")
+                            color: root.fgDim
+                            font.pointSize: 8
+                            font.weight: Font.Bold
+                            font.features: {
+                                "tnum": 1
+                            }
+                        }
                     }
                 }
                 StyledText {
-                    text: {
-                        const s = Qt.locale("fr_FR").toString(Time.date, "dddd d MMMM");
-                        return s.charAt(0).toUpperCase() + s.slice(1);
-                    }
+                    text: Qt.locale("fr_FR").toString(Time.date, "dddd d MMMM").toUpperCase()
                     color: root.fgDim
-                    font.pointSize: 9
-                    font.weight: Font.Medium
+                    font.pointSize: 7.5
+                    font.weight: Font.Bold
+                    font.letterSpacing: 0.7
                 }
             }
 
-            // Météo détaillée + batterie
-            Column {
+            // Météo détaillée + batterie dans un puits de télémétrie biseauté
+            Rectangle {
                 anchors.right: parent.right
-                anchors.rightMargin: 30
-                y: 22
-                spacing: 3
+                anchors.rightMargin: 26
+                y: 18
+                width: Math.max(infoTelCol.implicitWidth + 22, 148)
+                height: 66
+                radius: 13
+                color: Qt.alpha(root.fg, 0.05)
+                border.width: 0.5
+                border.color: Qt.alpha(root.fg, 0.12)
 
-                Row {
-                    anchors.right: parent.right
-                    spacing: 7
+                Column {
+                    id: infoTelCol
 
-                    MaterialIcon {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: Weather.icon
-                        color: root.accent
-                        fontStyle: Tokens.font.icon.size(18).build()
-                        fill: 1
-                    }
-                    StyledText {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: Weather.cc ? Weather.temp : "—"
-                        color: root.fg
-                        font.pointSize: 17
-                        font.weight: Font.Bold
-                    }
-                }
-                StyledText {
                     anchors.right: parent.right
-                    visible: !!Weather.cc
-                    text: Weather.description
-                    color: root.fgDim
-                    font.pointSize: 8.5
-                    font.weight: Font.Medium
-                }
-                Row {
-                    anchors.right: parent.right
-                    spacing: 10
+                    anchors.rightMargin: 11
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 2
 
-                    StyledText {
-                        anchors.verticalCenter: parent.verticalCenter
-                        visible: !!Weather.cc
-                        text: qsTr("Ressenti %1 · %2 %").arg(Weather.feelsLike).arg(Weather.humidity)
-                        color: root.fgDim
-                        font.pointSize: 8
+                    Row {
+                        anchors.right: parent.right
+                        spacing: 6
+
+                        MaterialIcon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: Weather.icon
+                            color: root.accent
+                            fontStyle: Tokens.font.icon.size(16).build()
+                            fill: 1
+                        }
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: Weather.cc ? Weather.temp : "—"
+                            color: root.fg
+                            font.pointSize: 15
+                            font.weight: Font.Bold
+                            font.features: {
+                                "tnum": 1
+                            }
+                        }
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: !!Weather.cc
+                            text: (Weather.description || "").toUpperCase()
+                            color: root.fgDim
+                            font.pointSize: 7
+                            font.weight: Font.Bold
+                            font.letterSpacing: 0.5
+                        }
                     }
                     Row {
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: 5
-                        visible: UPower.displayDevice.isLaptopBattery
+                        anchors.right: parent.right
+                        spacing: 9
 
                         StyledText {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: `${Math.round(root.battery * 100)} %`
-                            color: root.battCharging ? root.green : root.battery < 0.2 ? root.red : root.fgDim
-                            font.pointSize: 8.5
-                            font.weight: Font.DemiBold
+                            visible: !!Weather.cc
+                            text: qsTr("Ressenti %1 · %2 %").arg(Weather.feelsLike).arg(Weather.humidity)
+                            color: root.fgDim
+                            font.pointSize: 7.8
+                            font.features: {
+                                "tnum": 1
+                            }
                         }
-                        BatteryGlyph {
+                        Row {
                             anchors.verticalCenter: parent.verticalCenter
-                            pct: root.battery
-                            charging: root.battCharging
+                            spacing: 5
+                            visible: UPower.displayDevice.isLaptopBattery
+
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: `${Math.round(root.battery * 100)} %`
+                                color: root.battCharging ? root.green : root.battery < 0.2 ? root.red : root.fg
+                                font.pointSize: 8
+                                font.weight: Font.Bold
+                                font.features: {
+                                    "tnum": 1
+                                }
+                            }
+                            BatteryGlyph {
+                                anchors.verticalCenter: parent.verticalCenter
+                                pct: root.battery
+                                charging: root.battCharging
+                            }
                         }
                     }
                 }
@@ -7912,12 +8333,12 @@ Item {
 
                         required property var modelData
 
-                        width: Math.min(chipRow.implicitWidth + 20, infoFlow.width)
-                        height: 26
-                        radius: 13
-                        color: Qt.alpha(chip.modelData.tint, 0.14)
-                        border.width: 1
-                        border.color: Qt.alpha(chip.modelData.tint, 0.22)
+                        width: Math.min(chipRow.implicitWidth + 18, infoFlow.width)
+                        height: 25
+                        radius: 8
+                        color: Qt.alpha(chip.modelData.tint, 0.11)
+                        border.width: 0.5
+                        border.color: Qt.alpha(chip.modelData.tint, 0.28)
 
                         Row {
                             id: chipRow
@@ -7939,8 +8360,11 @@ Item {
                                 elide: Text.ElideRight
                                 text: chip.modelData.text
                                 color: root.fg
-                                font.pointSize: 8.5
+                                font.pointSize: 8.2
                                 font.weight: Font.DemiBold
+                                font.features: {
+                                    "tnum": 1
+                                }
                             }
                         }
                     }
@@ -7955,9 +8379,9 @@ Item {
 
             Row {
                 anchors.left: parent.left
-                anchors.leftMargin: 26
+                anchors.leftMargin: 24
                 anchors.verticalCenter: parent.verticalCenter
-                anchors.verticalCenterOffset: -3
+                anchors.verticalCenterOffset: -4
                 spacing: 8
 
                 PerfRing {
@@ -7988,21 +8412,32 @@ Item {
                 }
             }
 
-            // Réseau : débit descendant / montant + courbe
+            // Réseau : débit descendant / montant + courbe dans un puits biseauté
             Item {
                 anchors.right: parent.right
-                anchors.rightMargin: 26
+                anchors.rightMargin: 24
                 anchors.verticalCenter: parent.verticalCenter
-                anchors.verticalCenterOffset: -3
-                width: 140
-                height: 90
+                anchors.verticalCenterOffset: -4
+                width: 142
+                height: 92
 
                 Rectangle {
                     anchors.fill: parent
-                    radius: 18
-                    color: Qt.alpha(root.fg, 0.06)
-                    border.width: 1
-                    border.color: Qt.alpha(root.fg, 0.08)
+                    radius: 15
+                    color: Qt.alpha(root.fg, 0.05)
+                    border.width: 0.5
+                    border.color: Qt.alpha(root.fg, 0.14)
+                    clip: true
+
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        height: 1
+                        color: Qt.alpha("#ffffff", 0.14)
+                    }
                 }
 
                 SparklineItem {
@@ -8056,7 +8491,7 @@ Item {
                     anchors.left: parent.left
                     anchors.top: parent.top
                     anchors.leftMargin: 12
-                    anchors.topMargin: 9
+                    anchors.topMargin: 8
                     spacing: 1
 
                     NetLine {
@@ -8074,12 +8509,17 @@ Item {
             }
         }
 
-        // Points de page (heure ↔ performances) : la pastille active s'allonge
-        Row {
+        // Dock de pagination : capsule optique abritant les pastilles de page
+        Rectangle {
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: parent.bottom
-            anchors.bottomMargin: 7
-            spacing: 5
+            anchors.bottomMargin: 5
+            width: pageDotsRow.implicitWidth + 12
+            height: 11
+            radius: 5.5
+            color: Qt.alpha(root.fg, 0.05)
+            border.width: 0.5
+            border.color: Qt.alpha(root.fg, 0.12)
             opacity: root.paged && root.shelf.length === 0 ? 1 : 0
             visible: opacity > 0.01
 
@@ -8089,35 +8529,42 @@ Item {
                 }
             }
 
-            Repeater {
-                model: root.pages.length
+            Row {
+                id: pageDotsRow
 
-                Rectangle {
-                    required property int index
-                    readonly property bool current: root.pageIndex === index
+                anchors.centerIn: parent
+                spacing: 4.5
 
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: current ? 16 : 5
-                    height: 5
-                    radius: 2.5
-                    color: current ? Qt.alpha(root.fg, 0.85) : Qt.alpha(root.fg, 0.28)
+                Repeater {
+                    model: root.pages.length
 
-                    Behavior on width {
-                        NumberAnimation {
-                            duration: 420
-                            easing.type: Easing.OutBack
-                            easing.overshoot: 1.6
+                    Rectangle {
+                        required property int index
+                        readonly property bool current: root.pageIndex === index
+
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: current ? 15 : 4.5
+                        height: 4.5
+                        radius: 2.25
+                        color: current ? root.accent : Qt.alpha(root.fg, 0.28)
+
+                        Behavior on width {
+                            NumberAnimation {
+                                duration: 380
+                                easing.type: Easing.OutBack
+                                easing.overshoot: 1.4
+                            }
                         }
-                    }
-                    Behavior on color {
-                        ColorAnimation {
-                            duration: 300
+                        Behavior on color {
+                            ColorAnimation {
+                                duration: 260
+                            }
                         }
-                    }
 
-                    TapHandler {
-                        margin: 6
-                        onTapped: root.flipPage(parent.index - root.pageIndex)
+                        TapHandler {
+                            margin: 6
+                            onTapped: root.flipPage(parent.index - root.pageIndex)
+                        }
                     }
                 }
             }
@@ -8192,22 +8639,31 @@ Item {
                 anchors.right: bigBars.left
                 anchors.rightMargin: 12
                 anchors.verticalCenter: bigCover.verticalCenter
-                spacing: 2
+                spacing: 1
 
+                StyledText {
+                    width: parent.width
+                    elide: Text.ElideRight
+                    text: (Players.getIdentity(root.player) || qsTr("Audio")).toUpperCase()
+                    color: root.accent
+                    font.pointSize: 7
+                    font.weight: Font.Bold
+                    font.letterSpacing: 0.7
+                }
                 StyledText {
                     width: parent.width
                     elide: Text.ElideRight
                     text: root.player?.trackTitle ?? ""
                     color: root.fg
-                    font.pointSize: 11
-                    font.weight: Font.DemiBold
+                    font.pointSize: 11.2
+                    font.weight: Font.Bold
                 }
                 StyledText {
                     width: parent.width
                     elide: Text.ElideRight
                     text: root.player?.trackArtist || Players.getIdentity(root.player)
                     color: root.fgDim
-                    font.pointSize: 9
+                    font.pointSize: 8.8
                 }
             }
 
@@ -8430,7 +8886,7 @@ Item {
         return `${v.replace(".", ",")} libres`;
     }
 
-    // Anneau de jauge animé (couleur qui chauffe avec la charge)
+    // Cadran chronographe 270° (puits optique interne + couleur qui chauffe avec la charge)
     component PerfRing: Column {
         id: ring
 
@@ -8457,29 +8913,39 @@ Item {
             width: 56
             height: 56
 
+            Rectangle {
+                anchors.centerIn: parent
+                width: 40
+                height: 40
+                radius: 20
+                color: Qt.alpha(ring.tint, 0.08)
+                border.width: 0.5
+                border.color: Qt.alpha(ring.tint, 0.24)
+            }
+
             Shape {
                 anchors.fill: parent
                 preferredRendererType: Shape.CurveRenderer
 
                 ShapePath {
                     fillColor: "transparent"
-                    strokeColor: Qt.alpha(root.fg, 0.1)
-                    strokeWidth: 5
+                    strokeColor: Qt.alpha(root.fg, 0.11)
+                    strokeWidth: 4.2
                     capStyle: ShapePath.RoundCap
 
                     PathAngleArc {
                         centerX: 28
                         centerY: 28
-                        radiusX: 25
-                        radiusY: 25
-                        startAngle: 0
-                        sweepAngle: 360
+                        radiusX: 24.5
+                        radiusY: 24.5
+                        startAngle: 135
+                        sweepAngle: 270
                     }
                 }
                 ShapePath {
                     fillColor: "transparent"
                     strokeColor: ring.tint
-                    strokeWidth: 5
+                    strokeWidth: 4.2
                     capStyle: ShapePath.RoundCap
 
                     Behavior on strokeColor {
@@ -8491,10 +8957,10 @@ Item {
                     PathAngleArc {
                         centerX: 28
                         centerY: 28
-                        radiusX: 25
-                        radiusY: 25
-                        startAngle: -90
-                        sweepAngle: Math.max(0.01, Math.min(1, ring.shown)) * 360
+                        radiusX: 24.5
+                        radiusY: 24.5
+                        startAngle: 135
+                        sweepAngle: Math.max(0.01, Math.min(1, ring.shown)) * 270
                     }
                 }
             }
@@ -8506,7 +8972,7 @@ Item {
                 MaterialIcon {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: ring.icon
-                    color: root.fgDim
+                    color: ring.tint
                     fontStyle: Tokens.font.icon.size(10).build()
                     fill: 1
                 }
@@ -8514,7 +8980,7 @@ Item {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: ring.centerText || Math.round(ring.shown * 100) + "%"
                     color: root.fg
-                    font.pointSize: 10.5
+                    font.pointSize: 10
                     font.weight: Font.Bold
                     font.features: {
                         "tnum": 1
@@ -8525,10 +8991,11 @@ Item {
 
         StyledText {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: ring.label
+            text: ring.label.toUpperCase()
             color: root.fg
-            font.pointSize: 8
-            font.weight: Font.DemiBold
+            font.pointSize: 7.2
+            font.weight: Font.Bold
+            font.letterSpacing: 0.6
         }
         StyledText {
             anchors.horizontalCenter: parent.horizontalCenter
