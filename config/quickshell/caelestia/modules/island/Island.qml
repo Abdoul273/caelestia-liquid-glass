@@ -37,6 +37,7 @@ Item {
     // Batterie lue directement dans le noyau (charge_now / charge_full), plus précise et réactive qu'UPower
     property real sysBattery: -1
     property string sysBattStatus
+    property real sysWatts: 0
     readonly property real battery: sysBattery >= 0 ? sysBattery : (UPower.displayDevice.percentage ?? 0)
     readonly property bool charging: !UPower.onBattery
     // Batterie au repos : icône toujours (sur portable), pourcentage seulement faible ou en charge
@@ -71,7 +72,7 @@ Item {
     Process {
         id: battProc
 
-        command: ["sh", "-c", "for b in /sys/class/power_supply/BAT*; do cat $b/status; if [ -e $b/charge_now ]; then cat $b/charge_now $b/charge_full; else cat $b/energy_now $b/energy_full; fi; break; done 2>/dev/null"]
+        command: ["sh", "-c", "for b in /sys/class/power_supply/BAT*; do cat $b/status; if [ -e $b/charge_now ]; then cat $b/charge_now $b/charge_full; else cat $b/energy_now $b/energy_full; fi; if [ -e $b/power_now ]; then cat $b/power_now; echo 1; elif [ -e $b/current_now ] && [ -e $b/voltage_now ]; then cat $b/current_now $b/voltage_now; fi; break; done 2>/dev/null"]
         stdout: StdioCollector {
             onStreamFinished: {
                 const l = text.trim().split("\n");
@@ -79,6 +80,13 @@ Item {
                 if (l.length >= 3 && full > 0) {
                     root.sysBattStatus = l[0].trim();
                     root.sysBattery = Math.round(Math.max(0, Math.min(1, now / full)) * 100) / 100;
+                }
+                if (l.length >= 5) {
+                    const a = parseFloat(l[3]), b = parseFloat(l[4]);
+                    if (!isNaN(a) && !isNaN(b)) {
+                        const w = b === 1 ? (a / 1e6) : ((a / 1e6) * (b / 1e6));
+                        root.sysWatts = Math.round(w * 10) / 10;
+                    }
                 }
             }
         }
@@ -137,11 +145,22 @@ Item {
         return "bluetooth";
     }
 
-    // Chargeur : état au moment de l'évènement + animation (remplissage, éclair, reflet)
+    // Chargeur : état au moment de l'évènement + chorégraphie MagSafe / cellule plasma liquide
     property bool chargePlugged
     property real chargeFill: 1
     property real chargeBolt: 1
     property real chargeShine: 0
+    property real chargeWave: 1
+    property real chargeRing: 1
+    property real chargeLivePhase: 0
+
+    NumberAnimation on chargeLivePhase {
+        running: root.mode === "charge"
+        from: 0
+        to: 1
+        duration: 1600
+        loops: Animation.Infinite
+    }
 
     Timer {
         id: chargeSwap
@@ -149,7 +168,7 @@ Item {
         interval: 260
         onTriggered: {
             root.chargePlugged = root.charging;
-            root.flash("charge", root.charging ? 3600 : 2600);
+            root.flash("charge", root.charging ? 4400 : 3200);
             chargeIntro.restart();
         }
     }
@@ -159,38 +178,64 @@ Item {
 
         ScriptAction {
             script: {
-                root.chargeFill = root.chargePlugged ? 0 : 1;
+                root.chargeFill = root.chargePlugged ? 0 : 1.12;
                 root.chargeBolt = 0;
                 root.chargeShine = 0;
+                root.chargeWave = 0;
+                root.chargeRing = 0;
             }
         }
         PauseAnimation {
-            duration: 150
+            duration: 80
         }
         ParallelAnimation {
             NumberAnimation {
                 target: root
                 property: "chargeBolt"
                 to: 1
-                duration: 560
+                duration: 620
                 easing.type: Easing.OutBack
-                easing.overshoot: 3
+                easing.overshoot: 2.4
+            }
+            NumberAnimation {
+                target: root
+                property: "chargeWave"
+                to: 1
+                duration: 1350
+                easing.type: Easing.OutQuart
             }
             NumberAnimation {
                 target: root
                 property: "chargeFill"
                 to: 1
-                duration: 1100
-                easing.type: Easing.OutCubic
+                duration: 1150
+                easing.type: Easing.OutExpo
             }
-        }
-        NumberAnimation {
-            target: root
-            property: "chargeShine"
-            from: 0
-            to: 1
-            duration: 900
-            easing.type: Easing.InOutQuad
+            SequentialAnimation {
+                PauseAnimation {
+                    duration: 160
+                }
+                NumberAnimation {
+                    target: root
+                    property: "chargeRing"
+                    to: 1
+                    duration: 1100
+                    easing.type: Easing.OutExpo
+                }
+            }
+            SequentialAnimation {
+                PauseAnimation {
+                    duration: 280
+                }
+                NumberAnimation {
+                    target: root
+                    property: "chargeShine"
+                    from: 0
+                    to: 1
+                    duration: 950
+                    easing.type: Easing.InOutCubic
+                }
+            }
         }
     }
 
@@ -1407,7 +1452,7 @@ Item {
         case "wifi":
             return wifiOn ? Qt.size(456, 86) : Qt.size(364, 58);
         case "charge":
-            return chargePlugged ? Qt.size(420, 78) : Qt.size(330, 48);
+            return chargePlugged ? Qt.size(464, 88) : Qt.size(410, 74);
         case "player":
             return Qt.size(pageWidth, (hasLyrics ? 202 : 178) + (shelf.length > 0 ? shelfExtra : 10));
         case "info":
@@ -1439,7 +1484,7 @@ Item {
 
     property real w: target.width
     property real h: target.height
-    readonly property real radius: Math.min(h / 2, mode === "player" || mode === "info" || mode === "perf" || mode === "notif" || mode === "bt" || mode === "wifi" || mode === "shot" || mode === "clock" || mode === "drop" || mode === "toast" || mode === "done" || mode === "alarm" || mode === "count" || mode === "recordFull" || mode === "callFull" || mode === "transferFull" || mode === "taskDue" || mode === "fileDone" || mode === "caffeine" || mode === "center" || mode === "agents" || mode === "perm" || mode === "agentDone" || (mode === "charge" && chargePlugged) ? 32 : h / 2)
+    readonly property real radius: Math.min(h / 2, mode === "player" || mode === "info" || mode === "perf" || mode === "notif" || mode === "bt" || mode === "wifi" || mode === "shot" || mode === "clock" || mode === "drop" || mode === "toast" || mode === "done" || mode === "alarm" || mode === "count" || mode === "recordFull" || mode === "callFull" || mode === "transferFull" || mode === "taskDue" || mode === "fileDone" || mode === "caffeine" || mode === "center" || mode === "agents" || mode === "perm" || mode === "agentDone" || mode === "charge" ? 32 : h / 2)
 
     function flash(kind: string, ms: int): void {
         if (!ready)
@@ -1661,6 +1706,8 @@ Item {
     onChargingChanged: {
         if (!UPower.displayDevice.ready || !UPower.displayDevice.isLaptopBattery)
             return;
+        if (!battProc.running)
+            battProc.running = true;
         if (pulse === "charge") {
             // Laisse la vue précédente s'effacer avant d'afficher la nouvelle
             pulse = "";
@@ -1668,7 +1715,7 @@ Item {
             return;
         }
         chargePlugged = charging;
-        flash("charge", charging ? 3600 : 2600);
+        flash("charge", charging ? 4400 : 3200);
         chargeIntro.restart();
     }
 
@@ -1815,6 +1862,11 @@ Item {
             root.wifiSsid = (ssid && ssid !== "off") ? ssid : (root.wifiName || "Fibre-5G");
             root.wifiOn = ssid !== "off";
             root.flash("wifi", root.wifiOn ? 4400 : 2800);
+        }
+        function testCharge(state: string): void {
+            root.chargePlugged = state !== "off";
+            root.flash("charge", root.chargePlugged ? 4400 : 3200);
+            chargeIntro.restart();
         }
         function state(): string {
             root.saveClock();
@@ -3959,56 +4011,145 @@ Item {
             }
         }
 
-        // ── chargeur branché / débranché ──
+        // ── chargeur branché / débranché : capsule plasma liquide, onde MagSafe, flux d'énergie et anneau double-arc ──
         Face {
             id: chargeFace
 
             readonly property bool plugged: root.chargePlugged
-            readonly property color tone: plugged ? root.green : root.battery < 0.2 ? root.red : root.fg
+            readonly property bool lowBatt: !plugged && root.battery < 0.2
+            readonly property color primaryTone: plugged ? root.green : lowBatt ? root.red : "#ff9f0a"
+            readonly property color secondaryTone: plugged ? "#38bdf8" : lowBatt ? "#ff6961" : "#ffd60a"
+            readonly property real shownLevel: Math.max(0.05, Math.min(1, root.battery * Math.min(1, root.chargeFill)))
+            readonly property string timeText: {
+                const d = UPower.displayDevice;
+                const t = plugged ? d.timeToFull : d.timeToEmpty;
+                if (!t || t <= 0)
+                    return plugged ? (root.battery >= 0.99 ? qsTr("Charge complète") : qsTr("Alimentation secteur active")) : qsTr("Mode autonomie actif");
+                const h = Math.floor(t / 3600);
+                const m = Math.round((t % 3600) / 60);
+                const dur = h > 0 ? `${h} h ${m.toString().padStart(2, "0")}` : `${m} min`;
+                return plugged ? qsTr("Pleine dans %1").arg(dur) : qsTr("%1 d'autonomie").arg(dur);
+            }
 
             active: root.mode === "charge"
 
-            // Grande batterie : se remplit depuis zéro, reflet qui la traverse, éclair qui surgit
+            // Capsule d'énergie liquide + onde de choc MagSafe
             Item {
                 id: bigBatt
 
                 anchors.left: parent.left
-                anchors.leftMargin: chargeFace.plugged ? 24 : 20
+                anchors.leftMargin: 20
                 anchors.verticalCenter: parent.verticalCenter
-                width: chargeFace.plugged ? 58 : 34
-                height: chargeFace.plugged ? 28 : 17
+                width: chargeFace.plugged ? 74 : 62
+                height: chargeFace.plugged ? 36 : 30
 
+                // Deux ondes MagSafe expansives au branchement / débranchement
+                Repeater {
+                    model: 2
+
+                    Rectangle {
+                        required property int index
+                        readonly property real t: Math.max(0, Math.min(1, root.chargeWave * 1.35 - index * 0.24))
+
+                        anchors.centerIn: shell
+                        width: shell.width + t * 34
+                        height: shell.height + t * 28
+                        radius: height / 2
+                        color: "transparent"
+                        border.width: 2
+                        border.color: index === 0 ? chargeFace.primaryTone : chargeFace.secondaryTone
+                        opacity: t > 0 && t < 1 ? (1 - t) * 0.72 : 0
+                    }
+                }
+
+                // Halo respirant derrière la cellule
+                Rectangle {
+                    anchors.centerIn: shell
+                    width: shell.width + 14
+                    height: shell.height + 12
+                    radius: height / 2
+                    color: Qt.alpha(chargeFace.primaryTone, chargeFace.plugged ? (0.14 + 0.08 * Math.sin(root.chargeLivePhase * Math.PI * 2)) : 0.1)
+                    scale: 0.6 + 0.4 * root.chargeBolt
+                }
+
+                // Corps vitré de la batterie
                 Rectangle {
                     id: shell
 
-                    width: parent.width - (chargeFace.plugged ? 5 : 3)
+                    width: parent.width - 6
                     height: parent.height
-                    radius: height * 0.3
-                    color: "transparent"
-                    border.width: chargeFace.plugged ? 2 : 1.4
-                    border.color: Qt.alpha(root.fg, 0.4)
+                    radius: height * 0.34
+                    color: Qt.alpha(root.fg, 0.06)
+                    border.width: 2
+                    border.color: Qt.alpha(chargeFace.primaryTone, chargeFace.plugged ? 0.65 : 0.45)
+                    scale: 0.72 + 0.28 * Math.min(1, root.chargeBolt)
 
+                    // Jauge plasma liquide avec dégradé dynamique
                     Rectangle {
                         id: fillBar
 
-                        readonly property real m: chargeFace.plugged ? 3.5 : 2.5
+                        readonly property real m: 3.5
 
                         x: m
                         y: m
                         height: parent.height - m * 2
-                        width: Math.max(radius * 2, (parent.width - m * 2) * root.battery * root.chargeFill)
-                        radius: shell.radius - m / 2
-                        color: chargeFace.tone
+                        width: Math.max(radius * 2, (parent.width - m * 2) * chargeFace.shownLevel)
+                        radius: shell.radius - m * 0.65
                         clip: true
 
-                        // Reflet lumineux qui balaie la batterie pendant la charge
+                        gradient: Gradient {
+                            orientation: Gradient.Horizontal
+                            GradientStop {
+                                position: 0.0
+                                color: chargeFace.plugged ? "#059669" : (chargeFace.lowBatt ? "#b91c1c" : "#d97706")
+                            }
+                            GradientStop {
+                                position: 0.65
+                                color: chargeFace.primaryTone
+                            }
+                            GradientStop {
+                                position: 1.0
+                                color: chargeFace.secondaryTone
+                            }
+                        }
+
+                        // Particules / micro-bulles d'énergie qui traversent la cellule pendant la charge
+                        Repeater {
+                            model: chargeFace.plugged ? 5 : 0
+
+                            Rectangle {
+                                required property int index
+                                readonly property real p: (root.chargeLivePhase + index * 0.2) % 1
+
+                                x: p * Math.max(10, fillBar.width - 6)
+                                y: (fillBar.height - height) * (0.2 + 0.6 * ((index * 37) % 10) / 10) + Math.sin((p + index) * Math.PI * 2) * 2.5
+                                width: 4 + (index % 2) * 2
+                                height: width
+                                radius: width / 2
+                                color: "#ffffff"
+                                opacity: Math.sin(p * Math.PI) * 0.65
+                            }
+                        }
+
+                        // Crête lumineuse au bord du liquide
                         Rectangle {
                             visible: chargeFace.plugged
-                            width: 22
-                            height: parent.height * 2
-                            y: -parent.height / 2
-                            x: -width + (parent.width + width * 2) * root.chargeShine
-                            rotation: 20
+                            anchors.right: parent.right
+                            width: 6
+                            height: parent.height
+                            radius: 3
+                            color: "#ffffff"
+                            opacity: 0.45 + 0.35 * Math.sin(root.chargeLivePhase * Math.PI * 2)
+                        }
+
+                        // Balayage holographique continu
+                        Rectangle {
+                            visible: chargeFace.plugged
+                            width: 24
+                            height: parent.height * 2.2
+                            y: -parent.height * 0.6
+                            x: -width + (parent.width + width * 2) * ((root.chargeShine + root.chargeLivePhase * 0.6) % 1)
+                            rotation: 22
                             gradient: Gradient {
                                 orientation: Gradient.Horizontal
                                 GradientStop {
@@ -4017,7 +4158,7 @@ Item {
                                 }
                                 GradientStop {
                                     position: 0.5
-                                    color: Qt.rgba(1, 1, 1, 0.55)
+                                    color: Qt.rgba(1, 1, 1, 0.52)
                                 }
                                 GradientStop {
                                     position: 1
@@ -4028,80 +4169,257 @@ Item {
                     }
                 }
 
+                // Borne positive (+) de la batterie
                 Rectangle {
                     anchors.left: shell.right
-                    anchors.leftMargin: 1.5
+                    anchors.leftMargin: 2
                     anchors.verticalCenter: shell.verticalCenter
-                    width: chargeFace.plugged ? 3 : 2
-                    height: shell.height * 0.36
+                    width: 3.5
+                    height: shell.height * 0.4
                     radius: width / 2
-                    color: Qt.alpha(root.fg, 0.4)
+                    color: Qt.alpha(chargeFace.primaryTone, 0.7)
+                    scale: 0.7 + 0.3 * Math.min(1, root.chargeBolt)
                 }
 
-                // Halo vert derrière l'éclair
+                // Médaillon central : éclair MagSafe (branché) ou prise débranchée (sur batterie)
                 Rectangle {
                     anchors.centerIn: shell
-                    visible: chargeFace.plugged
-                    width: 30
-                    height: 30
-                    radius: 15
-                    color: root.green
-                    opacity: 0.35 * (1 - root.chargeBolt) * (root.chargeBolt > 0 ? 1 : 0)
-                    scale: 0.6 + root.chargeBolt * 1.2
-                }
-
-                MaterialIcon {
-                    anchors.centerIn: shell
-                    visible: chargeFace.plugged
-                    text: "bolt"
-                    color: "white"
-                    style: Text.Outline
-                    styleColor: Qt.alpha("black", 0.25)
-                    fontStyle: Tokens.font.icon.size(17).build()
-                    fill: 1
+                    width: chargeFace.plugged ? 24 : 20
+                    height: width
+                    radius: width / 2
+                    color: Qt.rgba(0.05, 0.08, 0.1, 0.62)
+                    border.width: 1
+                    border.color: Qt.alpha("#ffffff", 0.38)
                     scale: root.chargeBolt
+
+                    MaterialIcon {
+                        anchors.centerIn: parent
+                        text: chargeFace.plugged ? "bolt" : "power_off"
+                        color: chargeFace.plugged ? "#ffd60a" : chargeFace.primaryTone
+                        fontStyle: Tokens.font.icon.size(chargeFace.plugged ? 16 : 13).build()
+                        fill: 1
+                    }
                 }
             }
 
+            // Colonne centrale : titre + badge Watts + conduit d'énergie temps réel
             Column {
                 anchors.left: bigBatt.right
-                anchors.leftMargin: 16
+                anchors.leftMargin: 14
+                anchors.right: chargeRight.left
+                anchors.rightMargin: 12
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 1
+                spacing: 5
 
-                StyledText {
-                    text: chargeFace.plugged ? qsTr("En charge") : qsTr("Sur batterie")
-                    color: root.fg
-                    font.pointSize: chargeFace.plugged ? 11 : 10
-                    font.weight: Font.DemiBold
-                }
-                StyledText {
-                    visible: text.length > 0
-                    text: {
-                        const d = UPower.displayDevice;
-                        const t = chargeFace.plugged ? d.timeToFull : d.timeToEmpty;
-                        if (!t || t <= 0)
-                            return chargeFace.plugged ? qsTr("Branché") : "";
-                        const h = Math.floor(t / 3600);
-                        const m = Math.round((t % 3600) / 60);
-                        const dur = h > 0 ? `${h} h ${m.toString().padStart(2, "0")}` : `${m} min`;
-                        return chargeFace.plugged ? qsTr("Pleine dans %1").arg(dur) : qsTr("%1 restantes").arg(dur);
+                Row {
+                    width: parent.width
+                    spacing: 6
+
+                    StyledText {
+                        elide: Text.ElideRight
+                        text: chargeFace.plugged ? (root.battery >= 0.995 ? qsTr("Batterie chargée") : qsTr("Charge rapide")) : (chargeFace.lowBatt ? qsTr("Batterie faible") : qsTr("Sur batterie"))
+                        color: root.fg
+                        font.pointSize: chargeFace.plugged ? 11.5 : 10.5
+                        font.weight: Font.Bold
                     }
-                    color: root.fgDim
-                    font.pointSize: 9
+
+                    // Pastille de puissance en Watts (ou Secteur / Autonomie)
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: wattRow.implicitWidth + 10
+                        height: 18
+                        radius: 9
+                        color: Qt.alpha(chargeFace.primaryTone, 0.17)
+                        border.width: 1
+                        border.color: Qt.alpha(chargeFace.primaryTone, 0.42)
+                        scale: 0.6 + 0.4 * Math.min(1, root.chargeRing)
+                        opacity: Math.min(1, root.chargeRing)
+
+                        Row {
+                            id: wattRow
+
+                            anchors.centerIn: parent
+                            spacing: 2
+
+                            MaterialIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: chargeFace.plugged ? "bolt" : "eco"
+                                color: chargeFace.primaryTone
+                                fontStyle: Tokens.font.icon.size(10).build()
+                                fill: 1
+                            }
+
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: root.sysWatts >= 1 ? `${Math.round(root.sysWatts)} W` : (chargeFace.plugged ? "AC" : qsTr("Éco"))
+                                color: chargeFace.primaryTone
+                                font.pointSize: 7.5
+                                font.weight: Font.Bold
+                            }
+                        }
+                    }
+                }
+
+                // Conduit d'impulsions énergétiques + estimation de durée
+                Row {
+                    spacing: 7
+                    opacity: Math.min(1, root.chargeRing)
+
+                    MaterialIcon {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: chargeFace.plugged ? "power" : "schedule"
+                        color: chargeFace.primaryTone
+                        fontStyle: Tokens.font.icon.size(13).build()
+                    }
+
+                    // Piste d'impulsions lumineuses quand le chargeur alimente la batterie
+                    Item {
+                        visible: chargeFace.plugged
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 44
+                        height: 8
+
+                        Rectangle {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width
+                            height: 2
+                            radius: 1
+                            color: Qt.alpha(root.fg, 0.14)
+                        }
+
+                        Repeater {
+                            model: 3
+
+                            Rectangle {
+                                required property int index
+                                readonly property real p: (root.chargeLivePhase + index / 3) % 1
+
+                                y: 1
+                                x: p * (parent.width - width)
+                                width: 8
+                                height: 6
+                                radius: 3
+                                color: index === 0 ? "#38bdf8" : root.green
+                                opacity: Math.sin(p * Math.PI) * 0.95
+                            }
+                        }
+                    }
+
+                    StyledText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: chargeFace.timeText
+                        color: root.fgDim
+                        font.pointSize: 8.5
+                        font.weight: Font.Medium
+                    }
                 }
             }
 
-            StyledText {
+            // Anneau d'énergie MagSafe double-arc + compteur tabulaire à droite
+            Item {
+                id: chargeRight
+
                 anchors.right: parent.right
-                anchors.rightMargin: 24
+                anchors.rightMargin: 18
                 anchors.verticalCenter: parent.verticalCenter
-                text: `${Math.round(root.battery * 100 * root.chargeFill)} %`
-                color: chargeFace.tone
-                font.pointSize: chargeFace.plugged ? 18 : 11
-                font.weight: Font.Bold
-                font.features: {
-                    "tnum": 1
+                width: chargeFace.plugged ? 54 : 46
+                height: width
+
+                readonly property real ringR: width * 0.5 - 4.5
+                readonly property real sweepDeg: 360 * chargeFace.shownLevel * Math.min(1, root.chargeRing)
+                readonly property real tipRad: (-90 + sweepDeg) * Math.PI / 180
+
+                Shape {
+                    anchors.fill: parent
+                    preferredRendererType: Shape.CurveRenderer
+
+                    // Piste externe
+                    ShapePath {
+                        strokeWidth: 4.2
+                        strokeColor: root.fgFaint
+                        fillColor: "transparent"
+                        capStyle: ShapePath.RoundCap
+
+                        PathAngleArc {
+                            centerX: chargeRight.width * 0.5
+                            centerY: chargeRight.height * 0.5
+                            radiusX: chargeRight.ringR
+                            radiusY: chargeRight.ringR
+                            startAngle: -90
+                            sweepAngle: 360
+                        }
+                    }
+
+                    // Halo interne cyan/ambre
+                    ShapePath {
+                        strokeWidth: 1.8
+                        strokeColor: Qt.alpha(chargeFace.secondaryTone, 0.25)
+                        fillColor: "transparent"
+                        capStyle: ShapePath.RoundCap
+
+                        PathAngleArc {
+                            centerX: chargeRight.width * 0.5
+                            centerY: chargeRight.height * 0.5
+                            radiusX: chargeRight.ringR - 5
+                            radiusY: chargeRight.ringR - 5
+                            startAngle: -90
+                            sweepAngle: 360 * Math.min(1, root.chargeRing)
+                        }
+                    }
+
+                    // Arc principal de niveau de batterie
+                    ShapePath {
+                        strokeWidth: 4.2
+                        strokeColor: chargeFace.primaryTone
+                        fillColor: "transparent"
+                        capStyle: ShapePath.RoundCap
+
+                        PathAngleArc {
+                            centerX: chargeRight.width * 0.5
+                            centerY: chargeRight.height * 0.5
+                            radiusX: chargeRight.ringR
+                            radiusY: chargeRight.ringR
+                            startAngle: -90
+                            sweepAngle: chargeRight.sweepDeg
+                        }
+                    }
+                }
+
+                // Perle lumineuse en tête de l'arc MagSafe
+                Rectangle {
+                    visible: chargeFace.plugged
+                    x: chargeRight.width * 0.5 + Math.cos(chargeRight.tipRad) * chargeRight.ringR - width * 0.5
+                    y: chargeRight.height * 0.5 + Math.sin(chargeRight.tipRad) * chargeRight.ringR - height * 0.5
+                    width: 7
+                    height: 7
+                    radius: 3.5
+                    color: "#ffffff"
+                    border.width: 1.5
+                    border.color: chargeFace.secondaryTone
+                }
+
+                Column {
+                    anchors.centerIn: parent
+                    spacing: -2
+
+                    StyledText {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: `${Math.round(root.battery * 100 * Math.min(1, root.chargeFill))}`
+                        color: root.fg
+                        font.pointSize: chargeFace.plugged ? 10 : 9
+                        font.weight: Font.Bold
+                        font.features: {
+                            "tnum": 1
+                        }
+                    }
+
+                    StyledText {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: "%"
+                        color: chargeFace.primaryTone
+                        font.pointSize: 6.5
+                        font.weight: Font.Bold
+                    }
                 }
             }
         }
