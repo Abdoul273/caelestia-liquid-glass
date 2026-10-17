@@ -7885,8 +7885,48 @@ Item {
 
         // ── lecteur complet ──
         Face {
+            id: playerFace
+
             active: root.mode === "player"
             slide: root.pageSlide("player")
+
+            readonly property real rawBass: {
+                if (!root.playing || Audio.cava.values.length === 0)
+                    return 0;
+                const n = Math.min(4, Audio.cava.values.length);
+                let s = 0;
+                for (let i = 0; i < n; i++)
+                    s += Audio.cava.values[i] ?? 0;
+                return Math.min(1, s / n);
+            }
+            property real bassLevel: rawBass
+            Behavior on bassLevel {
+                NumberAnimation {
+                    duration: 85
+                    easing.type: Easing.OutQuad
+                }
+            }
+
+            // Halo liquide réactif aux basses derrière la pochette
+            Rectangle {
+                anchors.centerIn: bigCover
+                width: bigCover.width + 12
+                height: bigCover.height + 12
+                radius: bigCover.radius + 5
+                scale: 1 + playerFace.bassLevel * 0.14
+                opacity: root.playing ? 0.18 + playerFace.bassLevel * 0.48 : 0
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: Qt.alpha(root.accent, 0.65) }
+                    GradientStop { position: 0.5; color: Qt.alpha("#38bdf8", 0.55) }
+                    GradientStop { position: 1.0; color: Qt.alpha(root.green, 0.5) }
+                }
+                border.width: 1
+                border.color: Qt.alpha("#ffffff", 0.22 + playerFace.bassLevel * 0.35)
+                Behavior on opacity {
+                    NumberAnimation { duration: 180 }
+                }
+            }
 
             Cover {
                 id: bigCover
@@ -7895,6 +7935,15 @@ Item {
                 y: 26
                 size: 66
                 radius: 15
+                scale: 1 + playerFace.bassLevel * 0.035
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: parent.radius
+                    color: "transparent"
+                    border.width: 1
+                    border.color: Qt.alpha("#ffffff", 0.18 + playerFace.bassLevel * 0.25)
+                }
             }
 
             Column {
@@ -7942,8 +7991,8 @@ Item {
                 anchors.rightMargin: 28
                 anchors.verticalCenter: bigCover.verticalCenter
                 count: 6
-                barWidth: 3
-                maxHeight: 22
+                barWidth: 3.2
+                maxHeight: 24
             }
 
             Item {
@@ -7952,13 +8001,14 @@ Item {
                 readonly property real len: root.player?.length ?? 0
                 readonly property real pos: root.player?.position ?? 0
                 readonly property bool known: len > 0 && len < 2147483
+                readonly property real playRatio: known ? Math.max(0, Math.min(1, pos / len)) : 0
 
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.leftMargin: 26
                 anchors.rightMargin: 26
                 y: root.hasLyrics ? 130 : 104
-                height: 16
+                height: 18
 
                 StyledText {
                     id: posText
@@ -7974,42 +8024,106 @@ Item {
                     }
                 }
 
-                Rectangle {
+                Item {
                     id: seekTrack
+
+                    readonly property int barCount: 28
+                    readonly property real hoverRatio: seekArea.containsMouse ? Math.max(0, Math.min(1, (seekArea.mouseX - 6) / Math.max(1, width))) : -1
 
                     anchors.left: posText.right
                     anchors.right: lenText.left
                     anchors.leftMargin: 6
                     anchors.rightMargin: 6
                     anchors.verticalCenter: parent.verticalCenter
-                    height: seekArea.containsMouse ? 8 : 5
-                    radius: height / 2
-                    color: root.fgFaint
+                    height: 16
 
-                    Behavior on height {
-                        NumberAnimation {
-                            duration: 150
+                    Row {
+                        anchors.centerIn: parent
+                        width: parent.width
+                        height: parent.height
+                        spacing: 2
+
+                        Repeater {
+                            model: seekTrack.barCount
+
+                            Rectangle {
+                                required property int index
+                                readonly property real barRatio: (index + 0.5) / seekTrack.barCount
+                                readonly property bool played: progress.known && barRatio <= progress.playRatio
+                                readonly property bool hoveredBar: seekTrack.hoverRatio >= 0 && Math.abs(barRatio - seekTrack.hoverRatio) < 0.08
+                                readonly property real baseWave: 0.28 + 0.34 * Math.abs(Math.sin((index + 1) * 0.72 + Math.cos(index * 0.35)))
+                                readonly property real liveSpec: {
+                                    if (!root.playing || Audio.cava.values.length === 0)
+                                        return 0;
+                                    const ci = Math.floor(barRatio * Audio.cava.values.length);
+                                    return Math.min(1, Audio.cava.values[ci] ?? 0);
+                                }
+                                readonly property real amp: Math.min(1, baseWave * (root.playing ? 0.55 : 0.75) + liveSpec * 0.65 + (hoveredBar ? 0.22 : 0))
+
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: Math.max(2, (seekTrack.width - (seekTrack.barCount - 1) * 2) / seekTrack.barCount)
+                                height: Math.max(3, Math.round((seekArea.containsMouse ? 15 : 13) * amp))
+                                radius: width / 2
+                                color: played ? root.accent : (seekTrack.hoverRatio >= 0 && barRatio <= seekTrack.hoverRatio ? Qt.alpha(root.fg, 0.35) : root.fgFaint)
+
+                                gradient: Gradient {
+                                    GradientStop {
+                                        position: 0.0
+                                        color: played ? "#38bdf8" : (seekTrack.hoverRatio >= 0 && barRatio <= seekTrack.hoverRatio ? Qt.alpha(root.fg, 0.38) : root.fgFaint)
+                                    }
+                                    GradientStop {
+                                        position: 1.0
+                                        color: played ? root.accent : (seekTrack.hoverRatio >= 0 && barRatio <= seekTrack.hoverRatio ? Qt.alpha(root.fg, 0.28) : root.fgFaint)
+                                    }
+                                }
+
+                                Behavior on height {
+                                    NumberAnimation {
+                                        duration: 85
+                                        easing.type: Easing.OutQuad
+                                    }
+                                }
+                            }
                         }
                     }
 
+                    // Curseur goutte de verre lumineuse
                     Rectangle {
-                        height: parent.height
-                        radius: parent.radius
-                        width: progress.known ? parent.width * Math.min(1, progress.pos / progress.len) : 0
-                        color: root.fg
+                        visible: progress.known
+                        x: Math.max(0, Math.min(seekTrack.width - width, progress.playRatio * seekTrack.width - width / 2))
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: seekArea.containsMouse ? 5 : 3.5
+                        height: seekArea.containsMouse ? 16 : 12
+                        radius: width / 2
+                        color: "#ffffff"
+                        border.width: 1
+                        border.color: Qt.alpha(root.accent, 0.65)
+
+                        Behavior on width {
+                            NumberAnimation { duration: 120 }
+                        }
+                        Behavior on height {
+                            NumberAnimation { duration: 120 }
+                        }
                     }
 
                     MouseArea {
                         id: seekArea
+
+                        function seekAt(mx: real): void {
+                            const ratio = Math.max(0, Math.min(1, (mx - 6) / Math.max(1, seekTrack.width)));
+                            root.player.position = ratio * progress.len;
+                        }
 
                         anchors.fill: parent
                         anchors.margins: -6
                         hoverEnabled: true
                         enabled: progress.known && (root.player?.canSeek ?? false)
                         cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                        onClicked: e => {
-                            const ratio = Math.max(0, Math.min(1, (e.x - 6) / seekTrack.width));
-                            root.player.position = ratio * progress.len;
+                        onClicked: e => seekAt(e.x)
+                        onPositionChanged: e => {
+                            if (pressed)
+                                seekAt(e.x);
                         }
                     }
                 }
@@ -8317,6 +8431,15 @@ Item {
         property int count: 5
         property real barWidth: 3
         property real maxHeight: 16
+        property real phase: 0
+
+        NumberAnimation on phase {
+            running: Players.active?.isPlaying ?? false
+            from: 0
+            to: Math.PI * 2
+            duration: 1400
+            loops: Animation.Infinite
+        }
 
         spacing: 2.5
         height: maxHeight
@@ -8328,10 +8451,14 @@ Item {
                 required property int index
                 readonly property int total: Audio.cava.values.length
                 readonly property real v: {
-                    if (!(Players.active?.isPlaying ?? false) || total === 0)
-                        return 0.15;
+                    if (!(Players.active?.isPlaying ?? false))
+                        return 0.16;
+                    const wave = 0.22 + 0.14 * Math.sin(bars.phase + index * 1.15);
+                    if (total === 0)
+                        return wave;
                     const i = Math.floor((index + 0.5) / bars.count * total);
-                    return Math.max(0.15, Math.min(1, Audio.cava.values[i] ?? 0));
+                    const cv = Audio.cava.values[i] ?? 0;
+                    return Math.max(wave, Math.min(1, cv * 0.88 + wave * 0.25));
                 }
 
                 anchors.verticalCenter: parent.verticalCenter
@@ -8339,10 +8466,28 @@ Item {
                 height: Math.max(bars.barWidth, bars.maxHeight * v)
                 radius: bars.barWidth / 2
                 color: Colours.palette.m3primary
+                border.width: 0.5
+                border.color: Qt.alpha("#ffffff", 0.22 + v * 0.25)
+
+                gradient: Gradient {
+                    GradientStop {
+                        position: 0.0
+                        color: "#38bdf8"
+                    }
+                    GradientStop {
+                        position: 0.55
+                        color: Colours.palette.m3primary
+                    }
+                    GradientStop {
+                        position: 1.0
+                        color: Qt.tint(Colours.palette.m3primary, Qt.alpha("#34d399", 0.35))
+                    }
+                }
 
                 Behavior on height {
                     NumberAnimation {
-                        duration: 90
+                        duration: 75
+                        easing.type: Easing.OutQuad
                     }
                 }
             }
