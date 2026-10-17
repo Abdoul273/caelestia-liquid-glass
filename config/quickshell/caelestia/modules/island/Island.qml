@@ -723,13 +723,16 @@ Item {
     onCapsLockChanged: if (capsKnown && ready) blip(capsLock ? "keyboard_capslock_badge" : "keyboard_capslock", capsLock ? qsTr("Verr. Maj activé") : qsTr("Verr. Maj désactivé"), "", capsLock)
 
     readonly property string wifiName: Nmcli.active?.ssid ?? ""
+    readonly property bool wifiHwEnabled: Nmcli.wifiEnabled
     property bool wifiKnown: false
     property bool wifiOn: false
     property string wifiSsid: ""
     readonly property int wifiStrength: Nmcli.active?.strength ?? 88
     readonly property int wifiFreq: Nmcli.active?.frequency ?? 5180
-    readonly property string wifiBand: wifiFreq >= 5900 ? "6 GHz" : wifiFreq >= 4900 ? "5 GHz" : wifiFreq > 0 ? "2,4 GHz" : "Wi-Fi"
+    readonly property string wifiBand: wifiFreq >= 5900 ? "6 GHz" : wifiFreq >= 4900 ? "5 GHz" : wifiFreq > 0 ? "2,4 GHz" : "5 GHz"
     readonly property bool wifiSecure: Nmcli.active?.isSecure ?? true
+    readonly property string wifiSecLabel: (Nmcli.active?.security ?? "") !== "" ? Nmcli.active.security : (wifiSecure ? "WPA3" : qsTr("Ouvert"))
+    readonly property string wifiQualityText: wifiStrength >= 80 ? qsTr("Signal excellent") : wifiStrength >= 55 ? qsTr("Signal fort") : wifiStrength >= 35 ? qsTr("Signal moyen") : qsTr("Signal faible")
 
     onWifiNameChanged: {
         if (!wifiKnown) {
@@ -744,7 +747,16 @@ Item {
         wifiOn = wifiName !== "";
         if (wifiName)
             wifiSsid = wifiName;
-        flash("wifi", wifiOn ? 4000 : 2300);
+        flash("wifi", wifiOn ? 4400 : 2800);
+    }
+
+    onWifiHwEnabledChanged: {
+        if (!wifiKnown || !ready)
+            return;
+        if (!wifiHwEnabled && wifiOn) {
+            wifiOn = false;
+            flash("wifi", 2800);
+        }
     }
 
     readonly property bool vpnOn: VPN.connected
@@ -1393,7 +1405,7 @@ Item {
         case "bt":
             return btOn ? Qt.size(400, 76) : Qt.size(330, 48);
         case "wifi":
-            return wifiOn ? Qt.size(420, 78) : Qt.size(340, 50);
+            return wifiOn ? Qt.size(456, 86) : Qt.size(364, 58);
         case "charge":
             return chargePlugged ? Qt.size(420, 78) : Qt.size(330, 48);
         case "player":
@@ -1800,9 +1812,9 @@ Item {
             root.ringAlarm(label || qsTr("Alarme"), Time.format("HH:mm"));
         }
         function testWifi(ssid: string): void {
-            root.wifiSsid = ssid || root.wifiName || "Fibre-5G";
+            root.wifiSsid = (ssid && ssid !== "off") ? ssid : (root.wifiName || "Fibre-5G");
             root.wifiOn = ssid !== "off";
-            root.flash("wifi", root.wifiOn ? 4000 : 2300);
+            root.flash("wifi", root.wifiOn ? 4400 : 2800);
         }
         function state(): string {
             root.saveClock();
@@ -1818,14 +1830,28 @@ Item {
             doneShake.restart();
         if (pulse === "bt" && btOn)
             btIntro.restart();
-        if (pulse === "wifi" && wifiOn)
-            wifiIntro.restart();
+        if (pulse === "wifi") {
+            if (wifiOn)
+                wifiIntro.restart();
+            else
+                wifiOutro.restart();
+        }
     }
 
-    // Arrivée du Wi-Fi : l'orbe surgit, trois arcs radar balaient, les barres et la jauge se remplissent
+    // ── Chorégraphie Wi-Fi : balayage séquentiel des 4 arcs vectoriels, flux de paquets et jauge ──
     property real wifiPop: 1
     property real wifiWave: 1
     property real wifiRing: 1
+    property real wifiSlash: 0
+    property real wifiLivePhase: 0
+
+    NumberAnimation on wifiLivePhase {
+        running: root.mode === "wifi"
+        from: 0
+        to: 1
+        duration: 1500
+        loops: Animation.Infinite
+    }
 
     SequentialAnimation {
         id: wifiIntro
@@ -1835,36 +1861,78 @@ Item {
                 root.wifiPop = 0;
                 root.wifiWave = 0;
                 root.wifiRing = 0;
+                root.wifiSlash = 0;
             }
         }
         PauseAnimation {
-            duration: 100
+            duration: 70
         }
         ParallelAnimation {
             NumberAnimation {
                 target: root
                 property: "wifiPop"
                 to: 1
-                duration: 600
+                duration: 620
                 easing.type: Easing.OutBack
-                easing.overshoot: 2.3
+                easing.overshoot: 2.1
             }
             NumberAnimation {
                 target: root
                 property: "wifiWave"
                 to: 1
-                duration: 1650
-                easing.type: Easing.OutCubic
+                duration: 1250
+                easing.type: Easing.OutQuart
             }
             SequentialAnimation {
                 PauseAnimation {
-                    duration: 220
+                    duration: 180
                 }
                 NumberAnimation {
                     target: root
                     property: "wifiRing"
                     to: 1
-                    duration: 1050
+                    duration: 1100
+                    easing.type: Easing.OutExpo
+                }
+            }
+        }
+    }
+
+    SequentialAnimation {
+        id: wifiOutro
+
+        ScriptAction {
+            script: {
+                root.wifiPop = 0;
+                root.wifiWave = 1;
+                root.wifiRing = 0;
+                root.wifiSlash = 0;
+            }
+        }
+        ParallelAnimation {
+            NumberAnimation {
+                target: root
+                property: "wifiPop"
+                to: 1
+                duration: 480
+                easing.type: Easing.OutBack
+            }
+            NumberAnimation {
+                target: root
+                property: "wifiWave"
+                to: 0.18
+                duration: 620
+                easing.type: Easing.OutCubic
+            }
+            SequentialAnimation {
+                PauseAnimation {
+                    duration: 160
+                }
+                NumberAnimation {
+                    target: root
+                    property: "wifiSlash"
+                    to: 1
+                    duration: 460
                     easing.type: Easing.OutCubic
                 }
             }
@@ -2655,87 +2723,194 @@ Item {
             }
         }
 
-        // ── Wi-Fi : ondes radar expansives, barres dynamiques, fréquence et anneau de signal ──
+        // ── Wi-Fi : balise radar à arcs vectoriels courbes, flux de paquets temps réel et télémétrie spectre ──
         Face {
             active: root.mode === "wifi"
 
+            // Balise d'ondes Wi-Fi vectorielles dessinées et animées arc par arc
             Item {
-                id: wifiIconBox
+                id: wifiBeacon
 
                 anchors.left: parent.left
-                anchors.leftMargin: root.wifiOn ? 22 : 18
+                anchors.leftMargin: root.wifiOn ? 18 : 16
                 anchors.verticalCenter: parent.verticalCenter
-                width: root.wifiOn ? 46 : 30
-                height: width
+                width: root.wifiOn ? 62 : 44
+                height: root.wifiOn ? 60 : 42
 
-                // Trois ondes radar qui partent de l'orbe Wi-Fi
-                Repeater {
-                    model: 3
+                readonly property real cx: width * 0.5
+                readonly property real cy: root.wifiOn ? 46 : 33
+                readonly property color wavePrimary: !root.wifiOn ? root.red : root.wifiStrength < 35 ? "#ff9f0a" : "#38bdf8"
+                readonly property color waveSecondary: !root.wifiOn ? root.red : root.wifiStrength < 35 ? "#ffd60a" : root.green
 
-                    Rectangle {
-                        required property int index
-                        readonly property real t: Math.max(0, Math.min(1, root.wifiWave * 1.35 - index * 0.22))
+                // Halo lumineux derrière les arcs Wi-Fi
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: parent.width * (0.88 + 0.14 * Math.sin(root.wifiLivePhase * Math.PI * 2))
+                    height: width
+                    radius: width / 2
+                    color: Qt.alpha(wifiBeacon.wavePrimary, root.wifiOn ? 0.14 : 0.12)
+                    border.width: 1
+                    border.color: Qt.alpha(wifiBeacon.waveSecondary, root.wifiOn ? 0.28 : 0.22)
+                    scale: 0.45 + 0.55 * root.wifiPop
+                }
 
-                        anchors.centerIn: parent
-                        width: parent.width * (1 + t * 0.95)
-                        height: width
-                        radius: width / 2
-                        color: "transparent"
-                        border.width: 2
-                        border.color: index === 0 ? root.green : root.accent
-                        opacity: root.wifiOn && t > 0 && t < 1 ? (1 - t) * 0.75 : 0
+                // Onde sonar externe qui s'échappe vers le haut en continu
+                Shape {
+                    anchors.fill: parent
+                    visible: root.wifiOn
+                    preferredRendererType: Shape.CurveRenderer
+                    opacity: Math.max(0, (1 - root.wifiLivePhase) * 0.65 * root.wifiWave)
+
+                    ShapePath {
+                        strokeWidth: 2.2
+                        strokeColor: wifiBeacon.waveSecondary
+                        fillColor: "transparent"
+                        capStyle: ShapePath.RoundCap
+
+                        PathAngleArc {
+                            centerX: wifiBeacon.cx
+                            centerY: wifiBeacon.cy
+                            radiusX: 28 + root.wifiLivePhase * 13
+                            radiusY: 28 + root.wifiLivePhase * 13
+                            startAngle: -136
+                            sweepAngle: 92
+                        }
                     }
                 }
 
-                Rectangle {
+                // Les 3 arcs courbes Wi-Fi qui s'ouvrent en éventail + ondulation lumineuse continue
+                Shape {
                     anchors.fill: parent
-                    radius: width / 2
-                    color: root.wifiOn ? Qt.alpha(root.accent, 0.22) : Qt.alpha(root.red, 0.16)
-                    border.width: root.wifiOn ? 1 : 0
-                    border.color: Qt.alpha(root.accent, 0.35)
-                    scale: 0.4 + 0.6 * root.wifiPop
+                    preferredRendererType: Shape.CurveRenderer
+                    scale: 0.55 + 0.45 * root.wifiPop
 
-                    MaterialIcon {
-                        anchors.centerIn: parent
-                        text: !root.wifiOn ? "wifi_off" : root.wifiStrength >= 75 ? "wifi" : root.wifiStrength >= 45 ? "network_wifi_3_bar" : "network_wifi_2_bar"
-                        color: root.wifiOn ? root.accent : root.red
-                        fontStyle: Tokens.font.icon.size(root.wifiOn ? 21 : 15).build()
-                        fill: 1
+                    // Arc interne (1)
+                    ShapePath {
+                        readonly property real prog: Math.max(0, Math.min(1, root.wifiWave * 1.75))
+                        readonly property real pulse: 0.5 + 0.5 * Math.sin((root.wifiLivePhase * 2 - 0.15) * Math.PI)
+                        readonly property bool lit: root.wifiOn && root.wifiStrength >= 15
+
+                        strokeWidth: 3.2 + (lit ? pulse * 0.7 : 0)
+                        strokeColor: !root.wifiOn ? Qt.alpha(root.red, 0.45) : lit ? Qt.tint(wifiBeacon.wavePrimary, Qt.alpha(wifiBeacon.waveSecondary, pulse * 0.65)) : root.fgFaint
+                        fillColor: "transparent"
+                        capStyle: ShapePath.RoundCap
+
+                        PathAngleArc {
+                            centerX: wifiBeacon.cx
+                            centerY: wifiBeacon.cy
+                            radiusX: root.wifiOn ? 10.5 : 8
+                            radiusY: root.wifiOn ? 10.5 : 8
+                            startAngle: -90 - 44 * Math.max(0.08, Math.min(1, root.wifiWave * 1.75))
+                            sweepAngle: 88 * Math.max(0.08, Math.min(1, root.wifiWave * 1.75))
+                        }
                     }
+
+                    // Arc médian (2)
+                    ShapePath {
+                        readonly property real prog: Math.max(0, Math.min(1, (root.wifiWave - 0.16) * 1.65))
+                        readonly property real pulse: 0.5 + 0.5 * Math.sin((root.wifiLivePhase * 2 - 0.55) * Math.PI)
+                        readonly property bool lit: root.wifiOn && root.wifiStrength >= 45
+
+                        strokeWidth: 3.2 + (lit ? pulse * 0.8 : 0)
+                        strokeColor: !root.wifiOn ? Qt.alpha(root.red, 0.35) : lit ? Qt.tint(wifiBeacon.wavePrimary, Qt.alpha(wifiBeacon.waveSecondary, pulse * 0.75)) : root.fgFaint
+                        fillColor: "transparent"
+                        capStyle: ShapePath.RoundCap
+
+                        PathAngleArc {
+                            centerX: wifiBeacon.cx
+                            centerY: wifiBeacon.cy
+                            radiusX: root.wifiOn ? 18.5 : 14
+                            radiusY: root.wifiOn ? 18.5 : 14
+                            startAngle: -90 - 45 * Math.max(0.04, Math.min(1, (root.wifiWave - 0.16) * 1.65))
+                            sweepAngle: 90 * Math.max(0.04, Math.min(1, (root.wifiWave - 0.16) * 1.65))
+                        }
+                    }
+
+                    // Arc externe (3)
+                    ShapePath {
+                        readonly property real prog: Math.max(0, Math.min(1, (root.wifiWave - 0.32) * 1.6))
+                        readonly property real pulse: 0.5 + 0.5 * Math.sin((root.wifiLivePhase * 2 - 0.95) * Math.PI)
+                        readonly property bool lit: root.wifiOn && root.wifiStrength >= 72
+
+                        strokeWidth: 3.3 + (lit ? pulse * 0.9 : 0)
+                        strokeColor: !root.wifiOn ? Qt.alpha(root.red, 0.25) : lit ? Qt.tint(wifiBeacon.waveSecondary, Qt.alpha("#ffffff", pulse * 0.35)) : root.fgFaint
+                        fillColor: "transparent"
+                        capStyle: ShapePath.RoundCap
+
+                        PathAngleArc {
+                            centerX: wifiBeacon.cx
+                            centerY: wifiBeacon.cy
+                            radiusX: root.wifiOn ? 26.5 : 20
+                            radiusY: root.wifiOn ? 26.5 : 20
+                            startAngle: -90 - 46 * Math.max(0.02, Math.min(1, (root.wifiWave - 0.32) * 1.6))
+                            sweepAngle: 92 * Math.max(0.02, Math.min(1, (root.wifiWave - 0.32) * 1.6))
+                        }
+                    }
+
+                    // Trait diagonal rouge animé en cas de coupure Wi-Fi
+                    ShapePath {
+                        strokeWidth: !root.wifiOn && root.wifiSlash > 0.01 ? 3.2 : 0
+                        strokeColor: !root.wifiOn && root.wifiSlash > 0.01 ? root.red : "transparent"
+                        fillColor: "transparent"
+                        capStyle: ShapePath.RoundCap
+
+                        PathMove {
+                            x: wifiBeacon.cx - 14
+                            y: wifiBeacon.cy - 24
+                        }
+                        PathLine {
+                            x: (wifiBeacon.cx - 14) + 28 * root.wifiSlash
+                            y: (wifiBeacon.cy - 24) + 26 * root.wifiSlash
+                        }
+                    }
+                }
+
+                // Point émetteur central au pied des ondes
+                Rectangle {
+                    x: wifiBeacon.cx - width / 2
+                    y: wifiBeacon.cy - height / 2
+                    width: root.wifiOn ? 8 : 6
+                    height: width
+                    radius: width / 2
+                    color: root.wifiOn ? wifiBeacon.waveSecondary : root.red
+                    scale: 0.4 + 0.6 * root.wifiPop
                 }
             }
 
+            // Colonne centrale : SSID, pastilles bande/sécurité et pont de paquets animés
             Column {
-                anchors.left: wifiIconBox.right
-                anchors.leftMargin: 14
+                anchors.left: wifiBeacon.right
+                anchors.leftMargin: 12
                 anchors.right: wifiRight.left
                 anchors.rightMargin: 12
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 3
+                spacing: 6
 
                 Row {
                     width: parent.width
                     spacing: 6
 
                     StyledText {
-                        width: Math.min(implicitWidth, parent.width - (wifiBandPill.visible ? wifiBandPill.width + 8 : 0))
+                        width: Math.min(implicitWidth, parent.width - (wifiBandPill.visible ? wifiBandPill.width + 6 : 0) - (wifiSecPill.visible ? wifiSecPill.width + 6 : 0))
                         elide: Text.ElideRight
-                        text: root.wifiOn ? (root.wifiSsid || root.wifiName || qsTr("Wi-Fi")) : qsTr("Wi-Fi coupé")
+                        text: root.wifiOn ? (root.wifiSsid || root.wifiName || qsTr("Wi-Fi")) : qsTr("Wi-Fi déconnecté")
                         color: root.fg
-                        font.pointSize: root.wifiOn ? 11 : 10
-                        font.weight: Font.DemiBold
+                        font.pointSize: root.wifiOn ? 11.5 : 10
+                        font.weight: Font.Bold
                     }
 
-                    // Pastille de bande (5 GHz / 2,4 GHz / 6 GHz)
+                    // Pastille fréquence (5 GHz / 6 GHz / 2,4 GHz)
                     Rectangle {
                         id: wifiBandPill
 
                         visible: root.wifiOn
                         anchors.verticalCenter: parent.verticalCenter
-                        width: bandTxt.implicitWidth + 10
-                        height: 17
-                        radius: 8.5
-                        color: Qt.alpha(root.accent, 0.18)
+                        width: bandTxt.implicitWidth + 12
+                        height: 18
+                        radius: 9
+                        color: Qt.alpha("#38bdf8", 0.18)
+                        border.width: 1
+                        border.color: Qt.alpha("#38bdf8", 0.42)
                         scale: 0.6 + 0.4 * root.wifiRing
                         opacity: root.wifiRing
 
@@ -2744,135 +2919,284 @@ Item {
 
                             anchors.centerIn: parent
                             text: root.wifiBand
-                            color: root.accent
+                            color: "#38bdf8"
                             font.pointSize: 7.5
                             font.weight: Font.Bold
                         }
                     }
+
+                    // Pastille sécurité (icône cadenas + WPA3/WPA2)
+                    Rectangle {
+                        id: wifiSecPill
+
+                        visible: root.wifiOn
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: secRow.implicitWidth + 10
+                        height: 18
+                        radius: 9
+                        color: Qt.alpha(root.green, 0.15)
+                        border.width: 1
+                        border.color: Qt.alpha(root.green, 0.35)
+                        scale: 0.6 + 0.4 * root.wifiRing
+                        opacity: root.wifiRing
+
+                        Row {
+                            id: secRow
+
+                            anchors.centerIn: parent
+                            spacing: 3
+
+                            MaterialIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: root.wifiSecure ? "lock" : "lock_open"
+                                color: root.wifiSecure ? root.green : "#ff9f0a"
+                                fontStyle: Tokens.font.icon.size(10).build()
+                                fill: 1
+                            }
+
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: root.wifiSecure ? qsTr("Sécurisé") : qsTr("Ouvert")
+                                color: root.wifiSecure ? root.green : "#ff9f0a"
+                                font.pointSize: 7
+                                font.weight: Font.DemiBold
+                            }
+                        }
+                    }
                 }
 
+                // Conduit de données animé (Routeur ⇄ flux de paquets lumineux ⇄ Ordinateur)
                 Row {
                     visible: root.wifiOn
-                    spacing: 5
+                    spacing: 7
+                    opacity: root.wifiRing
 
-                    Rectangle {
+                    MaterialIcon {
                         anchors.verticalCenter: parent.verticalCenter
-                        width: 6
-                        height: 6
-                        radius: 3
+                        text: "router"
+                        color: "#38bdf8"
+                        fontStyle: Tokens.font.icon.size(13).build()
+                    }
+
+                    // Piste de paquets bidirectionnels
+                    Item {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 54
+                        height: 10
+
+                        Rectangle {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width
+                            height: 2
+                            radius: 1
+                            color: Qt.alpha(root.fg, 0.14)
+                        }
+
+                        Repeater {
+                            model: 3
+
+                            Rectangle {
+                                required property int index
+                                readonly property real phase: (root.wifiLivePhase + index / 3) % 1
+
+                                y: 2
+                                x: phase * (parent.width - width)
+                                width: 8
+                                height: 6
+                                radius: 3
+                                color: index === 0 ? root.green : "#38bdf8"
+                                opacity: Math.sin(phase * Math.PI) * 0.95
+                            }
+                        }
+                    }
+
+                    MaterialIcon {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "laptop_chromebook"
                         color: root.green
+                        fontStyle: Tokens.font.icon.size(13).build()
                     }
 
                     StyledText {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: root.wifiSecure ? qsTr("Connecté · Sécurisé") : qsTr("Connecté · Ouvert")
+                        text: root.wifiQualityText
                         color: root.fgDim
                         font.pointSize: 8.5
+                        font.weight: Font.Medium
                     }
+                }
+
+                // Sous-titre quand le Wi-Fi est coupé
+                StyledText {
+                    visible: !root.wifiOn
+                    text: qsTr("Aucune liaison sans fil active")
+                    color: root.fgDim
+                    font.pointSize: 8.5
                 }
             }
 
+            // Télémétrie droite : égaliseur d'ondes en direct + jauge double-arc de puissance
             Item {
                 id: wifiRight
 
                 anchors.right: parent.right
-                anchors.rightMargin: 20
+                anchors.rightMargin: 18
                 anchors.verticalCenter: parent.verticalCenter
-                width: root.wifiOn ? 78 : wifiOffLbl.implicitWidth
-                height: 42
+                width: root.wifiOn ? 92 : wifiOffBadge.width
+                height: 54
 
-                StyledText {
-                    id: wifiOffLbl
+                Rectangle {
+                    id: wifiOffBadge
 
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
                     visible: !root.wifiOn
-                    text: qsTr("Déconnecté")
-                    color: root.red
-                    font.pointSize: 9
-                    font.weight: Font.DemiBold
+                    width: wifiOffLbl.implicitWidth + 16
+                    height: 24
+                    radius: 12
+                    color: Qt.alpha(root.red, 0.16)
+                    border.width: 1
+                    border.color: Qt.alpha(root.red, 0.38)
+
+                    StyledText {
+                        id: wifiOffLbl
+
+                        anchors.centerIn: parent
+                        text: qsTr("Hors ligne")
+                        color: root.red
+                        font.pointSize: 8.5
+                        font.weight: Font.Bold
+                    }
                 }
 
-                // 4 barres de signal progressives animées
+                // 5 barres spectrales animées en continu
                 Row {
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
                     visible: root.wifiOn
                     spacing: 3
-                    height: 20
+                    height: 28
 
                     Repeater {
-                        model: 4
+                        model: 5
 
                         Rectangle {
                             required property int index
-                            readonly property bool lit: root.wifiStrength >= (index + 1) * 20
-                            readonly property real barGrow: Math.max(0, Math.min(1, root.wifiRing * 1.4 - index * 0.14))
+                            readonly property bool lit: root.wifiStrength >= (index + 1) * 18
+                            readonly property real barGrow: Math.max(0, Math.min(1, root.wifiRing * 1.45 - index * 0.12))
+                            readonly property real wave: lit ? (0.84 + 0.16 * Math.sin((root.wifiLivePhase * 2 + index * 0.28) * Math.PI)) : 1
 
                             anchors.bottom: parent.bottom
-                            width: 4
-                            height: (6 + index * 4.5) * (0.25 + 0.75 * barGrow)
-                            radius: 2
-                            color: lit ? (root.wifiStrength < 35 ? "#ff9f0a" : root.green) : root.fgFaint
+                            width: 3.5
+                            height: (7 + index * 4.5) * (0.2 + 0.8 * barGrow) * wave
+                            radius: 1.75
+                            color: !lit ? root.fgFaint : index >= 3 ? root.green : "#38bdf8"
                         }
                     }
                 }
 
-                // Anneau de qualité du signal en %
+                // Jauge double-arc (externe = % signal, interne = qualité bande)
                 Item {
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
                     visible: root.wifiOn
-                    width: 42
-                    height: 42
+                    width: 52
+                    height: 52
 
                     Shape {
                         anchors.fill: parent
                         preferredRendererType: Shape.CurveRenderer
 
+                        // Piste externe
                         ShapePath {
-                            strokeWidth: 3.5
+                            strokeWidth: 4
                             strokeColor: root.fgFaint
                             fillColor: "transparent"
                             capStyle: ShapePath.RoundCap
 
                             PathAngleArc {
-                                centerX: 21
-                                centerY: 21
-                                radiusX: 18
-                                radiusY: 18
-                                startAngle: -90
-                                sweepAngle: 360
+                                centerX: 26
+                                centerY: 26
+                                radiusX: 21
+                                radiusY: 21
+                                startAngle: 135
+                                sweepAngle: 270
                             }
                         }
 
+                        // Piste interne
                         ShapePath {
-                            readonly property color ringCol: root.wifiStrength < 35 ? "#ff9f0a" : root.green
-
-                            strokeWidth: 3.5
-                            strokeColor: ringCol
+                            strokeWidth: 2.4
+                            strokeColor: Qt.alpha("#38bdf8", 0.16)
                             fillColor: "transparent"
                             capStyle: ShapePath.RoundCap
 
                             PathAngleArc {
-                                centerX: 21
-                                centerY: 21
-                                radiusX: 18
-                                radiusY: 18
-                                startAngle: -90
-                                sweepAngle: 360 * root.wifiRing * Math.max(0.08, root.wifiStrength / 100)
+                                centerX: 26
+                                centerY: 26
+                                radiusX: 15.5
+                                radiusY: 15.5
+                                startAngle: 135
+                                sweepAngle: 270
+                            }
+                        }
+
+                        // Arc externe animé (% signal)
+                        ShapePath {
+                            strokeWidth: 4
+                            strokeColor: root.wifiStrength < 35 ? "#ff9f0a" : root.green
+                            fillColor: "transparent"
+                            capStyle: ShapePath.RoundCap
+
+                            PathAngleArc {
+                                centerX: 26
+                                centerY: 26
+                                radiusX: 21
+                                radiusY: 21
+                                startAngle: 135
+                                sweepAngle: 270 * root.wifiRing * Math.max(0.08, root.wifiStrength / 100)
+                            }
+                        }
+
+                        // Arc interne animé (débit / bande)
+                        ShapePath {
+                            strokeWidth: 2.4
+                            strokeColor: "#38bdf8"
+                            fillColor: "transparent"
+                            capStyle: ShapePath.RoundCap
+
+                            PathAngleArc {
+                                centerX: 26
+                                centerY: 26
+                                radiusX: 15.5
+                                radiusY: 15.5
+                                startAngle: 135
+                                sweepAngle: 270 * root.wifiRing * (root.wifiFreq >= 4900 ? 0.92 : 0.68)
                             }
                         }
                     }
 
-                    StyledText {
+                    Column {
                         anchors.centerIn: parent
-                        text: `${Math.round(root.wifiStrength * root.wifiRing)}`
-                        color: root.fg
-                        font.pointSize: 8.5
-                        font.weight: Font.Bold
-                        font.features: {
-                            "tnum": 1
+                        spacing: -2
+
+                        StyledText {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: `${Math.round(root.wifiStrength * root.wifiRing)}`
+                            color: root.fg
+                            font.pointSize: 9.5
+                            font.weight: Font.Bold
+                            font.features: {
+                                "tnum": 1
+                            }
+                        }
+
+                        StyledText {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: "%"
+                            color: root.fgDim
+                            font.pointSize: 6.5
+                            font.weight: Font.Bold
                         }
                     }
                 }
