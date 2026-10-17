@@ -1413,7 +1413,7 @@ Item {
         case "notif":
             return Qt.size(430, hovered && notifHasActions ? 132 : 92);
         case "center":
-            return Qt.size(460, Math.min(600, Math.max(170, 86 + centerList.contentHeight)));
+            return Qt.size(500, Math.min(640, Math.max(210, 128 + centerList.contentHeight)));
         case "recordFull":
             return Qt.size(pageWidth, 86);
         case "caffeine":
@@ -1502,24 +1502,192 @@ Item {
         pulseTimer.restart();
     }
 
-    // Centre de notifications : une pile par appli ; un clic la déplie (expandedApp)
+    // ── Centre de notifications : piles rétractables par appli ou par espèce, filtres et masquage ──
     property string expandedApp
+    property var expandedGroups: ({})
+    property var hiddenGroups: ({})
+    property bool showHiddenGroups: false
+    property string centerCat: "all" // "all", "messages", "system", "media", "apps"
+    property string centerGroupBy: "app" // "app" (par application) ou "cat" (par espèce/catégorie)
+
+    function notifCat(n: var): string {
+        const s = `${n?.appName ?? ""} ${n?.appIcon ?? ""} ${n?.summary ?? ""}`.toLowerCase();
+        if (/whatsapp|telegram|discord|signal|slack|mail|thunderbird|gmail|messag|chat|element|teams| matrix|sms/.test(s))
+            return "messages";
+        if (/spotify|onde|vlc|mpv|youtube|music|audio|player|steam|prisme|obs|media/.test(s))
+            return "media";
+        if (/caelestia|hypr|quickshell|network|wifi|bluetooth|batter|upower|pacman|yay|arcadia|kitty|terminal|drive|transfer|capture|agent|claude|codex|antigravity|syst/.test(s))
+            return "system";
+        return "apps";
+    }
+
+    function notifCatLabel(cat: string): string {
+        return ({
+            all: qsTr("Tout"),
+            messages: qsTr("Messages"),
+            system: qsTr("Système"),
+            media: qsTr("Média"),
+            apps: qsTr("Applis")
+        })[cat] ?? qsTr("Applis");
+    }
+
+    function notifCatIcon(cat: string): string {
+        return ({
+            all: "dynamic_feed",
+            messages: "forum",
+            system: "tune",
+            media: "play_circle",
+            apps: "widgets"
+        })[cat] ?? "notifications";
+    }
+
+    function notifCatColor(cat: string): color {
+        return ({
+            all: root.accent,
+            messages: "#38bdf8",
+            system: "#a78bfa",
+            media: root.green,
+            apps: "#ff9f0a"
+        })[cat] ?? root.accent;
+    }
+
+    function groupKey(n: var): string {
+        if (centerGroupBy === "cat")
+            return `cat:${notifCat(n)}`;
+        const a = (n?.appName ?? "").trim();
+        return `app:${a || notifCatLabel(notifCat(n))}`;
+    }
+
+    function groupTitle(n: var): string {
+        if (centerGroupBy === "cat")
+            return notifCatLabel(notifCat(n));
+        return (n?.appName ?? "").trim() || notifCatLabel(notifCat(n));
+    }
+
+    function isGroupExpanded(k: string): bool {
+        return !!expandedGroups[k] || expandedApp === k;
+    }
+
+    function toggleGroupExpand(k: string): void {
+        const next = Object.assign({}, expandedGroups);
+        if (next[k])
+            delete next[k];
+        else
+            next[k] = true;
+        expandedGroups = next;
+    }
+
+    function isGroupHidden(k: string): bool {
+        return !!hiddenGroups[k];
+    }
+
+    function toggleGroupHidden(k: string): void {
+        const next = Object.assign({}, hiddenGroups);
+        if (next[k])
+            delete next[k];
+        else {
+            next[k] = true;
+            const exp = Object.assign({}, expandedGroups);
+            delete exp[k];
+            expandedGroups = exp;
+        }
+        hiddenGroups = next;
+        if (Object.keys(next).length === 0)
+            showHiddenGroups = false;
+    }
+
+    readonly property int hiddenNotifCount: {
+        let c = 0;
+        for (const n of Notifs.notClosed) {
+            if (hiddenGroups[groupKey(n)])
+                c++;
+        }
+        return c;
+    }
+
+    readonly property bool anyStackExpandable: {
+        const counts = {};
+        for (const n of Notifs.notClosed) {
+            if (centerCat !== "all" && notifCat(n) !== centerCat)
+                continue;
+            const k = groupKey(n);
+            if (!showHiddenGroups && hiddenGroups[k])
+                continue;
+            counts[k] = (counts[k] ?? 0) + 1;
+            if (counts[k] > 1)
+                return true;
+        }
+        return false;
+    }
+
+    readonly property bool allStacksExpanded: {
+        const counts = {};
+        for (const n of Notifs.notClosed) {
+            if (centerCat !== "all" && notifCat(n) !== centerCat)
+                continue;
+            const k = groupKey(n);
+            if (!showHiddenGroups && hiddenGroups[k])
+                continue;
+            counts[k] = (counts[k] ?? 0) + 1;
+        }
+        let hasMulti = false;
+        for (const k of Object.keys(counts)) {
+            if (counts[k] > 1) {
+                hasMulti = true;
+                if (!expandedGroups[k])
+                    return false;
+            }
+        }
+        return hasMulti;
+    }
+
+    function toggleExpandAllStacks(): void {
+        if (allStacksExpanded) {
+            expandedGroups = ({});
+            expandedApp = "";
+            return;
+        }
+        const next = Object.assign({}, expandedGroups);
+        for (const n of Notifs.notClosed)
+            next[groupKey(n)] = true;
+        expandedGroups = next;
+    }
+
+    function catCount(cat: string): int {
+        let c = 0;
+        for (const n of Notifs.notClosed) {
+            if (!showHiddenGroups && hiddenGroups[groupKey(n)])
+                continue;
+            if (cat === "all" || notifCat(n) === cat)
+                c++;
+        }
+        return c;
+    }
 
     function groupMembers(n: var): var {
-        const k = n.appName ?? "";
-        return Notifs.notClosed.filter(m => (m.appName ?? "") === k);
+        const k = groupKey(n);
+        return Notifs.notClosed.filter(m => {
+            if (centerCat !== "all" && notifCat(m) !== centerCat)
+                return false;
+            return groupKey(m) === k;
+        });
     }
 
     function centerItems(): var {
         const seen = {};
         const out = [];
         for (const n of Notifs.notClosed) {
-            const k = n.appName ?? "";
+            if (centerCat !== "all" && notifCat(n) !== centerCat)
+                continue;
+            const k = groupKey(n);
+            if (!showHiddenGroups && hiddenGroups[k])
+                continue;
             if (seen[k])
                 continue;
             seen[k] = true;
-            if (expandedApp === k)
-                out.push(...groupMembers(n));
+            const members = groupMembers(n);
+            if (isGroupExpanded(k) && members.length > 1)
+                out.push(...members);
             else
                 out.push(n);
         }
@@ -1645,6 +1813,7 @@ Item {
 
         function onNotifCenterChanged(): void {
             root.expandedApp = "";
+            root.expandedGroups = ({});
             root.centerVisited = root.hovered;
             if (Island.notifCenter)
                 centerClose.restart();
@@ -5866,50 +6035,157 @@ Item {
             }
         }
 
-        // ── Centre de notifications (clic sur l'île, Super + N) ──
+        // ── Centre de notifications (clic sur l'île, Super + N) : piles rétractables par appli/espèce & filtres ──
         Face {
             active: root.mode === "center"
 
             Item {
                 id: centerHead
 
-                x: 22
-                y: 16
-                width: parent.width - 44
+                x: 20
+                y: 14
+                width: parent.width - 40
                 height: 36
 
                 Column {
                     anchors.verticalCenter: parent.verticalCenter
+                    spacing: 1
+
+                    Row {
+                        spacing: 6
+
+                        StyledText {
+                            text: qsTr("Notifications")
+                            color: root.fg
+                            font.pointSize: 12.5
+                            font.weight: Font.Bold
+                        }
+
+                        // Badge de mode de regroupement actif
+                        Rectangle {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: grpModeTxt.implicitWidth + 10
+                            height: 17
+                            radius: 8.5
+                            color: Qt.alpha(root.accent, 0.16)
+                            border.width: 1
+                            border.color: Qt.alpha(root.accent, 0.35)
+
+                            StyledText {
+                                id: grpModeTxt
+
+                                anchors.centerIn: parent
+                                text: root.centerGroupBy === "app" ? qsTr("Par appli") : qsTr("Par espèce")
+                                color: root.accent
+                                font.pointSize: 7
+                                font.weight: Font.Bold
+                            }
+                        }
+                    }
 
                     StyledText {
-                        text: qsTr("Notifications")
-                        color: root.fg
-                        font.pointSize: 13
-                        font.weight: Font.Bold
-                    }
-                    StyledText {
-                        text: Notifs.notClosed.length === 0 ? qsTr("Tout est lu") : Notifs.notClosed.length === 1 ? qsTr("1 notification") : qsTr("%1 notifications").arg(Notifs.notClosed.length)
+                        text: {
+                            const n = Notifs.notClosed.length;
+                            const h = root.hiddenNotifCount;
+                            const base = n === 0 ? qsTr("Tout est lu") : n === 1 ? qsTr("1 notification") : qsTr("%1 notifications").arg(n);
+                            return h > 0 ? `${base} · ${qsTr("%1 masquée(s)").arg(h)}` : base;
+                        }
                         color: root.fgDim
-                        font.pointSize: 8.5
+                        font.pointSize: 8
                     }
                 }
 
                 Row {
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: 8
+                    spacing: 6
 
-                    // Ne pas déranger
+                    // Basculer le regroupement : Par appli ⇄ Par espèce (catégorie)
                     Rectangle {
-                        width: 34
-                        height: 34
-                        radius: 17
+                        width: 32
+                        height: 32
+                        radius: 16
                         color: "transparent"
-                        // Verre liquide (iOS 27) sous le contenu
+
                         GlassControl {
                             anchors.fill: parent
                             radius: parent.radius
-                            bevel: parent.height > 60 ? 16 : 0
+                            bevel: 0
+                            tintColour: root.centerGroupBy === "cat" ? Qt.alpha(root.accent, 0.28) : Qt.alpha(root.fg, grpByArea.containsMouse ? 0.16 : 0.1)
+                            visible: tintColour.a > 0.01
+                            pressed: grpByArea.pressed
+                            hovered: grpByArea.containsMouse
+                            pointer: grpByArea.containsMouse ? Qt.point(grpByArea.mouseX / Math.max(1, width), grpByArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
+                        }
+
+                        MaterialIcon {
+                            anchors.centerIn: parent
+                            text: root.centerGroupBy === "app" ? "apps" : "category"
+                            color: root.centerGroupBy === "cat" ? root.accent : root.fg
+                            fontStyle: Tokens.font.icon.size(13).build()
+                        }
+
+                        MouseArea {
+                            id: grpByArea
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                root.expandedGroups = ({});
+                                root.expandedApp = "";
+                                root.centerGroupBy = root.centerGroupBy === "app" ? "cat" : "app";
+                            }
+                        }
+                    }
+
+                    // Tout déplier / Tout replier
+                    Rectangle {
+                        visible: root.anyStackExpandable
+                        width: 32
+                        height: 32
+                        radius: 16
+                        color: "transparent"
+
+                        GlassControl {
+                            anchors.fill: parent
+                            radius: parent.radius
+                            bevel: 0
+                            tintColour: root.allStacksExpanded ? Qt.alpha(root.accent, 0.26) : Qt.alpha(root.fg, foldAllArea.containsMouse ? 0.16 : 0.1)
+                            visible: tintColour.a > 0.01
+                            pressed: foldAllArea.pressed
+                            hovered: foldAllArea.containsMouse
+                            pointer: foldAllArea.containsMouse ? Qt.point(foldAllArea.mouseX / Math.max(1, width), foldAllArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
+                        }
+
+                        MaterialIcon {
+                            anchors.centerIn: parent
+                            text: root.allStacksExpanded ? "unfold_less" : "unfold_more"
+                            color: root.allStacksExpanded ? root.accent : root.fg
+                            fontStyle: Tokens.font.icon.size(14).build()
+                        }
+
+                        MouseArea {
+                            id: foldAllArea
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.toggleExpandAllStacks()
+                        }
+                    }
+
+                    // Ne pas déranger
+                    Rectangle {
+                        width: 32
+                        height: 32
+                        radius: 16
+                        color: "transparent"
+
+                        GlassControl {
+                            anchors.fill: parent
+                            radius: parent.radius
+                            bevel: 0
                             tintColour: Notifs.dnd ? root.accent : Qt.alpha(root.fg, dndArea.containsMouse ? 0.16 : 0.1)
                             visible: tintColour.a > 0.01
                             pressed: dndArea.pressed
@@ -5934,18 +6210,18 @@ Item {
                         }
                     }
 
-                    // Tout effacer
+                    // Tout effacer (dans la catégorie courante ou tout)
                     Rectangle {
                         visible: Notifs.notClosed.length > 0
-                        width: clearLbl.implicitWidth + 26
-                        height: 34
-                        radius: 17
+                        width: clearLbl.implicitWidth + 22
+                        height: 32
+                        radius: 16
                         color: "transparent"
-                        // Verre liquide (iOS 27) sous le contenu
+
                         GlassControl {
                             anchors.fill: parent
                             radius: parent.radius
-                            bevel: parent.height > 60 ? 16 : 0
+                            bevel: 0
                             tintColour: Qt.alpha(root.fg, clearArea.containsMouse ? 0.16 : 0.1)
                             visible: tintColour.a > 0.01
                             pressed: clearArea.pressed
@@ -5957,9 +6233,9 @@ Item {
                             id: clearLbl
 
                             anchors.centerIn: parent
-                            text: qsTr("Tout effacer")
+                            text: root.centerCat === "all" ? qsTr("Tout effacer") : qsTr("Effacer")
                             color: root.fg
-                            font.pointSize: 9
+                            font.pointSize: 8.5
                             font.weight: Font.DemiBold
                         }
                         MouseArea {
@@ -5969,8 +6245,150 @@ Item {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                for (const n of [...Notifs.notClosed])
-                                    n.close();
+                                for (const n of [...Notifs.notClosed]) {
+                                    if (root.centerCat === "all" || root.notifCat(n) === root.centerCat)
+                                        n.close();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Barre de filtres par espèce / catégorie + bouton d'affichage des groupes masqués ──
+            Item {
+                id: centerFilterBar
+
+                x: 16
+                anchors.top: centerHead.bottom
+                anchors.topMargin: 8
+                width: parent.width - 32
+                height: 26
+
+                Row {
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 5
+
+                    Repeater {
+                        model: ["all", "messages", "system", "media", "apps"]
+
+                        Rectangle {
+                            id: catChip
+
+                            required property string modelData
+                            readonly property int count: root.catCount(modelData)
+                            readonly property bool selected: root.centerCat === modelData
+                            readonly property color catCol: root.notifCatColor(modelData)
+
+                            visible: modelData === "all" || count > 0 || selected
+                            width: catChipRow.implicitWidth + 14
+                            height: 24
+                            radius: 12
+                            color: selected ? Qt.alpha(catCol, 0.24) : Qt.alpha(root.fg, catChipArea.containsMouse ? 0.11 : 0.06)
+                            border.width: 1
+                            border.color: selected ? Qt.alpha(catCol, 0.55) : Qt.alpha(root.fg, 0.08)
+
+                            Row {
+                                id: catChipRow
+
+                                anchors.centerIn: parent
+                                spacing: 4
+
+                                MaterialIcon {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: root.notifCatIcon(catChip.modelData)
+                                    color: catChip.selected ? catChip.catCol : root.fgDim
+                                    fontStyle: Tokens.font.icon.size(11).build()
+                                }
+
+                                StyledText {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: root.notifCatLabel(catChip.modelData)
+                                    color: catChip.selected ? root.fg : root.fgDim
+                                    font.pointSize: 7.5
+                                    font.weight: catChip.selected ? Font.Bold : Font.Medium
+                                }
+
+                                Rectangle {
+                                    visible: catChip.count > 0
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: Math.max(14, catCountTxt.implicitWidth + 6)
+                                    height: 14
+                                    radius: 7
+                                    color: catChip.selected ? catChip.catCol : Qt.alpha(root.fg, 0.14)
+
+                                    StyledText {
+                                        id: catCountTxt
+
+                                        anchors.centerIn: parent
+                                        text: `${catChip.count}`
+                                        color: catChip.selected ? "#081018" : root.fg
+                                        font.pointSize: 6.5
+                                        font.weight: Font.Bold
+                                    }
+                                }
+                            }
+
+                            MouseArea {
+                                id: catChipArea
+
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.centerCat = catChip.modelData
+                            }
+                        }
+                    }
+                }
+
+                // Pastille « Masquées (œil) » pour voir ou réafficher les espèces/applis masquées
+                Rectangle {
+                    visible: Object.keys(root.hiddenGroups).length > 0
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: maskRow.implicitWidth + 14
+                    height: 24
+                    radius: 12
+                    color: root.showHiddenGroups ? Qt.alpha("#ff9f0a", 0.24) : Qt.alpha(root.fg, maskToggleArea.containsMouse ? 0.13 : 0.07)
+                    border.width: 1
+                    border.color: root.showHiddenGroups ? Qt.alpha("#ff9f0a", 0.55) : Qt.alpha(root.fg, 0.12)
+
+                    Row {
+                        id: maskRow
+
+                        anchors.centerIn: parent
+                        spacing: 4
+
+                        MaterialIcon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: root.showHiddenGroups ? "visibility" : "visibility_off"
+                            color: root.showHiddenGroups ? "#ff9f0a" : root.fgDim
+                            fontStyle: Tokens.font.icon.size(11).build()
+                        }
+
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: root.showHiddenGroups ? qsTr("Masquées visibles") : `${Object.keys(root.hiddenGroups).length}`
+                            color: root.showHiddenGroups ? "#ff9f0a" : root.fgDim
+                            font.pointSize: 7.5
+                            font.weight: Font.Bold
+                        }
+                    }
+
+                    MouseArea {
+                        id: maskToggleArea
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                        onClicked: mouse => {
+                            if (mouse.button === Qt.RightButton) {
+                                root.hiddenGroups = ({});
+                                root.showHiddenGroups = false;
+                            } else {
+                                root.showHiddenGroups = !root.showHiddenGroups;
                             }
                         }
                     }
@@ -5981,8 +6399,8 @@ Item {
                 id: centerList
 
                 x: 14
-                anchors.top: centerHead.bottom
-                anchors.topMargin: 12
+                anchors.top: centerFilterBar.bottom
+                anchors.topMargin: 10
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: 14
                 width: parent.width - 28
@@ -5996,7 +6414,7 @@ Item {
                         properties: "opacity"
                         from: 0
                         to: 1
-                        duration: 250
+                        duration: 240
                     }
                 }
                 remove: Transition {
@@ -6004,12 +6422,12 @@ Item {
                         NumberAnimation {
                             property: "opacity"
                             to: 0
-                            duration: 200
+                            duration: 190
                         }
                         NumberAnimation {
                             property: "x"
                             to: 80
-                            duration: 220
+                            duration: 210
                             easing.type: Easing.InCubic
                         }
                     }
@@ -6017,7 +6435,7 @@ Item {
                 displaced: Transition {
                     NumberAnimation {
                         properties: "y"
-                        duration: 260
+                        duration: 250
                         easing.type: Easing.OutCubic
                     }
                 }
@@ -6026,11 +6444,21 @@ Item {
                     id: slot
 
                     required property var modelData
-                    readonly property int repeats: root.groupMembers(modelData).length
-                    readonly property bool stacked: repeats > 1 && root.expandedApp !== (modelData.appName ?? "")
+                    readonly property string grpKey: root.groupKey(modelData)
+                    readonly property string grpName: root.groupTitle(modelData)
+                    readonly property string catName: root.notifCat(modelData)
+                    readonly property color catCol: root.notifCatColor(catName)
+                    readonly property var members: root.groupMembers(modelData)
+                    readonly property int repeats: members.length
+                    readonly property bool isExpanded: root.isGroupExpanded(grpKey)
+                    readonly property bool isHiddenGrp: root.isGroupHidden(grpKey)
+                    readonly property bool stacked: repeats > 1 && !isExpanded
+                    readonly property bool expandedMember: repeats > 1 && isExpanded
+                    readonly property bool expandedHead: expandedMember && members[0] === modelData
+                    readonly property real headBannerH: expandedHead ? 28 : 0
 
                     width: centerList.width
-                    height: card.height + (stacked ? 12 : 0)
+                    height: headBannerH + card.height + (stacked ? 13 : 0)
 
                     Behavior on height {
                         NumberAnimation {
@@ -6039,230 +6467,560 @@ Item {
                         }
                     }
 
-                    // Cartes cachées derrière la première : la pile
+                    // ── Bannière d'en-tête de pile dépliée : Réduire, Masquer l'espèce ou Tout fermer ──
                     Rectangle {
-                        visible: slot.stacked
-                        z: -2
-                        x: 20
-                        y: 12
-                        width: parent.width - 40
-                        height: card.height
-                        radius: 18
-                        color: Qt.alpha(root.fg, 0.035)
+                        id: groupBanner
+
+                        visible: slot.expandedHead
+                        x: 0
+                        y: 0
+                        width: parent.width
+                        height: 24
+                        radius: 12
+                        color: Qt.alpha(slot.catCol, 0.14)
                         border.width: 1
-                        border.color: Qt.alpha(root.fg, 0.05)
-                    }
-                    Rectangle {
-                        visible: slot.stacked
-                        z: -1
-                        x: 10
-                        y: 6
-                        width: parent.width - 20
-                        height: card.height
-                        radius: 18
-                        color: Qt.alpha(root.fg, 0.05)
-                        border.width: 1
-                        border.color: Qt.alpha(root.fg, 0.06)
-                    }
+                        border.color: Qt.alpha(slot.catCol, 0.35)
 
-                    Rectangle {
-                    id: card
+                        Row {
+                            anchors.left: parent.left
+                            anchors.leftMargin: 10
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 6
 
-                    property var modelData: slot.modelData
-                    readonly property string icon: modelData.appIcon ? Quickshell.iconPath(modelData.appIcon, true) : ""
-                    readonly property int repeats: slot.repeats
-                    readonly property bool stacked: slot.stacked
-                    readonly property bool expandedHead: repeats > 1 && !stacked && root.groupMembers(modelData)[0] === modelData
-
-                    width: centerList.width
-                    height: cardBody.implicitHeight + 24
-                    radius: 18
-                    color: Qt.alpha(root.fg, cardArea.containsMouse ? 0.1 : 0.065)
-                    border.width: 1
-                    border.color: Qt.alpha(root.fg, 0.07)
-
-                    Behavior on color {
-                        ColorAnimation {
-                            duration: 150
-                        }
-                    }
-
-                    // Icône de l'app ou image de la notification
-                    Rectangle {
-                        id: cardIcon
-
-                        x: 12
-                        y: 12
-                        width: 38
-                        height: 38
-                        radius: 11
-                        color: root.fgFaint
-                        clip: true
-
-                        Image {
-                            id: cardImg
-
-                            anchors.fill: parent
-                            anchors.margins: card.modelData.image ? 0 : 6
-                            fillMode: Image.PreserveAspectCrop
-                            asynchronous: true
-                            sourceSize: Qt.size(76, 76)
-                            source: card.modelData.image || card.icon
-                        }
-                        MaterialIcon {
-                            anchors.centerIn: parent
-                            visible: cardImg.status !== Image.Ready
-                            text: "notifications"
-                            color: root.fg
-                            fontStyle: Tokens.font.icon.size(14).build()
-                            fill: 1
-                        }
-                    }
-
-                    Column {
-                        id: cardBody
-
-                        anchors.left: cardIcon.right
-                        anchors.leftMargin: 12
-                        anchors.right: parent.right
-                        anchors.rightMargin: 14
-                        y: 11
-                        spacing: 2
-
-                        Item {
-                            width: parent.width
-                            height: cardApp.implicitHeight
-
-                            StyledText {
-                                id: cardApp
-
-                                anchors.left: parent.left
-                                anchors.right: cardTime.left
-                                anchors.rightMargin: 8
-                                elide: Text.ElideRight
-                                text: (card.modelData.appName || qsTr("Notification")) + (card.repeats > 1 ? `  ×${card.repeats}` : "") + (card.expandedHead ? qsTr("  ·  Réduire") : "")
-                                color: root.fgDim
-                                font.pointSize: 8
-                                font.weight: Font.Medium
+                            MaterialIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: root.notifCatIcon(slot.catName)
+                                color: slot.catCol
+                                fontStyle: Tokens.font.icon.size(11).build()
                             }
+
                             StyledText {
-                                id: cardTime
-
-                                anchors.right: parent.right
-                                anchors.rightMargin: cardArea.containsMouse ? 26 : 0
-                                text: card.modelData.timeStr
-                                color: root.fgDim
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: `${slot.grpName} · ${slot.repeats}`
+                                color: root.fg
                                 font.pointSize: 8
+                                font.weight: Font.Bold
+                            }
+                        }
 
-                                Behavior on anchors.rightMargin {
-                                    NumberAnimation {
-                                        duration: 150
+                        Row {
+                            anchors.right: parent.right
+                            anchors.rightMargin: 6
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 4
+
+                            // Bouton Réduire la pile
+                            Rectangle {
+                                width: collapseRow.implicitWidth + 12
+                                height: 18
+                                radius: 9
+                                color: collapseArea.containsMouse ? Qt.alpha(slot.catCol, 0.32) : Qt.alpha(slot.catCol, 0.2)
+
+                                Row {
+                                    id: collapseRow
+
+                                    anchors.centerIn: parent
+                                    spacing: 2
+
+                                    MaterialIcon {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: "expand_less"
+                                        color: slot.catCol
+                                        fontStyle: Tokens.font.icon.size(11).build()
+                                    }
+
+                                    StyledText {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: qsTr("Réduire")
+                                        color: root.fg
+                                        font.pointSize: 7
+                                        font.weight: Font.Bold
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: collapseArea
+
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.toggleGroupExpand(slot.grpKey)
+                                }
+                            }
+
+                            // Masquer / Afficher toute l'espèce ou l'application
+                            Rectangle {
+                                width: 18
+                                height: 18
+                                radius: 9
+                                color: bannerHideArea.containsMouse ? Qt.alpha(root.fg, 0.2) : Qt.alpha(root.fg, 0.1)
+
+                                MaterialIcon {
+                                    anchors.centerIn: parent
+                                    text: slot.isHiddenGrp ? "visibility" : "visibility_off"
+                                    color: slot.isHiddenGrp ? "#ff9f0a" : root.fgDim
+                                    fontStyle: Tokens.font.icon.size(10).build()
+                                }
+
+                                MouseArea {
+                                    id: bannerHideArea
+
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.toggleGroupHidden(slot.grpKey)
+                                }
+                            }
+
+                            // Tout fermer du groupe
+                            Rectangle {
+                                width: 18
+                                height: 18
+                                radius: 9
+                                color: bannerClearArea.containsMouse ? Qt.alpha(root.red, 0.28) : Qt.alpha(root.fg, 0.1)
+
+                                MaterialIcon {
+                                    anchors.centerIn: parent
+                                    text: "delete_sweep"
+                                    color: bannerClearArea.containsMouse ? root.red : root.fgDim
+                                    fontStyle: Tokens.font.icon.size(10).build()
+                                }
+
+                                MouseArea {
+                                    id: bannerClearArea
+
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        for (const m of [...slot.members])
+                                            m.close();
                                     }
                                 }
                             }
                         }
-                        StyledText {
-                            width: parent.width
-                            elide: Text.ElideRight
-                            text: card.modelData.summary
-                            color: root.fg
-                            font.pointSize: 9.5
-                            font.weight: Font.DemiBold
-                        }
-                        StyledText {
-                            width: parent.width
-                            visible: text.length > 0
-                            wrapMode: Text.Wrap
-                            maximumLineCount: 3
-                            elide: Text.ElideRight
-                            textFormat: Text.PlainText
-                            text: root.plain(card.modelData.body)
-                            color: Qt.alpha(root.fg, 0.78)
-                            font.pointSize: 8.5
-                        }
                     }
 
-                    MouseArea {
-                        id: cardArea
-
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            const n = card.modelData;
-                            // Pile repliée : un clic la déplie
-                            if (card.stacked) {
-                                root.expandedApp = n.appName ?? "";
-                                return;
-                            }
-                            if (n.actions?.length > 0)
-                                n.actions[0].invoke();
-                            n.close();
-                        }
-                    }
-
-                    // Replier la pile dépliée (sur le nom de l'appli)
-                    MouseArea {
-                        x: 62
-                        y: 8
-                        width: 240
-                        height: 18
-                        enabled: card.expandedHead
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.expandedApp = ""
-                    }
-
-                    // Fermer (au survol)
+                    // Cartes cachées derrière la première : effet d'éventail 3D quand la pile est rétractée
                     Rectangle {
-                        anchors.right: parent.right
-                        anchors.rightMargin: 8
-                        y: 8
-                        width: 22
-                        height: 22
-                        radius: 11
-                        opacity: cardArea.containsMouse || xArea.containsMouse ? 1 : 0
-                        color: "transparent"
-                        // Verre liquide (iOS 27) sous le contenu
-                        GlassControl {
-                            anchors.fill: parent
-                            radius: parent.radius
-                            bevel: parent.height > 60 ? 16 : 0
-                            tintColour: Qt.alpha(root.fg, xArea.containsMouse ? 0.22 : 0.13)
-                            visible: tintColour.a > 0.01
-                            pressed: xArea.pressed
-                            hovered: xArea.containsMouse
-                            pointer: xArea.containsMouse ? Qt.point(xArea.mouseX / Math.max(1, width), xArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
-                        }
+                        visible: slot.stacked && slot.repeats >= 3
+                        z: -2
+                        x: 18
+                        y: slot.headBannerH + 13
+                        width: parent.width - 36
+                        height: card.height
+                        radius: 18
+                        color: Qt.alpha(root.fg, 0.035)
+                        border.width: 1
+                        border.color: Qt.alpha(slot.catCol, 0.16)
+                    }
+                    Rectangle {
+                        visible: slot.stacked
+                        z: -1
+                        x: 9
+                        y: slot.headBannerH + 7
+                        width: parent.width - 18
+                        height: card.height
+                        radius: 18
+                        color: Qt.alpha(root.fg, 0.055)
+                        border.width: 1
+                        border.color: Qt.alpha(slot.catCol, 0.24)
+                    }
 
-                        Behavior on opacity {
-                            NumberAnimation {
+                    Rectangle {
+                        id: card
+
+                        property var modelData: slot.modelData
+                        readonly property string icon: modelData.appIcon ? Quickshell.iconPath(modelData.appIcon, true) : ""
+                        readonly property int repeats: slot.repeats
+                        readonly property bool stacked: slot.stacked
+
+                        y: slot.headBannerH
+                        width: centerList.width
+                        height: cardBody.implicitHeight + 24
+                        radius: 18
+                        opacity: slot.isHiddenGrp ? 0.58 : 1
+                        color: Qt.alpha(root.fg, cardArea.containsMouse ? 0.105 : 0.068)
+                        border.width: 1
+                        border.color: slot.stacked ? Qt.alpha(slot.catCol, 0.32) : Qt.alpha(root.fg, 0.08)
+
+                        Behavior on color {
+                            ColorAnimation {
                                 duration: 150
                             }
                         }
 
-                        MaterialIcon {
-                            anchors.centerIn: parent
-                            text: "close"
-                            color: root.fg
-                            fontStyle: Tokens.font.icon.size(10).build()
+                        // Fil conducteur vertical coloré quand la pile est dépliée
+                        Rectangle {
+                            visible: slot.expandedMember
+                            x: 4
+                            y: 10
+                            width: 3
+                            height: parent.height - 20
+                            radius: 1.5
+                            color: slot.catCol
+                            opacity: 0.75
                         }
+
+                        // Icône de l'app ou image de la notification
+                        Rectangle {
+                            id: cardIcon
+
+                            x: slot.expandedMember ? 13 : 12
+                            y: 12
+                            width: 38
+                            height: 38
+                            radius: 11
+                            color: Qt.alpha(slot.catCol, 0.14)
+                            border.width: 1
+                            border.color: Qt.alpha(slot.catCol, 0.28)
+                            clip: true
+
+                            Image {
+                                id: cardImg
+
+                                anchors.fill: parent
+                                anchors.margins: card.modelData.image ? 0 : 6
+                                fillMode: Image.PreserveAspectCrop
+                                asynchronous: true
+                                sourceSize: Qt.size(76, 76)
+                                source: card.modelData.image || card.icon
+                            }
+                            MaterialIcon {
+                                anchors.centerIn: parent
+                                visible: cardImg.status !== Image.Ready
+                                text: root.notifCatIcon(slot.catName)
+                                color: slot.catCol
+                                fontStyle: Tokens.font.icon.size(15).build()
+                                fill: 1
+                            }
+                        }
+
+                        Column {
+                            id: cardBody
+
+                            anchors.left: cardIcon.right
+                            anchors.leftMargin: 12
+                            anchors.right: parent.right
+                            anchors.rightMargin: 14
+                            y: 11
+                            spacing: 3
+
+                            Item {
+                                width: parent.width
+                                height: Math.max(cardAppRow.implicitHeight, 16)
+
+                                Row {
+                                    id: cardAppRow
+
+                                    anchors.left: parent.left
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    spacing: 5
+
+                                    StyledText {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        elide: Text.ElideRight
+                                        text: card.modelData.appName || root.notifCatLabel(slot.catName)
+                                        color: root.fgDim
+                                        font.pointSize: 8
+                                        font.weight: Font.DemiBold
+                                    }
+
+                                    // Pastille d'espèce (Messages / Système / Média / Applis)
+                                    Rectangle {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: catTagTxt.implicitWidth + 8
+                                        height: 14
+                                        radius: 7
+                                        color: Qt.alpha(slot.catCol, 0.15)
+
+                                        StyledText {
+                                            id: catTagTxt
+
+                                            anchors.centerIn: parent
+                                            text: root.notifCatLabel(slot.catName)
+                                            color: slot.catCol
+                                            font.pointSize: 6.5
+                                            font.weight: Font.Bold
+                                        }
+                                    }
+                                }
+
+                                StyledText {
+                                    id: cardTime
+
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: (card.stacked ? stackBadge.width + 6 : (slot.expandedMember ? foldChip.width + 6 : 0)) + (cardArea.containsMouse || hideBtnArea.containsMouse || xArea.containsMouse ? 48 : 0)
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: card.modelData.timeStr
+                                    color: root.fgDim
+                                    font.pointSize: 7.5
+
+                                    Behavior on anchors.rightMargin {
+                                        NumberAnimation {
+                                            duration: 150
+                                        }
+                                    }
+                                }
+                            }
+
+                            StyledText {
+                                width: parent.width
+                                elide: Text.ElideRight
+                                text: card.modelData.summary
+                                color: root.fg
+                                font.pointSize: 9.5
+                                font.weight: Font.DemiBold
+                            }
+
+                            StyledText {
+                                width: parent.width
+                                visible: text.length > 0
+                                wrapMode: Text.Wrap
+                                maximumLineCount: 3
+                                elide: Text.ElideRight
+                                textFormat: Text.PlainText
+                                text: root.plain(card.modelData.body)
+                                color: Qt.alpha(root.fg, 0.78)
+                                font.pointSize: 8.5
+                            }
+
+                            // Aperçu des autres notifications quand la pile est rétractée
+                            StyledText {
+                                visible: card.stacked && slot.repeats > 1
+                                width: parent.width
+                                elide: Text.ElideRight
+                                text: {
+                                    const others = slot.members.slice(1, 3).map(m => m.summary || root.plain(m.body)).filter(Boolean);
+                                    return others.length > 0 ? `+ ${others.join("  ·  ")}` : "";
+                                }
+                                color: slot.catCol
+                                font.pointSize: 7.5
+                                font.weight: Font.Medium
+                            }
+                        }
+
                         MouseArea {
-                            id: xArea
+                            id: cardArea
 
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                // Pile repliée : ferme toute la pile ; sinon seulement cette carte
-                                for (const m of card.stacked ? root.groupMembers(card.modelData) : [card.modelData])
-                                    m.close();
+                                const n = card.modelData;
+                                // Pile rétractée : un clic la déplie
+                                if (card.stacked) {
+                                    root.toggleGroupExpand(slot.grpKey);
+                                    return;
+                                }
+                                if (n.actions?.length > 0)
+                                    n.actions[0].invoke();
+                                n.close();
+                            }
+                        }
+
+                        // ── Badge interactif de pile rétractée : « ×N · Déplier ▾ » ──
+                        Rectangle {
+                            id: stackBadge
+
+                            visible: card.stacked
+                            anchors.right: parent.right
+                            anchors.rightMargin: (cardArea.containsMouse || hideBtnArea.containsMouse || xArea.containsMouse) ? 56 : 10
+                            y: 9
+                            width: stackBadgeRow.implicitWidth + 12
+                            height: 20
+                            radius: 10
+                            color: stackBadgeArea.containsMouse ? Qt.alpha(slot.catCol, 0.34) : Qt.alpha(slot.catCol, 0.22)
+                            border.width: 1
+                            border.color: Qt.alpha(slot.catCol, 0.5)
+
+                            Behavior on anchors.rightMargin {
+                                NumberAnimation {
+                                    duration: 150
+                                }
+                            }
+
+                            Row {
+                                id: stackBadgeRow
+
+                                anchors.centerIn: parent
+                                spacing: 3
+
+                                StyledText {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: `×${card.repeats} · ${qsTr("Déplier")}`
+                                    color: root.fg
+                                    font.pointSize: 7
+                                    font.weight: Font.Bold
+                                }
+
+                                MaterialIcon {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "expand_more"
+                                    color: slot.catCol
+                                    fontStyle: Tokens.font.icon.size(11).build()
+                                }
+                            }
+
+                            MouseArea {
+                                id: stackBadgeArea
+
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.toggleGroupExpand(slot.grpKey)
+                            }
+                        }
+
+                        // ── Bouton rapide « Réduire ▴ » sur chaque carte d'une pile dépliée ──
+                        Rectangle {
+                            id: foldChip
+
+                            visible: slot.expandedMember
+                            anchors.right: parent.right
+                            anchors.rightMargin: (cardArea.containsMouse || hideBtnArea.containsMouse || xArea.containsMouse) ? 56 : 10
+                            y: 9
+                            width: foldChipRow.implicitWidth + 10
+                            height: 19
+                            radius: 9.5
+                            color: foldChipArea.containsMouse ? Qt.alpha(slot.catCol, 0.28) : Qt.alpha(root.fg, 0.09)
+
+                            Behavior on anchors.rightMargin {
+                                NumberAnimation {
+                                    duration: 150
+                                }
+                            }
+
+                            Row {
+                                id: foldChipRow
+
+                                anchors.centerIn: parent
+                                spacing: 2
+
+                                MaterialIcon {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "expand_less"
+                                    color: slot.catCol
+                                    fontStyle: Tokens.font.icon.size(10).build()
+                                }
+
+                                StyledText {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: qsTr("Réduire")
+                                    color: root.fgDim
+                                    font.pointSize: 6.5
+                                    font.weight: Font.Bold
+                                }
+                            }
+
+                            MouseArea {
+                                id: foldChipArea
+
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.toggleGroupExpand(slot.grpKey)
+                            }
+                        }
+
+                        // Masquer cette application / espèce (au survol)
+                        Rectangle {
+                            anchors.right: closeBtn.left
+                            anchors.rightMargin: 4
+                            y: 8
+                            width: 22
+                            height: 22
+                            radius: 11
+                            opacity: cardArea.containsMouse || hideBtnArea.containsMouse || xArea.containsMouse ? 1 : 0
+                            color: "transparent"
+
+                            GlassControl {
+                                anchors.fill: parent
+                                radius: parent.radius
+                                bevel: 0
+                                tintColour: Qt.alpha(slot.isHiddenGrp ? "#ff9f0a" : root.fg, hideBtnArea.containsMouse ? 0.24 : 0.13)
+                                visible: tintColour.a > 0.01
+                                pressed: hideBtnArea.pressed
+                                hovered: hideBtnArea.containsMouse
+                                pointer: hideBtnArea.containsMouse ? Qt.point(hideBtnArea.mouseX / Math.max(1, width), hideBtnArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
+                            }
+
+                            Behavior on opacity {
+                                NumberAnimation {
+                                    duration: 150
+                                }
+                            }
+
+                            MaterialIcon {
+                                anchors.centerIn: parent
+                                text: slot.isHiddenGrp ? "visibility" : "visibility_off"
+                                color: slot.isHiddenGrp ? "#ff9f0a" : root.fg
+                                fontStyle: Tokens.font.icon.size(10).build()
+                            }
+
+                            MouseArea {
+                                id: hideBtnArea
+
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.toggleGroupHidden(slot.grpKey)
+                            }
+                        }
+
+                        // Fermer (au survol)
+                        Rectangle {
+                            id: closeBtn
+
+                            anchors.right: parent.right
+                            anchors.rightMargin: 8
+                            y: 8
+                            width: 22
+                            height: 22
+                            radius: 11
+                            opacity: cardArea.containsMouse || hideBtnArea.containsMouse || xArea.containsMouse ? 1 : 0
+                            color: "transparent"
+
+                            GlassControl {
+                                anchors.fill: parent
+                                radius: parent.radius
+                                bevel: 0
+                                tintColour: Qt.alpha(root.fg, xArea.containsMouse ? 0.22 : 0.13)
+                                visible: tintColour.a > 0.01
+                                pressed: xArea.pressed
+                                hovered: xArea.containsMouse
+                                pointer: xArea.containsMouse ? Qt.point(xArea.mouseX / Math.max(1, width), xArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
+                            }
+
+                            Behavior on opacity {
+                                NumberAnimation {
+                                    duration: 150
+                                }
+                            }
+
+                            MaterialIcon {
+                                anchors.centerIn: parent
+                                text: "close"
+                                color: root.fg
+                                fontStyle: Tokens.font.icon.size(10).build()
+                            }
+                            MouseArea {
+                                id: xArea
+
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    // Pile repliée : ferme toute la pile ; sinon seulement cette carte
+                                    for (const m of card.stacked ? slot.members : [card.modelData])
+                                        m.close();
+                                }
                             }
                         }
                     }
-                    }
                 }
 
-                // Rien à lire
+                // Rien à lire (ou catégorie filtrée / masquée)
                 Column {
                     anchors.centerIn: parent
                     visible: centerList.count === 0
@@ -6270,13 +7028,13 @@ Item {
 
                     MaterialIcon {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: "notifications_paused"
+                        text: root.hiddenNotifCount > 0 && !root.showHiddenGroups ? "visibility_off" : "notifications_paused"
                         color: root.fgDim
                         fontStyle: Tokens.font.icon.size(22).build()
                     }
                     StyledText {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: qsTr("Aucune notification")
+                        text: root.hiddenNotifCount > 0 && !root.showHiddenGroups ? qsTr("%1 notification(s) masquée(s)").arg(root.hiddenNotifCount) : qsTr("Aucune notification")
                         color: root.fgDim
                         font.pointSize: 9.5
                     }
