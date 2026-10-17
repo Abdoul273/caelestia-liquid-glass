@@ -29,6 +29,7 @@ PersistentProperties {
     property bool keyhelp
     property bool emoji
     property bool clipboard
+    property bool earbuds
 
     // Dashboard state
     property int dashboardTab

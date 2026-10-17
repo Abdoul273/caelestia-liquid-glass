@@ -57,6 +57,7 @@ Verre translucide partout, Mission Control, Spotlight, animations fluides façon
 - **Outils d'écriture** (`Super + Maj + W`) : sélectionne du texte n'importe où ; la goutte propose Corriger, Reformuler, Professionnel, Amical, Concis, Résumer, Points clés, En anglais, ou une consigne libre (« ajoute un emoji »…). Le résultat arrive en direct, Entrée remplace la sélection, Ctrl+C copie.
 - **Traduction** (`Super + Alt + T`) : une ligne comme Spotlight, reprend la sélection, traduit pendant que tu tapes (Auto = français ↔ anglais, Tab pour une autre langue) ; Entrée insère la traduction dans le champ. Mêmes réglages Gemini que la dictée (`~/.config/caelestia-write/config.json` ou `GEMINI_API_KEY`).
 - **Horloge** (`Super + Maj + O`) : minuteur avec anneau, chronomètre à cadran et tours, pomodoro automatique et alarmes. Tout tourne dans la Dynamic Island : le minuteur continue et l'alarme sonne même app fermée.
+- **Écouteurs 3D** (`Super + Maj + B` ou automatique à la connexion) : une goutte de verre tombe de l'île avec tes écouteurs CETW572 en 3D temps réel façon AirPodsDesktop (boîtier galet qui s'ouvre au ressort, écouteurs à crochet avec anneau chromé et LEDs bleues, rotation à la souris), jauges Gauche / Boîtier / Droite, volume et connexion Bluetooth.
 - **Aperçu rapide** : dans Nautilus, sélectionne un fichier et appuie sur **Espace**.
 - **Indicateur de bureau** en verre pendant les changements de bureau.
 - **Bureaux dynamiques** : `Super + Page ↑/↓` va aussi loin que tu veux, et les points de l'île s'effacent dès que tu reviens en arrière (seuls les bureaux occupés et les 3 de base restent).
@@ -144,6 +145,7 @@ Appuie sur **`Super + H`** : une ligne de recherche façon Spotlight tombe de l'
 | `Super + Maj + W` | Outils d'écriture (sélection) |
 | `Super + Alt + T` | Traduction rapide |
 | `Super + Maj + O` | Horloge (minuteur, chrono, pomodoro, alarmes) |
+| `Super + Maj + B` | Écouteurs 3D (animation 3D façon AirPodsDesktop, batterie, connexion) |
 | `Super + Tab` | Mission Control |
 | `Super + H` | Tous les raccourcis |
 | `Super + I` | Paramètres de Caelestia |

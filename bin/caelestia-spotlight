@@ -569,6 +569,7 @@ ACTIONS = [
     ("Se déconnecter", "deconnecter logout session", "󰍃", [BIN + "caelestia-logout"]),
     ("Paramètres de Caelestia", "parametres reglages settings nexus preferences", "󰒓", ["qs", "-c", "caelestia", "ipc", "call", "nexus", "open"]),
     ("Horloge", "horloge minuteur chrono alarme pomodoro reveil", "󰔛", ["hyprctl", "dispatch", 'hl.dsp.global("caelestia:clock")']),
+    ("Écouteurs 3D", "ecouteurs airpods bluetooth cetw572 casque batterie", "󰋋", ["hyprctl", "dispatch", 'hl.dsp.global("caelestia:earbuds")']),
     ("Calculatrice", "calculatrice calcul", "󰃬", [BIN + "caelestia-spotlight", "calc"]),
     ("Capture d'écran", "capture ecran screenshot", "󰹑", ["qs", "-c", "caelestia", "ipc", "call", "picker", "open"]),
     ("Mission Control", "mission control fenetres bureaux", "󰕰", ["qs", "-c", "caelestia", "ipc", "call", "missioncontrol", "open"]),

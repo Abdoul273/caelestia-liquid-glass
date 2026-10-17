@@ -28,7 +28,7 @@ PACKAGES=(
     psmisc pipewire-audio swappy      # Dynamic Island : caméra utilisée, sonneries, annoter les captures
     fd jq                             # Spotlight (fichiers), quitter l'app active (Super + Maj + Q)
     fzf btop                          # kitty : recherche floue dans l'historique, moniteur système
-    hyprsunset                        # éclairage de nuit (sinon filtre d'écran de secours)
+    hyprsunset qt6-quick3d            # éclairage de nuit, scène 3D des écouteurs
     ttf-jetbrains-mono-nerd noto-fonts-emoji
 )
 AUR_PACKAGES=(ttf-rubik-vf darkly-bin)  # darkly : style Qt capable du verre (KDE Connect…)

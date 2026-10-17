@@ -54,6 +54,7 @@ Item {
     readonly property alias keyhelp: keyhelp
     readonly property alias emoji: emoji
     readonly property alias clipboard: clipboard
+    readonly property alias earbuds: earbuds
 
     anchors.fill: parent
     anchors.margins: borderThickness
@@ -319,6 +320,18 @@ Item {
 
         anchors.horizontalCenter: parent.horizontalCenter
         y: Math.max(0, Math.round((parent.height - height) / 2))
+    }
+
+    // Écouteurs 3D (Super + Maj + B) : même goutte de verre façon AirPodsDesktop
+    SpotlightModule.Earbuds {
+        id: earbuds
+
+        screen: root.screen
+        screenState: root.screenState
+        island: island
+
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: Math.round(parent.height * 0.12)
     }
 
     // Dock : sort du bas de l'écran au survol

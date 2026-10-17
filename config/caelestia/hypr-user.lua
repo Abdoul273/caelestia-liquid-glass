@@ -207,6 +207,7 @@ hl.layer_rule({ match = { namespace = "kitty-quick-access" }, blur = true, ignor
 rebind("SUPER + grave", hl.dsp.exec_cmd("kitten quick-access-terminal"))
 
 rebind("SUPER + SHIFT + O", hl.dsp.global("caelestia:clock")) -- Horloge dans le verre du shell
+rebind("SUPER + SHIFT + B", hl.dsp.global("caelestia:earbuds")) -- Écouteurs 3D dans le verre du shell façon AirPodsDesktop
 rebind("SUPER + H", hl.dsp.global("caelestia:keyhelp")) -- Raccourcis façon Spotlight dans le verre du shell
 rebind("SUPER + Print", hl.dsp.global("caelestia:screenshot")) -- Capture sur mesure (choix de la zone → éditeur d’annotation), comme le bouton Capture du centre de contrôle
 rebind("Print", hl.dsp.exec_cmd("sh -c 'pw-play \"$HOME/.config/quickshell/caelestia/assets/sounds/screenshot.wav\" & caelestia screenshot'"), { locked = true }) -- Capture plein écran avec le même son que la capture sur mesure

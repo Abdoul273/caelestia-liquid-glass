@@ -24,7 +24,7 @@ Scope {
     }
 
     // Gouttes de verre de l'île (Spotlight, calculatrice, projection, presse-papiers…) : une seule à la fois
-    readonly property var drops: ["spotlight", "calculator", "display", "clipboard", "emoji", "keyhelp", "clock", "settings", "annotate", "dictation", "writing", "translate", "siri"]
+    readonly property var drops: ["spotlight", "calculator", "display", "clipboard", "emoji", "keyhelp", "clock", "settings", "annotate", "earbuds", "dictation", "writing", "translate", "siri"]
     function toggleDrop(kind: string): void {
         if (hasFullscreen)
             return;
@@ -140,6 +140,14 @@ Scope {
         name: "annotate"
         description: qsTr("Annoter une capture : même goutte de verre")
         onPressed: root.toggleDrop("annotate")
+    }
+
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
+        name: "earbuds"
+        description: qsTr("Écouteurs 3D (Super + Maj + B) : même goutte de verre façon AirPodsDesktop")
+        onPressed: root.toggleDrop("earbuds")
     }
 
     // qmllint disable unresolved-type
@@ -325,6 +333,22 @@ Scope {
         }
 
         target: "annotate"
+    }
+
+    IpcHandler {
+        function toggle(): void {
+            root.toggleDrop("earbuds");
+        }
+        function open(): void {
+            const screenState = ShellState.forActive();
+            if (!screenState.earbuds)
+                root.toggleDrop("earbuds");
+        }
+        function close(): void {
+            ShellState.forActive().earbuds = false;
+        }
+
+        target: "earbuds"
     }
 
     IpcHandler {
