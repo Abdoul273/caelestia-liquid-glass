@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Shapes
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
@@ -90,16 +91,46 @@ Item {
         }
     }
 
-    // ── Couleurs (comme la Dynamic Island) ──
+    // ── Couleurs matérielles & horlogères (cohérentes avec la Dynamic Island) ──
     readonly property color fg: Colours.palette.m3onSurface
     readonly property color fgDim: Qt.alpha(fg, 0.62)
     readonly property color fgFaint: Qt.alpha(fg, 0.12)
-    readonly property color tileColour: Qt.alpha(fg, Colours.light ? 0.06 : 0.07)
-    readonly property color tileBorder: Qt.alpha(fg, 0.08)
+    readonly property color tileColour: Qt.alpha(fg, Colours.light ? 0.055 : 0.065)
+    readonly property color tileBorder: Qt.alpha(fg, Colours.light ? 0.12 : 0.14)
     readonly property color accent: Colours.palette.m3primary
     readonly property color onAccent: Colours.palette.m3onPrimary
+    readonly property color green: Colours.light ? "#1f8f3a" : "#32d74b"
+    readonly property color red: Colours.light ? "#d70015" : "#ff453a"
+    readonly property color amber: Colours.light ? "#c77700" : "#ff9f0a"
 
     readonly property MprisPlayer player: Players.active
+    readonly property bool playing: player?.isPlaying ?? false
+    readonly property real rawBass: {
+        if (!shown || !playing || Audio.cava.values.length === 0)
+            return 0;
+        const n = Math.min(4, Audio.cava.values.length);
+        let s = 0;
+        for (let i = 0; i < n; i++)
+            s += Audio.cava.values[i] ?? 0;
+        return Math.min(1, s / n);
+    }
+    property real bassLevel: rawBass
+    Behavior on bassLevel {
+        NumberAnimation {
+            duration: 90
+            easing.type: Easing.OutQuad
+        }
+    }
+
+    function fmtTime(sec: real): string {
+        if (!(sec > 0))
+            return "0:00";
+        const s = Math.floor(sec);
+        const m = Math.floor(s / 60);
+        const r = s % 60;
+        return `${m}:${r.toString().padStart(2, "0")}`;
+    }
+
     readonly property var brightMon: Brightness.getMonitorForScreen(screen)
     readonly property BluetoothAdapter adapter: Bluetooth.defaultAdapter
     readonly property list<BluetoothDevice> btConnected: Bluetooth.devices.values.filter(d => d.connected)
@@ -388,7 +419,7 @@ Item {
                     }
                 }
 
-                // ── Connexions + Ne pas déranger / thème ──
+                // ── Connexions + Concentration / Apparence ──
                 Row {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 176
@@ -400,13 +431,15 @@ Item {
 
                         Column {
                             anchors.fill: parent
-                            anchors.margins: 12
-                            spacing: 6
+                            anchors.margins: 10
+                            spacing: 4
 
                             ConnRow {
                                 icon: Nmcli.wifiEnabled ? "wifi" : "wifi_off"
                                 title: qsTr("Wi-Fi")
                                 subtitle: !Nmcli.wifiEnabled ? qsTr("Désactivé") : Nmcli.active?.ssid ?? (Nmcli.activeEthernet ? qsTr("Ethernet") : qsTr("Non connecté"))
+                                badgeText: Nmcli.wifiEnabled && Nmcli.active ? `${Nmcli.active.strength} %` : ""
+                                hasSubpage: true
                                 on: Nmcli.wifiEnabled
                                 onToggle: Nmcli.toggleWifi()
                                 onOpen: {
@@ -418,6 +451,8 @@ Item {
                                 icon: root.adapter?.enabled ? "bluetooth" : "bluetooth_disabled"
                                 title: qsTr("Bluetooth")
                                 subtitle: !root.adapter?.enabled ? qsTr("Désactivé") : root.btConnected.length > 0 ? root.btConnected.map(d => d.name).join(", ") : qsTr("Activé")
+                                badgeText: root.btConnected.length > 0 && root.btConnected[0].batteryAvailable ? `${Math.round(root.btConnected[0].battery * 100)} %` : root.btConnected.length > 1 ? `${root.btConnected.length}` : ""
+                                hasSubpage: true
                                 on: root.adapter?.enabled ?? false
                                 onToggle: {
                                     if (root.adapter)
@@ -428,7 +463,9 @@ Item {
                             ConnRow {
                                 icon: "vpn_key"
                                 title: qsTr("VPN")
-                                subtitle: VPN.connecting ? qsTr("Connexion…") : VPN.connected ? qsTr("Connecté") : qsTr("Déconnecté")
+                                subtitle: VPN.connecting ? qsTr("Connexion…") : VPN.connected ? qsTr("Tunnel chiffré actif") : qsTr("Déconnecté")
+                                badgeText: VPN.connected ? qsTr("ACTIF") : ""
+                                activeTint: root.green
                                 on: VPN.connected
                                 onToggle: VPN.toggle()
                                 onOpen: VPN.toggle()
@@ -445,6 +482,8 @@ Item {
                             icon: FocusMode.active ? FocusMode.info.icon : Notifs.dnd ? "do_not_disturb_on" : "do_not_disturb_off"
                             title: qsTr("Concentration")
                             subtitle: FocusMode.active ? FocusMode.info.name : Notifs.dnd ? qsTr("Ne pas déranger") : qsTr("Désactivée")
+                            activeTint: FocusMode.active ? (FocusMode.info.tint ?? root.accent) : root.accent
+                            hasSubpage: true
                             on: FocusMode.active || Notifs.dnd
                             onClicked: root.page = "focus"
                         }
@@ -452,28 +491,48 @@ Item {
                             width: parent.width
                             icon: Colours.light ? "light_mode" : "dark_mode"
                             title: qsTr("Apparence")
-                            subtitle: Colours.light ? qsTr("Claire") : qsTr("Sombre")
+                            subtitle: Colours.light ? qsTr("Mode clair") : qsTr("Mode sombre")
                             on: !Colours.light
                             onClicked: Colours.setMode(Colours.light ? "dark" : "light")
                         }
                     }
                 }
 
-                // ── Lecteur ──
+                // ── Lecteur Studio (halo basse, spectre Cava, barre de progression tactile) ──
                 Tile {
+                    id: ccPlayerTile
+
+                    readonly property real len: root.player?.length ?? 0
+                    readonly property real pos: root.player?.position ?? 0
+                    readonly property bool known: len > 0 && len < 2147483
+                    readonly property real playRatio: known ? Math.max(0, Math.min(1, pos / len)) : 0
+
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 76
+                    Layout.preferredHeight: known ? 96 : 78
                     visible: !!root.player
+
+                    // Halo réactif aux basses sous la pochette
+                    Rectangle {
+                        anchors.centerIn: ccCover
+                        width: ccCover.width + 8
+                        height: ccCover.height + 8
+                        radius: ccCover.radius + 3
+                        scale: 1 + root.bassLevel * 0.12
+                        opacity: root.playing ? 0.16 + root.bassLevel * 0.42 : 0
+                        color: Qt.alpha(root.accent, 0.5)
+                        border.width: 0.5
+                        border.color: Qt.alpha("#ffffff", 0.22 + root.bassLevel * 0.3)
+                    }
 
                     Rectangle {
                         id: ccCover
 
                         anchors.left: parent.left
                         anchors.leftMargin: 12
-                        anchors.verticalCenter: parent.verticalCenter
+                        y: 12
                         width: 52
                         height: 52
-                        radius: 12
+                        radius: 13
                         color: root.fgFaint
                         clip: true
 
@@ -484,6 +543,14 @@ Item {
                             sourceSize: Qt.size(104, 104)
                             source: Players.getArtUrl(root.player)
                         }
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: parent.radius
+                            color: "transparent"
+                            border.width: 0.5
+                            border.color: Qt.alpha("#ffffff", 0.22)
+                        }
                     }
 
                     Column {
@@ -491,16 +558,58 @@ Item {
                         anchors.leftMargin: 12
                         anchors.right: ccControls.left
                         anchors.rightMargin: 8
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: 2
+                        anchors.verticalCenter: ccCover.verticalCenter
+                        spacing: 1
+
+                        Row {
+                            spacing: 6
+
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: (Players.getIdentity(root.player) || qsTr("Audio")).toUpperCase()
+                                color: root.accent
+                                font.pointSize: 6.8
+                                font.weight: Font.Bold
+                                font.letterSpacing: 0.7
+                            }
+
+                            // Mini spectre 4 bandes Cava en direct
+                            Row {
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: 1.5
+                                height: 9
+                                visible: root.playing
+
+                                Repeater {
+                                    model: 4
+
+                                    Rectangle {
+                                        required property int index
+                                        readonly property real v: root.shown && root.playing && Audio.cava.values.length > 0 ? (Audio.cava.values[index * 2] ?? 0.2) : 0.2
+
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: 2
+                                        height: Math.max(2.5, Math.min(9, 2.5 + v * 7))
+                                        radius: 1
+                                        color: index % 2 === 0 ? root.accent : "#38bdf8"
+
+                                        Behavior on height {
+                                            NumberAnimation {
+                                                duration: 85
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
 
                         StyledText {
                             width: parent.width
                             elide: Text.ElideRight
                             text: root.player?.trackTitle || qsTr("Rien en lecture")
                             color: root.fg
-                            font.pointSize: 10
-                            font.weight: Font.DemiBold
+                            font.pointSize: 10.2
+                            font.weight: Font.Bold
                         }
                         StyledText {
                             width: parent.width
@@ -516,8 +625,8 @@ Item {
 
                         anchors.right: parent.right
                         anchors.rightMargin: 10
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: 2
+                        anchors.verticalCenter: ccCover.verticalCenter
+                        spacing: 4
 
                         IconBtn {
                             icon: "skip_previous"
@@ -533,20 +642,133 @@ Item {
                             onClicked: root.player?.next()
                         }
                     }
+
+                    // Piste de progression et scrubbing direct
+                    Item {
+                        visible: ccPlayerTile.known
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        anchors.bottomMargin: 8
+                        height: 14
+
+                        StyledText {
+                            id: ccPosLbl
+
+                            anchors.left: parent.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 30
+                            text: root.fmtTime(ccPlayerTile.pos)
+                            color: root.fgDim
+                            font.pointSize: 7.2
+                            font.features: {
+                                "tnum": 1
+                            }
+                        }
+
+                        Rectangle {
+                            id: ccSeekBar
+
+                            anchors.left: ccPosLbl.right
+                            anchors.right: ccLenLbl.left
+                            anchors.leftMargin: 6
+                            anchors.rightMargin: 6
+                            anchors.verticalCenter: parent.verticalCenter
+                            height: ccSeekArea.containsMouse ? 5 : 3.5
+                            radius: height / 2
+                            color: Qt.alpha(root.fg, 0.12)
+
+                            Behavior on height {
+                                NumberAnimation {
+                                    duration: 120
+                                }
+                            }
+
+                            Rectangle {
+                                width: parent.width * ccPlayerTile.playRatio
+                                height: parent.height
+                                radius: parent.radius
+                                gradient: Gradient {
+                                    orientation: Gradient.Horizontal
+                                    GradientStop { position: 0.0; color: root.accent }
+                                    GradientStop { position: 1.0; color: "#38bdf8" }
+                                }
+                            }
+
+                            MouseArea {
+                                id: ccSeekArea
+
+                                anchors.fill: parent
+                                anchors.margins: -5
+                                hoverEnabled: true
+                                enabled: ccPlayerTile.known && (root.player?.canSeek ?? false)
+                                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                onClicked: e => {
+                                    const r = Math.max(0, Math.min(1, (e.x - 5) / Math.max(1, ccSeekBar.width)));
+                                    root.player.position = r * ccPlayerTile.len;
+                                }
+                            }
+                        }
+
+                        StyledText {
+                            id: ccLenLbl
+
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 30
+                            horizontalAlignment: Text.AlignRight
+                            text: root.fmtTime(ccPlayerTile.len)
+                            color: root.fgDim
+                            font.pointSize: 7.2
+                            font.features: {
+                                "tnum": 1
+                            }
+                        }
+                    }
                 }
 
-                // ── Luminosité ──
+                // ── Luminosité & Écran ──
                 Tile {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 72
+                    Layout.preferredHeight: 74
 
-                    StyledText {
+                    Row {
                         x: 14
-                        y: 10
-                        text: qsTr("Écran")
-                        color: root.fg
-                        font.pointSize: 9.5
-                        font.weight: Font.DemiBold
+                        y: 9
+                        spacing: 7
+
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: qsTr("ÉCRAN")
+                            color: root.fgDim
+                            font.pointSize: 7.2
+                            font.weight: Font.Bold
+                            font.letterSpacing: 0.7
+                        }
+                        Rectangle {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: brightPctTxt.implicitWidth + 10
+                            height: 16
+                            radius: 5
+                            color: Qt.alpha(root.fg, 0.06)
+                            border.width: 0.5
+                            border.color: Qt.alpha(root.fg, 0.12)
+
+                            StyledText {
+                                id: brightPctTxt
+
+                                anchors.centerIn: parent
+                                text: `${Math.round((root.brightMon?.brightness ?? 0) * 100)} %`
+                                color: root.fg
+                                font.pointSize: 7.8
+                                font.weight: Font.Bold
+                                font.features: {
+                                    "tnum": 1
+                                }
+                            }
+                        }
                     }
 
                     // Éclairage de nuit / projection → page Écran
@@ -555,20 +777,11 @@ Item {
                         anchors.rightMargin: 10
                         y: 6
                         width: scrRow.implicitWidth + 16
-                        height: 24
-                        radius: 12
-                        color: "transparent"
-                        // Verre liquide (iOS 27) sous le contenu
-                        GlassControl {
-                            anchors.fill: parent
-                            radius: parent.radius
-                            bevel: parent.height > 60 ? 16 : 0
-                            tintColour: scrArea.containsMouse ? root.fgFaint : "transparent"
-                            visible: tintColour.a > 0.01
-                            pressed: scrArea.pressed
-                            hovered: scrArea.containsMouse
-                            pointer: scrArea.containsMouse ? Qt.point(scrArea.mouseX / Math.max(1, width), scrArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
-                        }
+                        height: 22
+                        radius: 11
+                        color: scrArea.containsMouse ? Qt.alpha(root.fg, 0.1) : Qt.alpha(root.fg, 0.04)
+                        border.width: 0.5
+                        border.color: NightLight.enabled ? Qt.alpha(root.amber, 0.4) : Qt.alpha(root.fg, 0.12)
 
                         Row {
                             id: scrRow
@@ -580,15 +793,19 @@ Item {
                                 anchors.verticalCenter: parent.verticalCenter
                                 visible: NightLight.enabled
                                 text: "nightlight"
-                                color: "#ff9f0a"
+                                color: root.amber
                                 fontStyle: Tokens.font.icon.size(11).build()
                                 fill: 1
                             }
                             StyledText {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: NightLight.enabled ? qsTr("Nuit · %1 K").arg(NightLight.temperature) : root.projMode === "duplicate" ? qsTr("Dupliqué") : root.projMode === "extend" ? qsTr("Étendu") : root.projMode === "external" ? qsTr("Second écran") : qsTr("Nuit, projection")
-                                color: root.fgDim
-                                font.pointSize: 8
+                                color: NightLight.enabled ? root.amber : root.fgDim
+                                font.pointSize: 7.8
+                                font.weight: Font.DemiBold
+                                font.features: {
+                                    "tnum": 1
+                                }
                             }
                             MaterialIcon {
                                 anchors.verticalCenter: parent.verticalCenter
@@ -619,40 +836,59 @@ Item {
                     }
                 }
 
-                // ── Son + sortie ──
+                // ── Audio & Sortie ──
                 Tile {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 72
+                    Layout.preferredHeight: 74
 
-                    StyledText {
+                    Row {
                         x: 14
-                        y: 10
-                        text: qsTr("Son")
-                        color: root.fg
-                        font.pointSize: 9.5
-                        font.weight: Font.DemiBold
+                        y: 9
+                        spacing: 7
+
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: qsTr("AUDIO")
+                            color: root.fgDim
+                            font.pointSize: 7.2
+                            font.weight: Font.Bold
+                            font.letterSpacing: 0.7
+                        }
+                        Rectangle {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: volPctTxt.implicitWidth + 10
+                            height: 16
+                            radius: 5
+                            color: Audio.muted ? Qt.alpha(root.red, 0.14) : Qt.alpha(root.fg, 0.06)
+                            border.width: 0.5
+                            border.color: Audio.muted ? Qt.alpha(root.red, 0.35) : Qt.alpha(root.fg, 0.12)
+
+                            StyledText {
+                                id: volPctTxt
+
+                                anchors.centerIn: parent
+                                text: Audio.muted ? qsTr("MUET") : `${Math.round(Audio.volume * 100)} %`
+                                color: Audio.muted ? root.red : root.fg
+                                font.pointSize: 7.8
+                                font.weight: Font.Bold
+                                font.features: {
+                                    "tnum": 1
+                                }
+                            }
+                        }
                     }
 
-                    // Sortie audio actuelle → liste des sorties
+                    // Sortie audio actuelle → console audio complète
                     Rectangle {
                         anchors.right: parent.right
                         anchors.rightMargin: 10
                         y: 6
                         width: outRow.implicitWidth + 16
-                        height: 24
-                        radius: 12
-                        color: "transparent"
-                        // Verre liquide (iOS 27) sous le contenu
-                        GlassControl {
-                            anchors.fill: parent
-                            radius: parent.radius
-                            bevel: parent.height > 60 ? 16 : 0
-                            tintColour: outArea.containsMouse ? root.fgFaint : "transparent"
-                            visible: tintColour.a > 0.01
-                            pressed: outArea.pressed
-                            hovered: outArea.containsMouse
-                            pointer: outArea.containsMouse ? Qt.point(outArea.mouseX / Math.max(1, width), outArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
-                        }
+                        height: 22
+                        radius: 11
+                        color: outArea.containsMouse ? Qt.alpha(root.fg, 0.1) : Qt.alpha(root.fg, 0.04)
+                        border.width: 0.5
+                        border.color: Qt.alpha(root.fg, 0.12)
 
                         Row {
                             id: outRow
@@ -660,13 +896,21 @@ Item {
                             anchors.centerIn: parent
                             spacing: 4
 
+                            MaterialIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: (Audio.sink?.name ?? "").startsWith("bluez") ? "headphones" : (Audio.sink?.name ?? "").includes("hdmi") ? "tv" : "speaker"
+                                color: root.accent
+                                fontStyle: Tokens.font.icon.size(11).build()
+                                fill: 1
+                            }
                             StyledText {
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: Math.min(implicitWidth, 190)
+                                width: Math.min(implicitWidth, 175)
                                 elide: Text.ElideRight
                                 text: Audio.sink?.description || Audio.sink?.nickname || Audio.sink?.name || ""
                                 color: root.fgDim
-                                font.pointSize: 8
+                                font.pointSize: 7.8
+                                font.weight: Font.DemiBold
                             }
                             MaterialIcon {
                                 anchors.verticalCenter: parent.verticalCenter
@@ -702,18 +946,18 @@ Item {
                     }
                 }
 
-                // ── Raccourcis rapides ──
+                // ── Raccourcis rapides (grille matérielle 4×2 biseautée) ──
                 Tile {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: grid.implicitHeight + 24
+                    Layout.preferredHeight: grid.implicitHeight + 20
 
                     Grid {
                         id: grid
 
                         anchors.centerIn: parent
                         columns: 4
-                        columnSpacing: 22
-                        rowSpacing: 12
+                        columnSpacing: 8
+                        rowSpacing: 8
 
                         RoundToggle {
                             icon: "coffee"
@@ -729,7 +973,8 @@ Item {
                         }
                         RoundToggle {
                             icon: Audio.sourceMuted ? "mic_off" : "mic"
-                            label: qsTr("Micro")
+                            label: Audio.sourceMuted ? qsTr("Muet") : qsTr("Micro")
+                            activeTint: Audio.sourceMuted ? root.red : root.accent
                             on: !Audio.sourceMuted
                             onClicked: {
                                 if (Audio.source?.audio)
@@ -738,13 +983,14 @@ Item {
                         }
                         RoundToggle {
                             icon: Recorder.running ? "radio_button_checked" : "screen_record"
-                            label: Recorder.running ? qsTr("En cours") : qsTr("Enregistrer")
+                            label: Recorder.running ? qsTr("En cours") : qsTr("Capturer")
+                            activeTint: Recorder.running ? root.red : root.accent
                             on: Recorder.running
                             onClicked: root.page = "record"
                         }
                         RoundToggle {
                             icon: "screenshot_region"
-                            label: qsTr("Capture")
+                            label: qsTr("Photo")
                             onClicked: {
                                 root.close();
                                 captureDelay.start();
@@ -761,6 +1007,7 @@ Item {
                         RoundToggle {
                             icon: "nightlight"
                             label: NightLight.enabled ? qsTr("%1 K").arg(NightLight.temperature) : qsTr("Nuit")
+                            activeTint: root.amber
                             on: NightLight.enabled
                             onClicked: NightLight.toggle()
                         }
@@ -775,75 +1022,161 @@ Item {
                     }
                 }
 
-                // ── Énergie ──
+                // ── Télémétrie Énergie & Profils de puissance ──
                 Tile {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 56
+                    Layout.preferredHeight: 62
                     visible: UPower.displayDevice.isLaptopBattery || PowerProfiles.hasPerformanceProfile !== undefined
+
+                    readonly property real battPct: UPower.displayDevice.percentage ?? 0
+                    readonly property color battColor: !UPower.onBattery ? root.green : battPct < 0.2 ? root.red : battPct < 0.4 ? root.amber : root.accent
 
                     Row {
                         anchors.left: parent.left
-                        anchors.leftMargin: 14
+                        anchors.leftMargin: 10
                         anchors.verticalCenter: parent.verticalCenter
-                        spacing: 8
+                        spacing: 9
 
-                        MaterialIcon {
+                        // Mini cadran 270° de batterie
+                        Rectangle {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: UPower.onBattery ? "battery_full" : "battery_charging_full"
-                            color: !UPower.onBattery ? "#32d74b" : root.fg
-                            fontStyle: Tokens.font.icon.size(15).build()
-                            fill: 1
+                            width: 38
+                            height: 38
+                            radius: 11
+                            color: Qt.alpha(parent.parent.battColor, 0.11)
+                            border.width: 0.5
+                            border.color: Qt.alpha(parent.parent.battColor, 0.32)
+
+                            Shape {
+                                anchors.fill: parent
+                                preferredRendererType: Shape.CurveRenderer
+
+                                ShapePath {
+                                    fillColor: "transparent"
+                                    strokeColor: Qt.alpha(root.fg, 0.12)
+                                    strokeWidth: 2.4
+                                    capStyle: ShapePath.RoundCap
+
+                                    PathAngleArc {
+                                        centerX: 19
+                                        centerY: 19
+                                        radiusX: 13
+                                        radiusY: 13
+                                        startAngle: 135
+                                        sweepAngle: 270
+                                    }
+                                }
+                                ShapePath {
+                                    fillColor: "transparent"
+                                    strokeColor: parent.parent.parent.parent.battColor
+                                    strokeWidth: 2.4
+                                    capStyle: ShapePath.RoundCap
+
+                                    PathAngleArc {
+                                        centerX: 19
+                                        centerY: 19
+                                        radiusX: 13
+                                        radiusY: 13
+                                        startAngle: 135
+                                        sweepAngle: Math.max(0.02, Math.min(1, parent.parent.parent.parent.battPct)) * 270
+                                    }
+                                }
+                            }
+
+                            MaterialIcon {
+                                anchors.centerIn: parent
+                                text: !UPower.onBattery ? "bolt" : "battery_full"
+                                color: parent.parent.parent.battColor
+                                fontStyle: Tokens.font.icon.size(13).build()
+                                fill: 1
+                            }
                         }
-                        StyledText {
+
+                        Column {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: `${Math.round((UPower.displayDevice.percentage ?? 0) * 100)} %`
-                            color: root.fg
-                            font.pointSize: 10
-                            font.weight: Font.DemiBold
-                        }
-                        MaterialIcon {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: "chevron_right"
-                            color: root.fgDim
-                            fontStyle: Tokens.font.icon.size(12).build()
+                            spacing: 0
+
+                            Row {
+                                spacing: 4
+
+                                StyledText {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: `${Math.round((UPower.displayDevice.percentage ?? 0) * 100)} %`
+                                    color: root.fg
+                                    font.pointSize: 10
+                                    font.weight: Font.Bold
+                                    font.features: {
+                                        "tnum": 1
+                                    }
+                                }
+                                StyledText {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    visible: BatteryInfo.watts > 0.2
+                                    text: `· ${BatteryInfo.watts.toFixed(1).replace(".", ",")} W`
+                                    color: !UPower.onBattery ? root.green : root.fgDim
+                                    font.pointSize: 7.8
+                                    font.weight: Font.DemiBold
+                                    font.features: {
+                                        "tnum": 1
+                                    }
+                                }
+                                MaterialIcon {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "chevron_right"
+                                    color: root.fgDim
+                                    fontStyle: Tokens.font.icon.size(11).build()
+                                }
+                            }
+                            StyledText {
+                                width: 128
+                                elide: Text.ElideRight
+                                text: BatteryInfo.statusText
+                                color: root.fgDim
+                                font.pointSize: 7.5
+                            }
                         }
                     }
 
                     // Clic sur l'état de la batterie → page détaillée
                     MouseArea {
                         x: 4
-                        width: 110
+                        width: 175
                         height: parent.height
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: root.page = "battery"
                     }
 
-                    // Profils d'énergie : contrôle segmenté
+                    // Profils d'énergie : contrôle segmenté biseauté
                     Rectangle {
                         anchors.right: parent.right
                         anchors.rightMargin: 10
                         anchors.verticalCenter: parent.verticalCenter
-                        width: 186
-                        height: 34
-                        radius: 17
-                        color: root.fgFaint
+                        width: 174
+                        height: 36
+                        radius: 12
+                        color: Qt.alpha(root.fg, 0.06)
+                        border.width: 0.5
+                        border.color: Qt.alpha(root.fg, 0.14)
 
                         Rectangle {
                             readonly property int idx: PowerProfiles.profile === PowerProfile.PowerSaver ? 0 : PowerProfiles.profile === PowerProfile.Performance ? 2 : 1
+                            readonly property color modeTint: idx === 0 ? root.green : idx === 2 ? root.amber : root.accent
 
                             x: 3 + idx * (parent.width - 6) / 3
                             y: 3
                             width: (parent.width - 6) / 3
                             height: parent.height - 6
-                            radius: height / 2
-                            color: Qt.alpha(root.fg, 0.16)
+                            radius: 9
+                            color: Qt.alpha(modeTint, 0.2)
+                            border.width: 0.5
+                            border.color: Qt.alpha(modeTint, 0.45)
 
                             Behavior on x {
                                 NumberAnimation {
                                     duration: 320
                                     easing.type: Easing.OutBack
-                                    easing.overshoot: 1.2
+                                    easing.overshoot: 1.15
                                 }
                             }
                         }
@@ -856,14 +1189,20 @@ Item {
                                 model: [
                                     {
                                         icon: "energy_savings_leaf",
+                                        lbl: qsTr("ÉCO"),
+                                        tint: root.green,
                                         p: PowerProfile.PowerSaver
                                     },
                                     {
                                         icon: "balance",
+                                        lbl: qsTr("ÉQUIL."),
+                                        tint: root.accent,
                                         p: PowerProfile.Balanced
                                     },
                                     {
                                         icon: "speed",
+                                        lbl: qsTr("PERF."),
+                                        tint: root.amber,
                                         p: PowerProfile.Performance
                                     }
                                 ]
@@ -872,16 +1211,29 @@ Item {
                                     id: prof
 
                                     required property var modelData
+                                    readonly property bool active: PowerProfiles.profile === modelData.p
 
-                                    width: (parent.width) / 3
+                                    width: parent.width / 3
                                     height: parent.height
 
-                                    MaterialIcon {
+                                    Row {
                                         anchors.centerIn: parent
-                                        text: prof.modelData.icon
-                                        color: PowerProfiles.profile === prof.modelData.p ? root.fg : root.fgDim
-                                        fontStyle: Tokens.font.icon.size(13).build()
-                                        fill: PowerProfiles.profile === prof.modelData.p ? 1 : 0
+                                        spacing: 3
+
+                                        MaterialIcon {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: prof.modelData.icon
+                                            color: prof.active ? prof.modelData.tint : root.fgDim
+                                            fontStyle: Tokens.font.icon.size(12).build()
+                                            fill: prof.active ? 1 : 0
+                                        }
+                                        StyledText {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: prof.modelData.lbl
+                                            color: prof.active ? root.fg : root.fgDim
+                                            font.pointSize: 6.8
+                                            font.weight: Font.Bold
+                                        }
                                     }
 
                                     MouseArea {
@@ -895,15 +1247,28 @@ Item {
                     }
                 }
 
-                // ── Icônes système (anciennement dans la barre) ──
+                // ── Icônes système (SystemTray en puits optiques biseautés) ──
                 Tile {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 48
+                    Layout.preferredHeight: 46
                     visible: SystemTray.items.values.length > 0
 
-                    Row {
+                    StyledText {
+                        id: trayTitleLbl
+
                         anchors.left: parent.left
-                        anchors.leftMargin: 12
+                        anchors.leftMargin: 14
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: qsTr("ACTIFS")
+                        color: root.fgDim
+                        font.pointSize: 6.8
+                        font.weight: Font.Bold
+                        font.letterSpacing: 0.7
+                    }
+
+                    Row {
+                        anchors.left: trayTitleLbl.right
+                        anchors.leftMargin: 10
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 6
 
@@ -915,25 +1280,16 @@ Item {
 
                                 required property SystemTrayItem modelData
 
-                                width: 32
-                                height: 32
-                                radius: 10
-                                color: "transparent"
-                                // Verre liquide (iOS 27) sous le contenu
-                                GlassControl {
-                                    anchors.fill: parent
-                                    radius: parent.radius
-                                    bevel: parent.height > 60 ? 16 : 0
-                                    tintColour: trayArea.containsMouse ? root.fgFaint : "transparent"
-                                    visible: tintColour.a > 0.01
-                                    pressed: trayArea.pressed
-                                    hovered: trayArea.containsMouse
-                                    pointer: trayArea.containsMouse ? Qt.point(trayArea.mouseX / Math.max(1, width), trayArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
-                                }
+                                width: 30
+                                height: 30
+                                radius: 9
+                                color: trayArea.containsMouse ? Qt.alpha(root.fg, 0.12) : Qt.alpha(root.fg, 0.05)
+                                border.width: 0.5
+                                border.color: trayArea.containsMouse ? Qt.alpha(root.fg, 0.25) : Qt.alpha(root.fg, 0.11)
 
                                 IconImage {
                                     anchors.centerIn: parent
-                                    implicitSize: 18
+                                    implicitSize: 16
                                     source: {
                                         let icon = trayBtn.modelData.icon;
                                         if (icon.includes("?path=")) {
@@ -971,18 +1327,18 @@ Item {
                                     anchors.right: parent.right
                                     anchors.top: parent.top
                                     anchors.margins: -3
-                                    width: 15
-                                    height: 15
-                                    radius: 7.5
+                                    width: 14
+                                    height: 14
+                                    radius: 7
                                     color: quitArea.containsMouse ? Colours.palette.m3error : Qt.alpha(Colours.palette.m3surface, 0.95)
-                                    border.width: 1
-                                    border.color: Qt.alpha(Colours.palette.m3onSurface, 0.2)
+                                    border.width: 0.5
+                                    border.color: Qt.alpha(Colours.palette.m3onSurface, 0.25)
 
                                     MaterialIcon {
                                         anchors.centerIn: parent
                                         text: "close"
                                         color: quitArea.containsMouse ? Colours.palette.m3onError : Colours.palette.m3onSurface
-                                        fontStyle: Tokens.font.icon.size(10).build()
+                                        fontStyle: Tokens.font.icon.size(9).build()
                                     }
 
                                     MouseArea {
@@ -1000,67 +1356,111 @@ Item {
                     }
                 }
 
-                // ── Session ──
-                RowLayout {
+                // ── Barre de Session encadrée ──
+                Tile {
                     Layout.fillWidth: true
-                    Layout.topMargin: 2
-                    spacing: 8
+                    Layout.preferredHeight: 50
 
-                    Rectangle {
-                        width: 34
-                        height: 34
-                        radius: 17
-                        color: root.fgFaint
-                        clip: true
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 10
+                        anchors.rightMargin: 10
+                        spacing: 7
 
-                        Image {
-                            anchors.fill: parent
-                            fillMode: Image.PreserveAspectCrop
-                            asynchronous: true
-                            sourceSize: Qt.size(68, 68)
-                            source: `file://${Quickshell.env("HOME")}/.face`
+                        Item {
+                            Layout.preferredWidth: 32
+                            Layout.preferredHeight: 32
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 10
+                                color: root.fgFaint
+                                clip: true
+
+                                Image {
+                                    anchors.fill: parent
+                                    fillMode: Image.PreserveAspectCrop
+                                    asynchronous: true
+                                    sourceSize: Qt.size(64, 64)
+                                    source: `file://${Quickshell.env("HOME")}/.face`
+                                }
+
+                                Rectangle {
+                                    anchors.fill: parent
+                                    radius: parent.radius
+                                    color: "transparent"
+                                    border.width: 0.5
+                                    border.color: Qt.alpha("#ffffff", 0.25)
+                                }
+                            }
+
+                            Rectangle {
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                anchors.margins: -1
+                                width: 8
+                                height: 8
+                                radius: 4
+                                color: root.green
+                                border.width: 1.5
+                                border.color: Colours.palette.m3surface
+                            }
                         }
-                    }
-                    StyledText {
-                        Layout.fillWidth: true
-                        elide: Text.ElideRight
-                        text: {
-                            const u = Quickshell.env("USER") ?? "";
-                            return u.charAt(0).toUpperCase() + u.slice(1);
+
+                        Column {
+                            Layout.fillWidth: true
+                            spacing: -1
+
+                            StyledText {
+                                text: qsTr("SESSION ACTIVE")
+                                color: root.fgDim
+                                font.pointSize: 6.5
+                                font.weight: Font.Bold
+                                font.letterSpacing: 0.7
+                            }
+                            StyledText {
+                                width: parent.width
+                                elide: Text.ElideRight
+                                text: {
+                                    const u = Quickshell.env("USER") ?? "";
+                                    return u.charAt(0).toUpperCase() + u.slice(1);
+                                }
+                                color: root.fg
+                                font.pointSize: 9.8
+                                font.weight: Font.Bold
+                            }
                         }
-                        color: root.fg
-                        font.pointSize: 10
-                        font.weight: Font.DemiBold
-                    }
-                    IconBtn {
-                        icon: "settings"
-                        onClicked: {
-                            root.close();
-                            root.run(["qs", "-c", "caelestia", "ipc", "call", "nexus", "open"]);
+
+                        IconBtn {
+                            icon: "settings"
+                            onClicked: {
+                                root.close();
+                                root.run(["qs", "-c", "caelestia", "ipc", "call", "nexus", "open"]);
+                            }
                         }
-                    }
-                    IconBtn {
-                        icon: "lock"
-                        onClicked: {
-                            root.close();
-                            root.run(["qs", "-c", "caelestia", "ipc", "call", "lock", "lock"]);
+                        IconBtn {
+                            icon: "lock"
+                            onClicked: {
+                                root.close();
+                                root.run(["qs", "-c", "caelestia", "ipc", "call", "lock", "lock"]);
+                            }
                         }
-                    }
-                    IconBtn {
-                        icon: "bedtime"
-                        onClicked: {
-                            root.close();
-                            root.run(["systemctl", "suspend"]);
+                        IconBtn {
+                            icon: "bedtime"
+                            onClicked: {
+                                root.close();
+                                root.run(["systemctl", "suspend"]);
+                            }
                         }
-                    }
-                    IconBtn {
-                        icon: "restart_alt"
-                        onClicked: root.run(Config.session.commands.reboot)
-                    }
-                    IconBtn {
-                        icon: "power_settings_new"
-                        danger: true
-                        onClicked: root.run(Config.session.commands.shutdown)
+                        IconBtn {
+                            icon: "restart_alt"
+                            onClicked: root.run(Config.session.commands.reboot)
+                        }
+                        IconBtn {
+                            icon: "power_settings_new"
+                            danger: true
+                            onClicked: root.run(Config.session.commands.shutdown)
+                        }
                     }
                 }
             }
@@ -1087,12 +1487,12 @@ Item {
                     }
                 }
 
-                // En-tête : retour + titre + interrupteur
+                // En-tête : retour biseauté + catégorie technique + titre + contrôles
                 Item {
                     id: subHead
 
                     width: parent.width
-                    height: 44
+                    height: 46
 
                     IconBtn {
                         anchors.left: parent.left
@@ -1100,20 +1500,40 @@ Item {
                         icon: "arrow_back_ios_new"
                         onClicked: root.page = "main"
                     }
-                    StyledText {
+                    Column {
                         anchors.left: parent.left
-                        anchors.leftMargin: 44
+                        anchors.leftMargin: 42
                         anchors.verticalCenter: parent.verticalCenter
-                        text: root.page === "wifi" ? qsTr("Wi-Fi") : root.page === "bt" ? qsTr("Bluetooth") : root.page === "record" ? qsTr("Enregistrement de l'écran") : root.page === "caffeine" ? qsTr("Caféine") : root.page === "display" ? qsTr("Écran") : root.page === "battery" ? qsTr("Batterie") : root.page === "focus" ? qsTr("Concentration") : qsTr("Sortie audio")
-                        color: root.fg
-                        font.pointSize: 13
-                        font.weight: Font.Bold
+                        spacing: 1
+
+                        StyledText {
+                            text: root.page === "wifi" || root.page === "bt" ? qsTr("CONNECTIVITÉ SANS FIL") : root.page === "audio" ? qsTr("CONSOLE AUDIO PIPEWIRE") : root.page === "battery" ? qsTr("GESTION ÉNERGÉTIQUE") : root.page === "display" ? qsTr("AFFICHAGE & COLORIMÉTRIE") : root.page === "focus" ? qsTr("PROFIL DE CONCENTRATION") : root.page === "caffeine" ? qsTr("INHIBITION DE VEILLE") : qsTr("CAPTURE STUDIO")
+                            color: root.accent
+                            font.pointSize: 6.5
+                            font.weight: Font.Bold
+                            font.letterSpacing: 0.7
+                        }
+                        StyledText {
+                            text: root.page === "wifi" ? qsTr("Wi-Fi") : root.page === "bt" ? qsTr("Bluetooth") : root.page === "record" ? qsTr("Enregistrement") : root.page === "caffeine" ? qsTr("Caféine") : root.page === "display" ? qsTr("Écran") : root.page === "battery" ? qsTr("Batterie") : root.page === "focus" ? qsTr("Concentration") : qsTr("Studio Audio")
+                            color: root.fg
+                            font.pointSize: 12.5
+                            font.weight: Font.Bold
+                        }
                     }
                     Row {
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 8
 
+                        // Bouton Écouteurs 3D sur la page Bluetooth
+                        IconBtn {
+                            visible: root.page === "bt"
+                            icon: "Spatial_audio_off"
+                            onClicked: {
+                                root.close();
+                                root.screenState.earbuds = true;
+                            }
+                        }
                         IconBtn {
                             visible: root.page === "wifi" || root.page === "bt"
                             icon: "refresh"
@@ -1166,12 +1586,12 @@ Item {
                     property string connecting: ""
 
                     anchors.top: subHead.bottom
-                    anchors.topMargin: 6
+                    anchors.topMargin: 8
                     anchors.bottom: parent.bottom
                     width: parent.width
                     visible: root.page === "wifi"
                     clip: true
-                    spacing: 4
+                    spacing: 5
                     model: [...Nmcli.networks].sort((a, b) => (b.active - a.active) || (b.strength - a.strength))
 
                     delegate: Rectangle {
@@ -1181,15 +1601,17 @@ Item {
                         readonly property bool askPwd: wifiList.passwordFor === modelData.ssid
 
                         width: wifiList.width
-                        height: askPwd ? 100 : 48
-                        radius: 14
+                        height: askPwd ? 104 : 50
+                        radius: 15
                         color: "transparent"
-                        // Verre liquide (iOS 27) sous le contenu
+                        border.width: 0.5
+                        border.color: modelData.active ? Qt.alpha(root.accent, 0.45) : netArea.containsMouse ? Qt.alpha("white", 0.14) : Qt.alpha(root.fg, 0.06)
+
                         GlassControl {
                             anchors.fill: parent
                             radius: parent.radius
                             bevel: parent.height > 60 ? 16 : 0
-                            tintColour: modelData.active ? Qt.alpha(root.accent, 0.16) : netArea.containsMouse ? root.tileColour : "transparent"
+                            tintColour: modelData.active ? Qt.alpha(root.accent, 0.16) : netArea.containsMouse ? root.tileColour : Qt.alpha(root.fg, 0.03)
                             visible: tintColour.a > 0.01
                             pressed: netArea.pressed
                             hovered: netArea.containsMouse
@@ -1203,47 +1625,87 @@ Item {
                             }
                         }
 
-                        MaterialIcon {
-                            x: 12
-                            y: 14
-                            text: net.modelData.strength > 66 ? "network_wifi" : net.modelData.strength > 33 ? "network_wifi_2_bar" : "network_wifi_1_bar"
-                            color: net.modelData.active ? root.accent : root.fg
-                            fontStyle: Tokens.font.icon.size(14).build()
-                            fill: 1
+                        Rectangle {
+                            x: 10
+                            y: 9
+                            width: 32
+                            height: 32
+                            radius: 10
+                            color: net.modelData.active ? root.accent : Qt.alpha(root.fg, 0.08)
+                            border.width: 0.5
+                            border.color: net.modelData.active ? Qt.alpha("white", 0.28) : Qt.alpha(root.fg, 0.1)
+
+                            MaterialIcon {
+                                anchors.centerIn: parent
+                                text: net.modelData.strength > 66 ? "network_wifi" : net.modelData.strength > 33 ? "network_wifi_2_bar" : "network_wifi_1_bar"
+                                color: net.modelData.active ? root.onAccent : root.fg
+                                fontStyle: Tokens.font.icon.size(14).build()
+                                fill: 1
+                            }
                         }
-                        StyledText {
-                            x: 42
-                            y: 14
-                            width: parent.width - 110
-                            elide: Text.ElideRight
-                            text: net.modelData.ssid
-                            color: root.fg
-                            font.pointSize: 10
-                            font.weight: net.modelData.active ? Font.DemiBold : Font.Normal
+
+                        Column {
+                            x: 50
+                            y: 9
+                            width: parent.width - 140
+                            spacing: 1
+
+                            StyledText {
+                                width: parent.width
+                                elide: Text.ElideRight
+                                text: net.modelData.ssid
+                                color: root.fg
+                                font.pointSize: 9.8
+                                font.weight: net.modelData.active ? Font.Bold : Font.DemiBold
+                            }
+                            StyledText {
+                                text: wifiList.connecting === net.modelData.ssid && !net.modelData.active ? qsTr("Connexion en cours…") : net.modelData.active ? qsTr("Connecté · %1 %").arg(net.modelData.strength) : (net.modelData.isSecure ? qsTr("Sécurisé WPA") : qsTr("Réseau ouvert"))
+                                color: net.modelData.active ? root.accent : root.fgDim
+                                font.pointSize: 7.8
+                                font.features: { "tnum": 1 }
+                            }
                         }
+
                         Row {
                             anchors.right: parent.right
                             anchors.rightMargin: 12
-                            y: 14
+                            y: 15
                             spacing: 6
 
-                            StyledText {
-                                visible: wifiList.connecting === net.modelData.ssid && !net.modelData.active
-                                text: qsTr("Connexion…")
-                                color: root.fgDim
-                                font.pointSize: 8.5
+                            Rectangle {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: sigTxt.implicitWidth + 10
+                                height: 19
+                                radius: 9.5
+                                color: net.modelData.active ? Qt.alpha(root.accent, 0.18) : Qt.alpha(root.fg, 0.07)
+                                border.width: 0.5
+                                border.color: net.modelData.active ? Qt.alpha(root.accent, 0.4) : Qt.alpha(root.fg, 0.1)
+
+                                StyledText {
+                                    id: sigTxt
+
+                                    anchors.centerIn: parent
+                                    text: `${net.modelData.strength} %`
+                                    color: net.modelData.active ? root.accent : root.fgDim
+                                    font.pointSize: 7.5
+                                    font.weight: Font.Bold
+                                    font.features: { "tnum": 1 }
+                                }
                             }
                             MaterialIcon {
+                                anchors.verticalCenter: parent.verticalCenter
                                 visible: net.modelData.isSecure
                                 text: "lock"
                                 color: root.fgDim
                                 fontStyle: Tokens.font.icon.size(11).build()
                             }
                             MaterialIcon {
+                                anchors.verticalCenter: parent.verticalCenter
                                 visible: net.modelData.active
-                                text: "check"
+                                text: "check_circle"
                                 color: root.accent
                                 fontStyle: Tokens.font.icon.size(13).build()
+                                fill: 1
                             }
                         }
 
@@ -1251,7 +1713,7 @@ Item {
                             id: netArea
 
                             width: parent.width
-                            height: 48
+                            height: 50
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
@@ -1270,13 +1732,13 @@ Item {
                         // Mot de passe, directement dans la liste
                         Rectangle {
                             x: 12
-                            y: 52
+                            y: 54
                             width: parent.width - 24
                             height: 38
                             radius: 12
                             visible: net.askPwd
                             color: root.tileColour
-                            border.width: 1
+                            border.width: 0.5
                             border.color: pwd.activeFocus ? Qt.alpha(root.accent, 0.7) : root.tileBorder
 
                             TextInput {
@@ -1328,12 +1790,12 @@ Item {
                     id: btList
 
                     anchors.top: subHead.bottom
-                    anchors.topMargin: 6
+                    anchors.topMargin: 8
                     anchors.bottom: parent.bottom
                     width: parent.width
                     visible: root.page === "bt"
                     clip: true
-                    spacing: 4
+                    spacing: 5
                     model: [...Bluetooth.devices.values].filter(d => d.bonded || d.trusted || d.paired || d.connected || (root.adapter?.discovering && d.name)).sort((a, b) => (b.connected - a.connected) || (b.paired - a.paired) || a.name.localeCompare(b.name))
 
                     delegate: Rectangle {
@@ -1343,15 +1805,17 @@ Item {
                         readonly property bool busy: Bluez.isBusy(modelData)
 
                         width: btList.width
-                        height: 52
-                        radius: 14
+                        height: 54
+                        radius: 15
                         color: "transparent"
-                        // Verre liquide (iOS 27) sous le contenu
+                        border.width: 0.5
+                        border.color: modelData.connected ? Qt.alpha(root.accent, 0.45) : devArea.containsMouse ? Qt.alpha("white", 0.14) : Qt.alpha(root.fg, 0.06)
+
                         GlassControl {
                             anchors.fill: parent
                             radius: parent.radius
                             bevel: parent.height > 60 ? 16 : 0
-                            tintColour: modelData.connected ? Qt.alpha(root.accent, 0.16) : devArea.containsMouse ? root.tileColour : "transparent"
+                            tintColour: modelData.connected ? Qt.alpha(root.accent, 0.16) : devArea.containsMouse ? root.tileColour : Qt.alpha(root.fg, 0.03)
                             visible: tintColour.a > 0.01
                             pressed: devArea.pressed
                             hovered: devArea.containsMouse
@@ -1361,46 +1825,77 @@ Item {
                         Rectangle {
                             x: 10
                             anchors.verticalCenter: parent.verticalCenter
-                            width: 32
-                            height: 32
-                            radius: 16
+                            width: 34
+                            height: 34
+                            radius: 11
                             color: dev.modelData.connected ? root.accent : root.fgFaint
+                            border.width: 0.5
+                            border.color: dev.modelData.connected ? Qt.alpha("white", 0.28) : Qt.alpha(root.fg, 0.1)
 
                             MaterialIcon {
                                 anchors.centerIn: parent
                                 text: Icons.getBluetoothIcon(dev.modelData.icon)
                                 color: dev.modelData.connected ? root.onAccent : root.fg
-                                fontStyle: Tokens.font.icon.size(13).build()
+                                fontStyle: Tokens.font.icon.size(14).build()
                                 fill: 1
                             }
                         }
                         Column {
                             x: 52
                             anchors.verticalCenter: parent.verticalCenter
-                            width: parent.width - 120
+                            width: parent.width - 140
+                            spacing: 1
 
                             StyledText {
                                 width: parent.width
                                 elide: Text.ElideRight
                                 text: dev.modelData.name || dev.modelData.address
                                 color: root.fg
-                                font.pointSize: 10
-                                font.weight: dev.modelData.connected ? Font.DemiBold : Font.Normal
+                                font.pointSize: 9.8
+                                font.weight: dev.modelData.connected ? Font.Bold : Font.DemiBold
                             }
                             StyledText {
-                                text: dev.busy ? qsTr("Patiente…") : dev.modelData.connected ? qsTr("Connecté") : (dev.modelData.paired || dev.modelData.bonded || dev.modelData.trusted) ? qsTr("Associé") : qsTr("Disponible")
-                                color: root.fgDim
-                                font.pointSize: 8
+                                text: dev.busy ? qsTr("Synchronisation…") : dev.modelData.connected ? qsTr("Connecté · Audio actif") : (dev.modelData.paired || dev.modelData.bonded || dev.modelData.trusted) ? qsTr("Associé") : qsTr("Disponible")
+                                color: dev.modelData.connected ? root.accent : root.fgDim
+                                font.pointSize: 7.8
                             }
                         }
-                        StyledText {
+
+                        // Badge de batterie biseauté
+                        Rectangle {
                             anchors.right: parent.right
-                            anchors.rightMargin: 14
+                            anchors.rightMargin: 12
                             anchors.verticalCenter: parent.verticalCenter
                             visible: dev.modelData.connected && dev.modelData.batteryAvailable
-                            text: `${Math.round(dev.modelData.battery * 100)} %`
-                            color: root.fgDim
-                            font.pointSize: 9
+                            width: btBattRow.implicitWidth + 12
+                            height: 22
+                            radius: 11
+                            color: Qt.alpha(dev.modelData.battery < 0.2 ? root.red : root.green, 0.15)
+                            border.width: 0.5
+                            border.color: Qt.alpha(dev.modelData.battery < 0.2 ? root.red : root.green, 0.4)
+
+                            Row {
+                                id: btBattRow
+
+                                anchors.centerIn: parent
+                                spacing: 4
+
+                                MaterialIcon {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: dev.modelData.battery < 0.2 ? "battery_alert" : "battery_full"
+                                    color: dev.modelData.battery < 0.2 ? root.red : root.green
+                                    fontStyle: Tokens.font.icon.size(10).build()
+                                    fill: 1
+                                }
+                                StyledText {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: `${Math.round(dev.modelData.battery * 100)} %`
+                                    color: dev.modelData.battery < 0.2 ? root.red : root.green
+                                    font.pointSize: 8
+                                    font.weight: Font.Bold
+                                    font.features: { "tnum": 1 }
+                                }
+                            }
                         }
 
                         MouseArea {
@@ -1750,64 +2245,63 @@ Item {
 
                     readonly property color level: BatteryInfo.charging || BatteryInfo.full ? "#32d74b" : BatteryInfo.pct < 0.2 ? "#ff453a" : BatteryInfo.pct < 0.4 ? "#ff9f0a" : root.fg
 
-                    // État
+                    // État (cadran radial 270° + télémétrie électrique)
                     Tile {
                         width: parent.width
                         height: 96
 
-                        // Grande pile dessinée
-                        Item {
+                        Rectangle {
                             id: bigBatt
 
-                            x: 18
+                            x: 16
                             anchors.verticalCenter: parent.verticalCenter
-                            width: 74
-                            height: 38
+                            width: 64
+                            height: 64
+                            radius: 18
+                            color: Qt.alpha(batteryPage.level, 0.1)
+                            border.width: 0.5
+                            border.color: Qt.alpha(batteryPage.level, 0.35)
 
-                            Rectangle {
-                                id: battBody
+                            Shape {
+                                anchors.fill: parent
+                                preferredRendererType: Shape.CurveRenderer
 
-                                width: 68
-                                height: 38
-                                radius: 10
-                                color: "transparent"
-                                border.width: 2
-                                border.color: Qt.alpha(root.fg, 0.45)
-
-                                Rectangle {
-                                    x: 4
-                                    y: 4
-                                    height: parent.height - 8
-                                    width: Math.max(6, (parent.width - 8) * BatteryInfo.pct)
-                                    radius: 6
-                                    color: batteryPage.level
-
-                                    Behavior on width {
-                                        NumberAnimation {
-                                            duration: 600
-                                            easing.type: Easing.OutCubic
-                                        }
+                                ShapePath {
+                                    fillColor: "transparent"
+                                    strokeColor: Qt.alpha(root.fg, 0.14)
+                                    strokeWidth: 4
+                                    capStyle: ShapePath.RoundCap
+                                    PathAngleArc {
+                                        centerX: 32
+                                        centerY: 32
+                                        radiusX: 23
+                                        radiusY: 23
+                                        startAngle: 135
+                                        sweepAngle: 270
                                     }
                                 }
-                                MaterialIcon {
-                                    anchors.centerIn: parent
-                                    visible: BatteryInfo.charging
-                                    text: "bolt"
-                                    color: "white"
-                                    fontStyle: Tokens.font.icon.size(20).build()
-                                    fill: 1
-                                    style: Text.Outline
-                                    styleColor: Qt.alpha("black", 0.35)
+                                ShapePath {
+                                    fillColor: "transparent"
+                                    strokeColor: batteryPage.level
+                                    strokeWidth: 4
+                                    capStyle: ShapePath.RoundCap
+                                    PathAngleArc {
+                                        centerX: 32
+                                        centerY: 32
+                                        radiusX: 23
+                                        radiusY: 23
+                                        startAngle: 135
+                                        sweepAngle: 270 * Math.max(0.03, BatteryInfo.pct)
+                                    }
                                 }
                             }
-                            Rectangle {
-                                anchors.left: battBody.right
-                                anchors.leftMargin: 2
-                                anchors.verticalCenter: battBody.verticalCenter
-                                width: 4
-                                height: 14
-                                radius: 2
-                                color: Qt.alpha(root.fg, 0.45)
+
+                            MaterialIcon {
+                                anchors.centerIn: parent
+                                text: BatteryInfo.charging ? "bolt" : BatteryInfo.pct < 0.2 ? "battery_alert" : "battery_full"
+                                color: batteryPage.level
+                                fontStyle: Tokens.font.icon.size(20).build()
+                                fill: 1
                             }
                         }
 
@@ -1817,15 +2311,39 @@ Item {
                             anchors.right: parent.right
                             anchors.rightMargin: 14
                             anchors.verticalCenter: parent.verticalCenter
-                            spacing: 1
+                            spacing: 2
 
                             StyledText {
-                                text: `${Math.round(BatteryInfo.pct * 100)} %`
-                                color: root.fg
-                                font.pointSize: 20
+                                text: qsTr("CAPACITÉ ÉLECTRIQUE")
+                                color: batteryPage.level
+                                font.pointSize: 6.5
                                 font.weight: Font.Bold
-                                font.features: {
-                                    "tnum": 1
+                                font.letterSpacing: 0.7
+                            }
+                            Row {
+                                spacing: 8
+
+                                StyledText {
+                                    anchors.baseline: battUnitSub.baseline
+                                    text: `${Math.round(BatteryInfo.pct * 100)} %`
+                                    color: root.fg
+                                    font.pointSize: 20
+                                    font.weight: Font.Bold
+                                    font.features: {
+                                        "tnum": 1
+                                    }
+                                }
+                                StyledText {
+                                    id: battUnitSub
+
+                                    visible: BatteryInfo.watts > 0.2
+                                    text: (BatteryInfo.charging ? `+${BatteryInfo.watts.toFixed(1).replace(".", ",")} W` : `-${BatteryInfo.watts.toFixed(1).replace(".", ",")} W`)
+                                    color: BatteryInfo.charging ? root.green : root.fgDim
+                                    font.pointSize: 9.5
+                                    font.weight: Font.Bold
+                                    font.features: {
+                                        "tnum": 1
+                                    }
                                 }
                             }
                             StyledText {
@@ -1833,16 +2351,8 @@ Item {
                                 elide: Text.ElideRight
                                 text: BatteryInfo.statusText
                                 color: BatteryInfo.charging ? "#32d74b" : root.fgDim
-                                font.pointSize: 9.5
+                                font.pointSize: 9
                                 font.weight: Font.DemiBold
-                            }
-                            StyledText {
-                                width: parent.width
-                                elide: Text.ElideRight
-                                visible: BatteryInfo.watts > 0.2
-                                text: (BatteryInfo.charging ? qsTr("Charge à %1 W") : qsTr("Consomme %1 W")).arg(BatteryInfo.watts.toFixed(1).replace(".", ","))
-                                color: root.fgDim
-                                font.pointSize: 8.5
                             }
                         }
                     }
@@ -1979,7 +2489,7 @@ Item {
                             spacing: 8
 
                             StyledText {
-                                text: qsTr("APPS QUI CONSOMMENT LE PLUS")
+                                text: qsTr("PROCESSUS LES PLUS ÉNERGIVORES")
                                 color: root.fgDim
                                 font.pointSize: 7.5
                                 font.weight: Font.Bold
@@ -2015,7 +2525,7 @@ Item {
                                         anchors.left: consIcon.right
                                         anchors.leftMargin: 10
                                         anchors.top: parent.top
-                                        width: parent.width - 110
+                                        width: parent.width - 130
                                         elide: Text.ElideRight
                                         text: root.appName(consumer.modelData.key)
                                         color: root.fg
@@ -2028,7 +2538,7 @@ Item {
                                         anchors.leftMargin: 10
                                         anchors.bottom: parent.bottom
                                         anchors.bottomMargin: 2
-                                        width: parent.width - 110
+                                        width: parent.width - 130
                                         height: 4
                                         radius: 2
                                         color: root.fgFaint
@@ -2047,13 +2557,26 @@ Item {
                                             }
                                         }
                                     }
-                                    StyledText {
+                                    Rectangle {
                                         anchors.right: parent.right
                                         anchors.verticalCenter: parent.verticalCenter
-                                        text: consumer.modelData.cpu >= 15 ? qsTr("Élevé") : consumer.modelData.cpu >= 4 ? qsTr("Moyen") : qsTr("Faible")
-                                        color: consumer.modelData.cpu >= 15 ? "#ff9f0a" : root.fgDim
-                                        font.pointSize: 8.5
-                                        font.weight: Font.DemiBold
+                                        width: consBadgeTxt.implicitWidth + 12
+                                        height: 20
+                                        radius: 10
+                                        color: Qt.alpha(consumer.modelData.cpu >= 15 ? root.amber : root.fg, 0.1)
+                                        border.width: 0.5
+                                        border.color: Qt.alpha(consumer.modelData.cpu >= 15 ? root.amber : root.fg, 0.25)
+
+                                        StyledText {
+                                            id: consBadgeTxt
+
+                                            anchors.centerIn: parent
+                                            text: `${Math.round(consumer.modelData.cpu)} % · ` + (consumer.modelData.cpu >= 15 ? qsTr("Élevé") : consumer.modelData.cpu >= 4 ? qsTr("Moyen") : qsTr("Faible"))
+                                            color: consumer.modelData.cpu >= 15 ? root.amber : root.fgDim
+                                            font.pointSize: 7.5
+                                            font.weight: Font.Bold
+                                            font.features: { "tnum": 1 }
+                                        }
                                     }
                                 }
                             }
@@ -2490,24 +3013,54 @@ Item {
                     visible: root.page === "caffeine"
                     spacing: 10
 
-                    // État
+                    // État (cadran radial 270°)
                     Tile {
                         width: parent.width
-                        height: 86
+                        height: 88
 
                         Rectangle {
                             id: cup
 
                             x: 16
                             anchors.verticalCenter: parent.verticalCenter
-                            width: 52
-                            height: 52
-                            radius: 26
-                            color: IdleInhibitor.enabled ? root.accent : root.fgFaint
+                            width: 56
+                            height: 56
+                            radius: 16
+                            color: Qt.alpha(IdleInhibitor.enabled ? root.amber : root.fg, 0.1)
+                            border.width: 0.5
+                            border.color: Qt.alpha(IdleInhibitor.enabled ? root.amber : root.fg, 0.32)
 
-                            Behavior on color {
-                                ColorAnimation {
-                                    duration: 220
+                            Shape {
+                                anchors.fill: parent
+                                preferredRendererType: Shape.CurveRenderer
+
+                                ShapePath {
+                                    fillColor: "transparent"
+                                    strokeColor: Qt.alpha(root.fg, 0.14)
+                                    strokeWidth: 3.5
+                                    capStyle: ShapePath.RoundCap
+                                    PathAngleArc {
+                                        centerX: 28
+                                        centerY: 28
+                                        radiusX: 20
+                                        radiusY: 20
+                                        startAngle: 135
+                                        sweepAngle: 270
+                                    }
+                                }
+                                ShapePath {
+                                    fillColor: "transparent"
+                                    strokeColor: IdleInhibitor.enabled ? root.amber : Qt.alpha(root.fg, 0.25)
+                                    strokeWidth: 3.5
+                                    capStyle: ShapePath.RoundCap
+                                    PathAngleArc {
+                                        centerX: 28
+                                        centerY: 28
+                                        radiusX: 20
+                                        radiusY: 20
+                                        startAngle: 135
+                                        sweepAngle: IdleInhibitor.enabled ? 270 : 0
+                                    }
                                 }
                             }
 
@@ -2515,8 +3068,8 @@ Item {
                                 anchors.centerIn: parent
                                 text: "coffee"
                                 fill: IdleInhibitor.enabled ? 1 : 0
-                                color: IdleInhibitor.enabled ? root.onAccent : root.fg
-                                fontStyle: Tokens.font.icon.size(22).build()
+                                color: IdleInhibitor.enabled ? root.amber : root.fg
+                                fontStyle: Tokens.font.icon.size(20).build()
                             }
                         }
                         Column {
@@ -2528,6 +3081,13 @@ Item {
                             spacing: 2
 
                             StyledText {
+                                text: IdleInhibitor.enabled ? qsTr("VERROU D'ÉVEIL ACTIF") : qsTr("VEILLE AUTOMATIQUE")
+                                color: IdleInhibitor.enabled ? root.amber : root.fgDim
+                                font.pointSize: 6.5
+                                font.weight: Font.Bold
+                                font.letterSpacing: 0.7
+                            }
+                            StyledText {
                                 text: IdleInhibitor.enabled ? qsTr("L'écran reste allumé") : qsTr("Veille normale")
                                 color: root.fg
                                 font.pointSize: 12
@@ -2538,7 +3098,8 @@ Item {
                                 elide: Text.ElideRight
                                 text: !IdleInhibitor.enabled ? qsTr("Choisis une durée pour l'activer") : IdleInhibitor.until > 0 ? qsTr("Encore %1 · jusqu'à %2").arg(IdleInhibitor.remainingText()).arg(Qt.formatTime(new Date(IdleInhibitor.until), "HH:mm")) : qsTr("Sans limite · depuis %1").arg(Qt.formatTime(IdleInhibitor.enabledSince, "HH:mm"))
                                 color: root.fgDim
-                                font.pointSize: 9
+                                font.pointSize: 8.5
+                                font.features: { "tnum": 1 }
                             }
                         }
                     }
@@ -2554,7 +3115,7 @@ Item {
                             spacing: 10
 
                             StyledText {
-                                text: qsTr("DURÉE")
+                                text: qsTr("DURÉE D'ACTIVATION")
                                 color: root.fgDim
                                 font.pointSize: 7.5
                                 font.weight: Font.Bold
@@ -2577,30 +3138,27 @@ Item {
                                         height: 34
                                         radius: 17
                                         color: "transparent"
-                                        // Verre liquide (iOS 27) sous le contenu
+                                        border.width: 0.5
+                                        border.color: on ? Qt.alpha(root.amber, 0.5) : Qt.alpha(root.fg, 0.08)
+
                                         GlassControl {
                                             anchors.fill: parent
                                             radius: parent.radius
                                             bevel: parent.height > 60 ? 16 : 0
-                                            tintColour: on ? root.accent : durMouse.containsMouse ? Qt.alpha(root.fg, 0.14) : root.fgFaint
+                                            tintColour: on ? root.amber : durMouse.containsMouse ? Qt.alpha(root.fg, 0.14) : root.fgFaint
                                             visible: tintColour.a > 0.01
                                             pressed: durMouse.pressed
                                             hovered: durMouse.containsMouse
                                             pointer: durMouse.containsMouse ? Qt.point(durMouse.mouseX / Math.max(1, width), durMouse.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
                                         }
 
-                                        Behavior on color {
-                                            ColorAnimation {
-                                                duration: 180
-                                            }
-                                        }
-
                                         StyledText {
                                             anchors.centerIn: parent
                                             text: dur.modelData[1]
-                                            color: dur.on ? root.onAccent : root.fg
+                                            color: dur.on ? "#1f1202" : root.fg
                                             font.pointSize: dur.modelData[0] === 0 ? 13 : 9.5
-                                            font.weight: Font.DemiBold
+                                            font.weight: Font.Bold
+                                            font.features: { "tnum": 1 }
                                         }
                                         MouseArea {
                                             id: durMouse
@@ -2634,7 +3192,7 @@ Item {
                             spacing: 6
 
                             StyledText {
-                                text: qsTr("SANS CAFÉINE")
+                                text: qsTr("MINUTERIES D'INACTIVITÉ (SANS CAFÉINE)")
                                 color: root.fgDim
                                 font.pointSize: 7.5
                                 font.weight: Font.Bold
@@ -2728,7 +3286,7 @@ Item {
                     visible: root.page === "record"
                     spacing: 10
 
-                    // En cours : chrono + pause / arrêter
+                    // En cours : cadran radial 270° + chrono + pause / arrêter
                     Tile {
                         width: parent.width
                         height: 92
@@ -2737,23 +3295,67 @@ Item {
                         Rectangle {
                             id: liveDot
 
-                            x: 18
+                            x: 16
                             anchors.verticalCenter: parent.verticalCenter
-                            width: 14
-                            height: 14
-                            radius: 7
-                            color: "#ff453a"
+                            width: 56
+                            height: 56
+                            radius: 16
+                            color: Qt.alpha(Recorder.paused ? root.amber : root.red, 0.1)
+                            border.width: 0.5
+                            border.color: Qt.alpha(Recorder.paused ? root.amber : root.red, 0.35)
 
-                            SequentialAnimation on opacity {
-                                running: Recorder.running && !Recorder.paused && root.page === "record"
-                                loops: Animation.Infinite
-                                NumberAnimation {
-                                    to: 0.3
-                                    duration: 700
+                            Shape {
+                                anchors.fill: parent
+                                preferredRendererType: Shape.CurveRenderer
+
+                                ShapePath {
+                                    fillColor: "transparent"
+                                    strokeColor: Qt.alpha(root.fg, 0.14)
+                                    strokeWidth: 3.5
+                                    capStyle: ShapePath.RoundCap
+                                    PathAngleArc {
+                                        centerX: 28
+                                        centerY: 28
+                                        radiusX: 20
+                                        radiusY: 20
+                                        startAngle: 135
+                                        sweepAngle: 270
+                                    }
                                 }
-                                NumberAnimation {
-                                    to: 1
-                                    duration: 700
+                                ShapePath {
+                                    fillColor: "transparent"
+                                    strokeColor: Recorder.paused ? root.amber : root.red
+                                    strokeWidth: 3.5
+                                    capStyle: ShapePath.RoundCap
+                                    PathAngleArc {
+                                        centerX: 28
+                                        centerY: 28
+                                        radiusX: 20
+                                        radiusY: 20
+                                        startAngle: 135
+                                        sweepAngle: 270 * Math.max(0.05, (Recorder.elapsed % 60) / 60)
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                anchors.centerIn: parent
+                                width: 10
+                                height: 10
+                                radius: Recorder.paused ? 2 : 5
+                                color: Recorder.paused ? root.amber : root.red
+
+                                SequentialAnimation on opacity {
+                                    running: Recorder.running && !Recorder.paused && root.page === "record"
+                                    loops: Animation.Infinite
+                                    NumberAnimation {
+                                        to: 0.3
+                                        duration: 700
+                                    }
+                                    NumberAnimation {
+                                        to: 1
+                                        duration: 700
+                                    }
                                 }
                             }
                         }
@@ -2761,23 +3363,26 @@ Item {
                             anchors.left: liveDot.right
                             anchors.leftMargin: 12
                             anchors.verticalCenter: parent.verticalCenter
+                            spacing: 1
 
+                            StyledText {
+                                text: Recorder.paused ? qsTr("EN PAUSE") : qsTr("CAPTURE EN DIRECT")
+                                color: Recorder.paused ? root.amber : root.red
+                                font.pointSize: 6.5
+                                font.weight: Font.Bold
+                                font.letterSpacing: 0.7
+                            }
                             StyledText {
                                 text: {
                                     const s = Math.floor(Recorder.elapsed);
                                     return `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
                                 }
                                 color: root.fg
-                                font.pointSize: 22
+                                font.pointSize: 20
                                 font.weight: Font.Bold
                                 font.features: {
                                     "tnum": 1
                                 }
-                            }
-                            StyledText {
-                                text: Recorder.paused ? qsTr("En pause") : qsTr("Enregistrement en cours")
-                                color: root.fgDim
-                                font.pointSize: 8.5
                             }
                         }
                         Row {
@@ -2837,7 +3442,7 @@ Item {
                             spacing: 4
 
                             StyledText {
-                                text: qsTr("SON")
+                                text: qsTr("PISTES AUDIO")
                                 color: root.fgDim
                                 font.pointSize: 7.5
                                 font.weight: Font.Bold
@@ -2906,7 +3511,9 @@ Item {
                         radius: 25
                         visible: !Recorder.running
                         color: "transparent"
-                        // Verre liquide (iOS 27) sous le contenu
+                        border.width: 0.5
+                        border.color: Qt.alpha("white", 0.25)
+
                         GlassControl {
                             anchors.fill: parent
                             radius: parent.radius
@@ -2932,16 +3539,16 @@ Item {
 
                             Rectangle {
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: 14
-                                height: 14
-                                radius: 7
+                                width: 12
+                                height: 12
+                                radius: 6
                                 color: "white"
                             }
                             StyledText {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: root.recRegion ? qsTr("Choisir la zone et enregistrer") : qsTr("Démarrer l'enregistrement")
                                 color: "white"
-                                font.pointSize: 11
+                                font.pointSize: 10.5
                                 font.weight: Font.Bold
                             }
                         }
@@ -2957,76 +3564,330 @@ Item {
                     }
                 }
 
-                // ── Sorties audio ──
-                ListView {
+                // ── Studio Audio (Sorties + Entrée Micro + Mixeur par application) ──
+                Flickable {
                     id: audioList
 
                     anchors.top: subHead.bottom
-                    anchors.topMargin: 6
+                    anchors.topMargin: 8
                     anchors.bottom: parent.bottom
                     width: parent.width
                     visible: root.page === "audio"
                     clip: true
-                    spacing: 4
-                    model: Audio.sinks
+                    contentHeight: audioStudioCol.implicitHeight + 8
+                    boundsBehavior: Flickable.StopAtBounds
 
-                    delegate: Rectangle {
-                        id: sinkItem
+                    Column {
+                        id: audioStudioCol
 
-                        required property var modelData
-                        readonly property bool current: Audio.sink === modelData
+                        width: parent.width
+                        spacing: 10
 
-                        width: audioList.width
-                        height: 48
-                        radius: 14
-                        color: "transparent"
-                        // Verre liquide (iOS 27) sous le contenu
-                        GlassControl {
-                            anchors.fill: parent
-                            radius: parent.radius
-                            bevel: parent.height > 60 ? 16 : 0
-                            tintColour: current ? Qt.alpha(root.accent, 0.16) : sinkArea.containsMouse ? root.tileColour : "transparent"
-                            visible: tintColour.a > 0.01
-                            pressed: sinkArea.pressed
-                            hovered: sinkArea.containsMouse
-                            pointer: sinkArea.containsMouse ? Qt.point(sinkArea.mouseX / Math.max(1, width), sinkArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
+                        // 1. Sorties audio (Sinks)
+                        Tile {
+                            width: parent.width
+                            height: sinksCol.implicitHeight + 22
+
+                            Column {
+                                id: sinksCol
+
+                                x: 12
+                                y: 11
+                                width: parent.width - 24
+                                spacing: 5
+
+                                StyledText {
+                                    text: qsTr("PÉRIPHÉRIQUES DE SORTIE")
+                                    color: root.fgDim
+                                    font.pointSize: 7.2
+                                    font.weight: Font.Bold
+                                    font.letterSpacing: 0.7
+                                }
+
+                                Repeater {
+                                    model: Audio.sinks
+
+                                    Rectangle {
+                                        id: sinkItem
+
+                                        required property var modelData
+                                        readonly property bool current: Audio.sink === modelData
+
+                                        width: sinksCol.width
+                                        height: 44
+                                        radius: 13
+                                        color: "transparent"
+                                        border.width: 0.5
+                                        border.color: current ? Qt.alpha(root.accent, 0.45) : sinkArea.containsMouse ? Qt.alpha("white", 0.14) : Qt.alpha(root.fg, 0.06)
+
+                                        GlassControl {
+                                            anchors.fill: parent
+                                            radius: parent.radius
+                                            bevel: 0
+                                            tintColour: current ? Qt.alpha(root.accent, 0.16) : sinkArea.containsMouse ? root.tileColour : Qt.alpha(root.fg, 0.03)
+                                            visible: tintColour.a > 0.01
+                                            pressed: sinkArea.pressed
+                                            hovered: sinkArea.containsMouse
+                                            pointer: sinkArea.containsMouse ? Qt.point(sinkArea.mouseX / Math.max(1, width), sinkArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
+                                        }
+
+                                        Rectangle {
+                                            x: 8
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: 28
+                                            height: 28
+                                            radius: 9
+                                            color: sinkItem.current ? root.accent : root.fgFaint
+
+                                            MaterialIcon {
+                                                anchors.centerIn: parent
+                                                text: (sinkItem.modelData.name ?? "").startsWith("bluez") ? "headphones" : (sinkItem.modelData.name ?? "").includes("hdmi") ? "tv" : "speaker"
+                                                color: sinkItem.current ? root.onAccent : root.fg
+                                                fontStyle: Tokens.font.icon.size(13).build()
+                                                fill: 1
+                                            }
+                                        }
+                                        StyledText {
+                                            x: 44
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: parent.width - 78
+                                            elide: Text.ElideRight
+                                            text: sinkItem.modelData.description || sinkItem.modelData.nickname || sinkItem.modelData.name
+                                            color: root.fg
+                                            font.pointSize: 9.5
+                                            font.weight: sinkItem.current ? Font.Bold : Font.DemiBold
+                                        }
+                                        MaterialIcon {
+                                            anchors.right: parent.right
+                                            anchors.rightMargin: 10
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            visible: sinkItem.current
+                                            text: "check_circle"
+                                            color: root.accent
+                                            fontStyle: Tokens.font.icon.size(13).build()
+                                            fill: 1
+                                        }
+
+                                        MouseArea {
+                                            id: sinkArea
+
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: Audio.setAudioSink(sinkItem.modelData)
+                                        }
+                                    }
+                                }
+                            }
                         }
 
-                        MaterialIcon {
-                            x: 12
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: (sinkItem.modelData.name ?? "").startsWith("bluez") ? "headphones" : (sinkItem.modelData.name ?? "").includes("hdmi") ? "tv" : "speaker"
-                            color: sinkItem.current ? root.accent : root.fg
-                            fontStyle: Tokens.font.icon.size(14).build()
-                            fill: 1
-                        }
-                        StyledText {
-                            x: 42
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: parent.width - 80
-                            elide: Text.ElideRight
-                            text: sinkItem.modelData.description || sinkItem.modelData.nickname || sinkItem.modelData.name
-                            color: root.fg
-                            font.pointSize: 10
-                            font.weight: sinkItem.current ? Font.DemiBold : Font.Normal
-                        }
-                        MaterialIcon {
-                            anchors.right: parent.right
-                            anchors.rightMargin: 12
-                            anchors.verticalCenter: parent.verticalCenter
-                            visible: sinkItem.current
-                            text: "check"
-                            color: root.accent
-                            fontStyle: Tokens.font.icon.size(13).build()
+                        // 2. Entrée Microphone (Gain + Sources)
+                        Tile {
+                            width: parent.width
+                            height: micCol.implicitHeight + 22
+
+                            Column {
+                                id: micCol
+
+                                x: 12
+                                y: 11
+                                width: parent.width - 24
+                                spacing: 7
+
+                                Item {
+                                    width: parent.width
+                                    height: 20
+
+                                    Row {
+                                        anchors.left: parent.left
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        spacing: 6
+
+                                        StyledText {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: qsTr("ENTRÉE MICROPHONE")
+                                            color: root.fgDim
+                                            font.pointSize: 7.2
+                                            font.weight: Font.Bold
+                                            font.letterSpacing: 0.7
+                                        }
+                                        Rectangle {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: micPctTxt.implicitWidth + 10
+                                            height: 17
+                                            radius: 8.5
+                                            color: Audio.sourceMuted ? Qt.alpha(root.red, 0.16) : Qt.alpha(root.fg, 0.08)
+                                            border.width: 0.5
+                                            border.color: Audio.sourceMuted ? Qt.alpha(root.red, 0.4) : Qt.alpha(root.fg, 0.12)
+
+                                            StyledText {
+                                                id: micPctTxt
+
+                                                anchors.centerIn: parent
+                                                text: Audio.sourceMuted ? qsTr("COUPÉ") : `${Math.round(Audio.sourceVolume * 100)} %`
+                                                color: Audio.sourceMuted ? root.red : root.fg
+                                                font.pointSize: 7
+                                                font.weight: Font.Bold
+                                                font.features: { "tnum": 1 }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                GlassSlider {
+                                    width: parent.width
+                                    icon: Audio.sourceMuted ? "mic_off" : "mic"
+                                    value: Audio.sourceVolume
+                                    dim: Audio.sourceMuted
+                                    onMoved: v => Audio.setSourceVolume(v)
+                                    onIconClicked: {
+                                        if (Audio.source?.audio)
+                                            Audio.source.audio.muted = !Audio.source.audio.muted;
+                                    }
+                                }
+
+                                Repeater {
+                                    model: Audio.sources
+
+                                    Rectangle {
+                                        id: srcItem
+
+                                        required property var modelData
+                                        readonly property bool current: Audio.source === modelData
+
+                                        width: micCol.width
+                                        height: 38
+                                        radius: 11
+                                        color: "transparent"
+                                        border.width: 0.5
+                                        border.color: current ? Qt.alpha(root.accent, 0.4) : Qt.alpha(root.fg, 0.06)
+
+                                        GlassControl {
+                                            anchors.fill: parent
+                                            radius: parent.radius
+                                            bevel: 0
+                                            tintColour: current ? Qt.alpha(root.accent, 0.14) : srcArea.containsMouse ? root.tileColour : Qt.alpha(root.fg, 0.02)
+                                            visible: tintColour.a > 0.01
+                                            pressed: srcArea.pressed
+                                            hovered: srcArea.containsMouse
+                                            pointer: srcArea.containsMouse ? Qt.point(srcArea.mouseX / Math.max(1, width), srcArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
+                                        }
+
+                                        MaterialIcon {
+                                            x: 10
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: "settings_voice"
+                                            color: srcItem.current ? root.accent : root.fgDim
+                                            fontStyle: Tokens.font.icon.size(12).build()
+                                            fill: 1
+                                        }
+                                        StyledText {
+                                            x: 32
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: parent.width - 62
+                                            elide: Text.ElideRight
+                                            text: srcItem.modelData.description || srcItem.modelData.nickname || srcItem.modelData.name
+                                            color: root.fg
+                                            font.pointSize: 8.8
+                                            font.weight: srcItem.current ? Font.Bold : Font.Normal
+                                        }
+                                        MaterialIcon {
+                                            anchors.right: parent.right
+                                            anchors.rightMargin: 10
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            visible: srcItem.current
+                                            text: "check"
+                                            color: root.accent
+                                            fontStyle: Tokens.font.icon.size(12).build()
+                                        }
+
+                                        MouseArea {
+                                            id: srcArea
+
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: Audio.setAudioSource(srcItem.modelData)
+                                        }
+                                    }
+                                }
+                            }
                         }
 
-                        MouseArea {
-                            id: sinkArea
+                        // 3. Mixeur par application (PipeWire streams)
+                        Tile {
+                            width: parent.width
+                            height: streamsCol.implicitHeight + 22
+                            visible: Audio.streams.length > 0
 
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: Audio.setAudioSink(sinkItem.modelData)
+                            Column {
+                                id: streamsCol
+
+                                x: 12
+                                y: 11
+                                width: parent.width - 24
+                                spacing: 8
+
+                                StyledText {
+                                    text: qsTr("MIXEUR D'APPLICATIONS (%1)").arg(Audio.streams.length)
+                                    color: root.fgDim
+                                    font.pointSize: 7.2
+                                    font.weight: Font.Bold
+                                    font.letterSpacing: 0.7
+                                    font.features: { "tnum": 1 }
+                                }
+
+                                Repeater {
+                                    model: Audio.streams
+
+                                    Column {
+                                        id: streamRow
+
+                                        required property var modelData
+                                        readonly property real sVol: Audio.getStreamVolume(modelData)
+                                        readonly property bool sMuted: Audio.getStreamMuted(modelData)
+
+                                        width: streamsCol.width
+                                        spacing: 4
+
+                                        Item {
+                                            width: parent.width
+                                            height: 18
+
+                                            StyledText {
+                                                anchors.left: parent.left
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                width: parent.width - 60
+                                                elide: Text.ElideRight
+                                                text: Audio.getStreamName(streamRow.modelData)
+                                                color: root.fg
+                                                font.pointSize: 8.8
+                                                font.weight: Font.DemiBold
+                                            }
+                                            StyledText {
+                                                anchors.right: parent.right
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                text: streamRow.sMuted ? qsTr("MUET") : `${Math.round(streamRow.sVol * 100)} %`
+                                                color: streamRow.sMuted ? root.red : root.fgDim
+                                                font.pointSize: 7.8
+                                                font.weight: Font.Bold
+                                                font.features: { "tnum": 1 }
+                                            }
+                                        }
+
+                                        GlassSlider {
+                                            width: parent.width
+                                            height: 22
+                                            icon: streamRow.sMuted ? "volume_off" : "graphic_eq"
+                                            value: streamRow.sVol
+                                            dim: streamRow.sMuted
+                                            tint: root.accent
+                                            onMoved: v => Audio.setStreamVolume(streamRow.modelData, v)
+                                            onIconClicked: Audio.setStreamMuted(streamRow.modelData, !streamRow.sMuted)
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -3044,45 +3905,89 @@ Item {
 
     // ════════════════════ Composants ════════════════════
 
-    // Plaque de verre (liquid glass iOS 27) qui porte un groupe de réglages
+    // Plaque de verre biseautée (Liquid Glass optique 0.5px + reflet spéculaire supérieur)
     component Tile: Item {
         property real radius: 22
+        property color borderTint: root.tileBorder
 
         GlassControl {
             anchors.fill: parent
             radius: parent.radius
             bevel: 16
-            tintColour: Qt.alpha(Colours.palette.m3onSurface, Colours.light ? 0.05 : 0.06)
+            tintColour: Qt.alpha(Colours.palette.m3onSurface, Colours.light ? 0.05 : 0.065)
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            radius: parent.radius
+            color: "transparent"
+            border.width: 0.5
+            border.color: parent.borderTint
+
+            Rectangle {
+                anchors.top: parent.top
+                anchors.topMargin: 0.5
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.max(0, parent.width - parent.radius * 1.7)
+                height: 0.6
+                color: Qt.alpha("white", Colours.light ? 0.45 : 0.16)
+            }
         }
     }
 
-    // Ligne de connexion : pastille ronde en verre (bascule) + texte (ouvre la liste)
+    // Ligne de connexion matérielle : puits squircle biseauté + texte + badge télémétrique + chevron
     component ConnRow: Item {
         id: cr
 
         property string icon
         property string title
         property string subtitle
+        property string badgeText: ""
         property bool on
+        property bool hasSubpage: false
+        property color activeTint: Colours.palette.m3primary
         signal toggle
         signal open
 
         width: parent?.width ?? 0
         height: 46
 
+        Rectangle {
+            anchors.fill: parent
+            anchors.leftMargin: -4
+            anchors.rightMargin: -4
+            radius: 14
+            color: crOpenArea.containsMouse ? Qt.alpha(Colours.palette.m3onSurface, 0.05) : "transparent"
+
+            Behavior on color {
+                ColorAnimation {
+                    duration: 140
+                }
+            }
+        }
+
         GlassButton {
             id: crDot
 
             anchors.verticalCenter: parent.verticalCenter
-            width: 38
-            height: 38
-            tint: cr.on ? Qt.alpha(Colours.palette.m3primary, 0.9) : Qt.alpha(Colours.palette.m3onSurface, 0.12)
+            width: 36
+            height: 36
+            radius: 12
+            tint: cr.on ? Qt.alpha(cr.activeTint, 0.92) : Qt.alpha(Colours.palette.m3onSurface, 0.1)
             onClicked: cr.toggle()
+
+            Rectangle {
+                anchors.fill: parent
+                radius: 12
+                color: "transparent"
+                border.width: 0.5
+                border.color: cr.on ? Qt.alpha("white", 0.3) : Qt.alpha(Colours.palette.m3onSurface, 0.12)
+            }
 
             MaterialIcon {
                 anchors.centerIn: parent
                 text: cr.icon
-                color: cr.on ? Colours.palette.m3onPrimary : Colours.palette.m3onSurface
+                color: cr.on ? (cr.activeTint === root.green ? "#05200a" : Colours.palette.m3onPrimary) : Colours.palette.m3onSurface
                 fontStyle: Tokens.font.icon.size(14).build()
                 fill: 1
             }
@@ -3090,37 +3995,81 @@ Item {
 
         Column {
             anchors.left: crDot.right
-            anchors.leftMargin: 10
-            anchors.right: parent.right
+            anchors.leftMargin: 9
+            anchors.right: crRightRow.left
+            anchors.rightMargin: 4
             anchors.verticalCenter: parent.verticalCenter
+            spacing: 0.5
 
             StyledText {
                 width: parent.width
                 elide: Text.ElideRight
                 text: cr.title
                 color: Colours.palette.m3onSurface
-                font.pointSize: 9.5
-                font.weight: Font.DemiBold
+                font.pointSize: 9.2
+                font.weight: Font.Bold
             }
             StyledText {
                 width: parent.width
                 elide: Text.ElideRight
                 text: cr.subtitle
-                color: Qt.alpha(Colours.palette.m3onSurface, 0.6)
-                font.pointSize: 8.5
+                color: cr.on ? cr.activeTint : Qt.alpha(Colours.palette.m3onSurface, 0.55)
+                font.pointSize: 7.8
+                font.weight: cr.on ? Font.DemiBold : Font.Normal
+            }
+        }
+
+        Row {
+            id: crRightRow
+
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 2
+
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: cr.badgeText !== ""
+                width: crBadgeLbl.implicitWidth + 9
+                height: 17
+                radius: 8.5
+                color: Qt.alpha(cr.activeTint, 0.15)
+                border.width: 0.5
+                border.color: Qt.alpha(cr.activeTint, 0.35)
+
+                StyledText {
+                    id: crBadgeLbl
+
+                    anchors.centerIn: parent
+                    text: cr.badgeText
+                    color: cr.activeTint
+                    font.pointSize: 6.8
+                    font.weight: Font.Bold
+                    font.features: { "tnum": 1 }
+                }
+            }
+
+            MaterialIcon {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: cr.hasSubpage
+                text: "chevron_right"
+                color: Qt.alpha(Colours.palette.m3onSurface, crOpenArea.containsMouse ? 0.8 : 0.4)
+                fontStyle: Tokens.font.icon.size(12).build()
             }
         }
 
         MouseArea {
+            id: crOpenArea
+
             anchors.left: crDot.right
             anchors.right: parent.right
             height: parent.height
+            hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: cr.open()
         }
     }
 
-    // Grande tuile à bascule en verre (Concentration, Apparence)
+    // Grande tuile à bascule en verre biseautée (Concentration, Apparence)
     component WideToggle: GlassButton {
         id: wt
 
@@ -3128,20 +4077,48 @@ Item {
         property string title
         property string subtitle
         property bool on
+        property bool hasSubpage: false
+        property color activeTint: Colours.palette.m3primary
 
         implicitHeight: 83
         radius: 22
         bevel: 16
-        tint: Qt.alpha(Colours.palette.m3onSurface, 0.07)
+        tint: wt.on ? Qt.alpha(wt.activeTint, 0.15) : Qt.alpha(Colours.palette.m3onSurface, 0.065)
+
+        Rectangle {
+            anchors.fill: parent
+            radius: parent.radius
+            color: "transparent"
+            border.width: 0.5
+            border.color: wt.on ? Qt.alpha(wt.activeTint, 0.42) : root.tileBorder
+
+            Rectangle {
+                anchors.top: parent.top
+                anchors.topMargin: 0.5
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.max(0, parent.width - parent.radius * 1.7)
+                height: 0.6
+                color: Qt.alpha("white", Colours.light ? 0.45 : 0.16)
+            }
+        }
 
         GlassControl {
             id: wtDot
 
-            x: 12
-            y: 12
+            x: 11
+            y: 11
             width: 32
             height: 32
-            tintColour: wt.on ? Qt.alpha(Colours.palette.m3primary, 0.9) : Qt.alpha(Colours.palette.m3onSurface, 0.12)
+            radius: 11
+            tintColour: wt.on ? Qt.alpha(wt.activeTint, 0.92) : Qt.alpha(Colours.palette.m3onSurface, 0.11)
+
+            Rectangle {
+                anchors.fill: parent
+                radius: 11
+                color: "transparent"
+                border.width: 0.5
+                border.color: wt.on ? Qt.alpha("white", 0.3) : Qt.alpha(Colours.palette.m3onSurface, 0.1)
+            }
 
             MaterialIcon {
                 anchors.centerIn: parent
@@ -3152,67 +4129,128 @@ Item {
             }
         }
 
+        // Indicateur lumineux ou chevron en haut à droite
+        Row {
+            anchors.right: parent.right
+            anchors.rightMargin: 11
+            anchors.top: parent.top
+            anchors.topMargin: 13
+            spacing: 4
+
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: wt.on
+                width: 6
+                height: 6
+                radius: 3
+                color: wt.activeTint
+            }
+            MaterialIcon {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: wt.hasSubpage
+                text: "chevron_right"
+                color: Qt.alpha(Colours.palette.m3onSurface, 0.45)
+                fontStyle: Tokens.font.icon.size(11).build()
+            }
+        }
+
         Column {
             x: 12
             anchors.bottom: parent.bottom
-            anchors.bottomMargin: 10
+            anchors.bottomMargin: 9
             width: parent.width - 24
+            spacing: 0.5
 
             StyledText {
                 width: parent.width
                 elide: Text.ElideRight
                 text: wt.title
                 color: Colours.palette.m3onSurface
-                font.pointSize: 9.5
-                font.weight: Font.DemiBold
+                font.pointSize: 9.2
+                font.weight: Font.Bold
             }
             StyledText {
                 width: parent.width
                 elide: Text.ElideRight
                 text: wt.subtitle
-                color: Qt.alpha(Colours.palette.m3onSurface, 0.6)
-                font.pointSize: 8
+                color: wt.on ? wt.activeTint : Qt.alpha(Colours.palette.m3onSurface, 0.58)
+                font.pointSize: 7.8
+                font.weight: wt.on ? Font.DemiBold : Font.Normal
             }
         }
     }
 
-    // Petit bouton rond en verre + libellé (raccourcis rapides)
-    component RoundToggle: Column {
+    // Cellule matérielle biseautée pour la grille 4x2 de raccourcis rapides
+    component RoundToggle: GlassButton {
         id: rt
 
         property string icon
         property string label
         property bool on
-        signal clicked
+        property color activeTint: Colours.palette.m3primary
 
-        spacing: 4
+        width: 82
+        height: 58
+        radius: 16
+        bevel: 12
+        tint: rt.on ? Qt.alpha(rt.activeTint, 0.22) : Qt.alpha(Colours.palette.m3onSurface, rt.hovered ? 0.11 : 0.065)
 
-        GlassButton {
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: 46
-            height: 46
-            tint: rt.on ? Qt.alpha(Colours.palette.m3primary, 0.9) : Qt.alpha(Colours.palette.m3onSurface, 0.1)
-            onClicked: rt.clicked()
+        Rectangle {
+            anchors.fill: parent
+            radius: parent.radius
+            color: "transparent"
+            border.width: 0.5
+            border.color: rt.on ? Qt.alpha(rt.activeTint, 0.55) : Qt.alpha(Colours.palette.m3onSurface, rt.hovered ? 0.18 : 0.09)
 
-            MaterialIcon {
-                anchors.centerIn: parent
-                text: rt.icon
-                color: rt.on ? Colours.palette.m3onPrimary : Colours.palette.m3onSurface
-                fontStyle: Tokens.font.icon.size(15).build()
-                fill: 1
+            Rectangle {
+                anchors.top: parent.top
+                anchors.topMargin: 0.5
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.max(0, parent.width - parent.radius * 1.6)
+                height: 0.5
+                color: Qt.alpha("white", Colours.light ? 0.4 : 0.14)
             }
         }
 
-        StyledText {
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: rt.label
-            color: Qt.alpha(Colours.palette.m3onSurface, 0.75)
-            font.pointSize: 7.5
-            font.weight: Font.Medium
+        // Point témoin LED actif en haut à droite
+        Rectangle {
+            anchors.right: parent.right
+            anchors.rightMargin: 8
+            anchors.top: parent.top
+            anchors.topMargin: 8
+            width: 5
+            height: 5
+            radius: 2.5
+            visible: rt.on
+            color: rt.activeTint
+        }
+
+        Column {
+            anchors.centerIn: parent
+            width: parent.width - 8
+            spacing: 4
+
+            MaterialIcon {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: rt.icon
+                color: rt.on ? rt.activeTint : Colours.palette.m3onSurface
+                fontStyle: Tokens.font.icon.size(15).build()
+                fill: rt.on ? 1 : 0
+            }
+
+            StyledText {
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                elide: Text.ElideRight
+                text: rt.label
+                color: rt.on ? Colours.palette.m3onSurface : Qt.alpha(Colours.palette.m3onSurface, 0.78)
+                font.pointSize: 7.4
+                font.weight: rt.on ? Font.Bold : Font.DemiBold
+            }
         }
     }
 
-    // Jauge épaisse en verre, glissable, avec icône dedans ; elle gonfle quand on la tient
+    // Jauge matérielle en verre biseauté, graduée, glissable + molette de précision
     component GlassSlider: Item {
         id: gs
 
@@ -3223,32 +4261,51 @@ Item {
         signal moved(real v)
         signal iconClicked
 
-        height: 26
+        height: 28
 
         Item {
             id: track
 
             anchors.fill: parent
-            scale: gsArea.pressed ? 1.04 : 1
+            scale: gsArea.pressed ? 1.03 : 1
 
             Behavior on scale {
                 SpringAnimation {
                     spring: 5
-                    damping: 0.3
+                    damping: 0.35
                 }
             }
 
             GlassControl {
                 anchors.fill: parent
+                radius: height / 2
                 bevel: 10
                 tintColour: Qt.alpha(Colours.palette.m3onSurface, 0.1)
                 hovered: gsArea.containsMouse
                 pointer: gsArea.containsMouse ? Qt.point((gsArea.mouseX + 30) / track.width, gsArea.mouseY / track.height) : Qt.point(-1, -1)
             }
 
+            // Graduations optiques subtiles (25 %, 50 %, 75 %)
+            Repeater {
+                model: [0.25, 0.5, 0.75]
+
+                Rectangle {
+                    required property real modelData
+                    x: parent.width * modelData
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 1
+                    height: 6
+                    radius: 0.5
+                    color: Qt.alpha(Colours.palette.m3onSurface, 0.14)
+                }
+            }
+
             GlassControl {
+                id: fillBar
+
                 height: parent.height
                 width: Math.max(parent.height, parent.width * Math.max(0, Math.min(1, gs.value)))
+                radius: height / 2
                 bevel: 10
                 tintColour: gs.dim ? Qt.alpha(Colours.palette.m3onSurface, 0.35) : Qt.alpha(gs.tint, 0.92)
                 pressed: gsArea.pressed
@@ -3257,10 +4314,31 @@ Item {
                     enabled: !gsArea.pressed
 
                     NumberAnimation {
-                        duration: 160
+                        duration: 150
                         easing.type: Easing.OutCubic
                     }
                 }
+
+                // Curseur vertical optique à l'extrémité droite
+                Rectangle {
+                    anchors.right: parent.right
+                    anchors.rightMargin: 6
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 2.5
+                    height: 10
+                    radius: 1.25
+                    visible: fillBar.width > parent.height + 10
+                    color: gs.dim ? Qt.alpha(Colours.palette.m3onSurface, 0.5) : Qt.alpha(Colours.palette.m3surface, 0.55)
+                }
+            }
+
+            // Biseau optique sur le pourtour de la piste
+            Rectangle {
+                anchors.fill: parent
+                radius: height / 2
+                color: "transparent"
+                border.width: 0.5
+                border.color: gsArea.containsMouse ? Qt.alpha("white", 0.22) : Qt.alpha(Colours.palette.m3onSurface, 0.12)
             }
 
             MouseArea {
@@ -3275,14 +4353,18 @@ Item {
                     if (pressed)
                         gs.moved(Math.max(0, Math.min(1, (e.x + 30) / track.width)));
                 }
+                onWheel: wheel => {
+                    const step = wheel.angleDelta.y > 0 ? 0.02 : -0.02;
+                    gs.moved(Math.max(0, Math.min(1, gs.value + step)));
+                }
             }
         }
 
         MaterialIcon {
-            x: 7
+            x: 8
             anchors.verticalCenter: parent.verticalCenter
             text: gs.icon
-            color: gs.value > 0.1 && !gs.dim ? Colours.palette.m3surface : Colours.palette.m3onSurface
+            color: gs.value > 0.08 && !gs.dim ? Colours.palette.m3surface : Colours.palette.m3onSurface
             fontStyle: Tokens.font.icon.size(12).build()
             fill: 1
 
@@ -3295,7 +4377,7 @@ Item {
         }
     }
 
-    // Bouton icône rond en verre
+    // Bouton icône rond en verre biseauté
     component IconBtn: GlassButton {
         id: ib
 
@@ -3306,7 +4388,15 @@ Item {
 
         width: big ? 38 : 32
         height: width
-        tint: ib.danger ? Qt.alpha("#ff453a", 0.18) : Qt.alpha(Colours.palette.m3onSurface, ib.hovered ? 0.1 : 0.04)
+        tint: ib.danger ? Qt.alpha("#ff453a", 0.18) : Qt.alpha(Colours.palette.m3onSurface, ib.hovered ? 0.12 : 0.05)
+
+        Rectangle {
+            anchors.fill: parent
+            radius: width / 2
+            color: "transparent"
+            border.width: 0.5
+            border.color: ib.danger ? Qt.alpha("#ff453a", 0.4) : Qt.alpha(Colours.palette.m3onSurface, ib.hovered ? 0.18 : 0.08)
+        }
 
         MaterialIcon {
             anchors.centerIn: parent
@@ -3325,7 +4415,7 @@ Item {
         }
     }
 
-    // Grande carte de choix en verre (plein écran / zone)
+    // Grande carte de choix en verre biseautée (plein écran / zone)
     component ChoiceCard: GlassButton {
         id: cc
 
@@ -3337,15 +4427,14 @@ Item {
         height: 104
         radius: 22
         bevel: 16
-        tint: cc.on ? Qt.alpha(Colours.palette.m3primary, 0.26) : Qt.alpha(Colours.palette.m3onSurface, 0.07)
+        tint: cc.on ? Qt.alpha(Colours.palette.m3primary, 0.24) : Qt.alpha(Colours.palette.m3onSurface, 0.065)
 
         Rectangle {
             anchors.fill: parent
             radius: 22
             color: "transparent"
-            border.width: 2
-            border.color: Qt.alpha(Colours.palette.m3primary, 0.7)
-            visible: cc.on
+            border.width: cc.on ? 1.5 : 0.5
+            border.color: cc.on ? Qt.alpha(Colours.palette.m3primary, 0.75) : root.tileBorder
         }
 
         Column {
@@ -3364,7 +4453,7 @@ Item {
                 text: cc.title
                 color: Colours.palette.m3onSurface
                 font.pointSize: 10
-                font.weight: Font.DemiBold
+                font.weight: Font.Bold
             }
             StyledText {
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -3425,7 +4514,7 @@ Item {
         }
     }
 
-    // Pilule en verre (rouge pour les actions risquées)
+    // Pilule en verre biseautée (rouge pour les actions risquées)
     component BigPill: GlassButton {
         id: bp
 
@@ -3435,6 +4524,14 @@ Item {
         width: bpLbl.implicitWidth + 30
         height: 38
         tint: bp.red ? Qt.alpha("#ff453a", 0.88) : Qt.alpha(Colours.palette.m3onSurface, 0.12)
+
+        Rectangle {
+            anchors.fill: parent
+            radius: height / 2
+            color: "transparent"
+            border.width: 0.5
+            border.color: bp.red ? Qt.alpha("white", 0.3) : Qt.alpha(Colours.palette.m3onSurface, 0.15)
+        }
 
         StyledText {
             id: bpLbl
@@ -3447,7 +4544,7 @@ Item {
         }
     }
 
-    // Interrupteur façon iOS 27 : piste en verre, pastille-lentille qui s'étire à l'appui
+    // Interrupteur façon iOS 27 : piste en verre biseautée, pastille-lentille qui s'étire à l'appui
     component Switch: Item {
         id: sw
 
@@ -3461,6 +4558,14 @@ Item {
             anchors.fill: parent
             bevel: 9
             tintColour: sw.on ? Qt.alpha("#32d74b", 0.92) : Qt.alpha(Colours.palette.m3onSurface, 0.16)
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            radius: 13
+            color: "transparent"
+            border.width: 0.5
+            border.color: sw.on ? Qt.alpha("white", 0.28) : Qt.alpha(Colours.palette.m3onSurface, 0.15)
         }
 
         GlassControl {
