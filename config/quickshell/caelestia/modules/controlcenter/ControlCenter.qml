@@ -211,14 +211,49 @@ Item {
         return e?.name || (key.charAt(0).toUpperCase() + key.slice(1));
     }
 
+    // Chemin d'icône réellement présent dans le thème, sinon "" (la page affiche alors un glyphe propre
+    // au lieu du damier magenta « icône manquante »)
     function appIcon(key: string): string {
         if (key === "quickshell" || key === "qs")
-            return Quickshell.iconPath("preferences-desktop", "application-x-executable");
+            return "";
         if (key === "claude")
-            return Quickshell.iconPath("claude-desktop", "utilities-terminal");
+            return Quickshell.iconPath("claude-desktop", true);
         const e = DesktopEntries.byId(key) ?? DesktopEntries.heuristicLookup(key);
         const icon = e?.icon ?? key;
-        return icon.startsWith("/") ? `file://${icon}` : Quickshell.iconPath(icon, "application-x-executable");
+        return icon.startsWith("/") ? `file://${icon}` : Quickshell.iconPath(icon, true);
+    }
+
+    function appGlyph(key: string): string {
+        const k = key.toLowerCase();
+        if (k === "quickshell" || k === "qs" || k.startsWith("caelestia"))
+            return "auto_awesome";
+        if (k.includes("hypr"))
+            return "grid_view";
+        if (k.includes("pipewire") || k.includes("wireplumber") || k.includes("pulse"))
+            return "graphic_eq";
+        if (k.includes("chrome") || k.includes("firefox"))
+            return "public";
+        if (k.includes("kitty") || k.includes("term") || k === "fish" || k === "bash")
+            return "terminal";
+        if (k.includes("python") || k === "node" || k.includes("claude") || k.includes("antigravity"))
+            return "code";
+        return "memory";
+    }
+
+    // Processus regroupés par nom affiché (quickshell + qs + caelestia-* = une seule ligne « Caelestia »)
+    function mergedConsumers(list: var): var {
+        const by = {};
+        const out = [];
+        for (const c of list ?? []) {
+            const name = appName(c.key);
+            if (by[name]) {
+                by[name].cpu += c.cpu;
+            } else {
+                by[name] = { key: c.key, name: name, cpu: c.cpu };
+                out.push(by[name]);
+            }
+        }
+        return out.sort((a, b) => b.cpu - a.cpu).slice(0, 5);
     }
 
     // ── Projection (outil caelestia-display-pro, piloté sans fenêtre) ──
@@ -546,7 +581,7 @@ Item {
 
                         Rectangle {
                             anchors.fill: parent
-                            radius: parent.radius
+                            radius: ccCover.radius
                             color: "transparent"
                             border.width: 0.5
                             border.color: Qt.alpha("#ffffff", 0.22)
@@ -689,7 +724,7 @@ Item {
                             Rectangle {
                                 width: parent.width * ccPlayerTile.playRatio
                                 height: parent.height
-                                radius: parent.radius
+                                radius: ccSeekBar.radius
                                 gradient: Gradient {
                                     orientation: Gradient.Horizontal
                                     GradientStop { position: 0.0; color: root.accent }
@@ -946,18 +981,18 @@ Item {
                     }
                 }
 
-                // ── Raccourcis rapides (grille matérielle 4×2 biseautée) ──
+                // ── Raccourcis rapides (grille 4×2 de pastilles rondes en verre) ──
                 Tile {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: grid.implicitHeight + 20
+                    Layout.preferredHeight: grid.implicitHeight + 24
 
                     Grid {
                         id: grid
 
                         anchors.centerIn: parent
                         columns: 4
-                        columnSpacing: 8
-                        rowSpacing: 8
+                        columnSpacing: 16
+                        rowSpacing: 10
 
                         RoundToggle {
                             icon: "coffee"
@@ -1024,6 +1059,8 @@ Item {
 
                 // ── Télémétrie Énergie & Profils de puissance ──
                 Tile {
+                    id: energyTile
+
                     Layout.fillWidth: true
                     Layout.preferredHeight: 62
                     visible: UPower.displayDevice.isLaptopBattery || PowerProfiles.hasPerformanceProfile !== undefined
@@ -1042,10 +1079,10 @@ Item {
                             anchors.verticalCenter: parent.verticalCenter
                             width: 38
                             height: 38
-                            radius: 11
-                            color: Qt.alpha(parent.parent.battColor, 0.11)
+                            radius: 12
+                            color: Qt.alpha(energyTile.battColor, 0.11)
                             border.width: 0.5
-                            border.color: Qt.alpha(parent.parent.battColor, 0.32)
+                            border.color: Qt.alpha(energyTile.battColor, 0.35)
 
                             Shape {
                                 anchors.fill: parent
@@ -1068,7 +1105,7 @@ Item {
                                 }
                                 ShapePath {
                                     fillColor: "transparent"
-                                    strokeColor: parent.parent.parent.parent.battColor
+                                    strokeColor: energyTile.battColor
                                     strokeWidth: 2.4
                                     capStyle: ShapePath.RoundCap
 
@@ -1078,7 +1115,7 @@ Item {
                                         radiusX: 13
                                         radiusY: 13
                                         startAngle: 135
-                                        sweepAngle: Math.max(0.02, Math.min(1, parent.parent.parent.parent.battPct)) * 270
+                                        sweepAngle: Math.max(0.02, Math.min(1, energyTile.battPct)) * 270
                                     }
                                 }
                             }
@@ -1086,7 +1123,7 @@ Item {
                             MaterialIcon {
                                 anchors.centerIn: parent
                                 text: !UPower.onBattery ? "bolt" : "battery_full"
-                                color: parent.parent.parent.battColor
+                                color: energyTile.battColor
                                 fontStyle: Tokens.font.icon.size(13).build()
                                 fill: 1
                             }
@@ -2365,7 +2402,7 @@ Item {
                         StyledText {
                             x: 14
                             y: 10
-                            text: qsTr("DERNIÈRES 24 H")
+                            text: histCanvas.span >= 23 * 3600 * 1000 ? qsTr("DERNIÈRES 24 H") : qsTr("HISTORIQUE")
                             color: root.fgDim
                             font.pointSize: 7.5
                             font.weight: Font.Bold
@@ -2381,6 +2418,17 @@ Item {
                             height: 74
 
                             readonly property var pts: BatteryInfo.history
+                            // Fenêtre adaptative : on zoome sur les données disponibles (1 h mini, 24 h maxi)
+                            // pour que la courbe remplisse toujours le graphe au lieu d'un point collé à droite
+                            readonly property real span: {
+                                const now = Date.now();
+                                const oldest = pts.length ? pts[0].t : now;
+                                return Math.max(3600 * 1000, Math.min(24 * 3600 * 1000, now - oldest));
+                            }
+                            function spanLabel(f: real): string {
+                                const m = Math.round(span * f / 60000);
+                                return m >= 60 ? qsTr("il y a %1 h").arg(Math.round(m / 6) / 10) : qsTr("il y a %1 min").arg(m);
+                            }
                             onPtsChanged: requestPaint()
                             onWidthChanged: requestPaint()
                             Connections {
@@ -2394,7 +2442,7 @@ Item {
                             onPaint: {
                                 const ctx = getContext("2d");
                                 ctx.reset();
-                                const w = width, h = height, now = Date.now(), span = 24 * 3600 * 1000;
+                                const w = width, h = height, now = Date.now(), span = histCanvas.span;
                                 // Lignes 0 / 50 / 100 %
                                 ctx.strokeStyle = Qt.alpha(root.fg, 0.1);
                                 ctx.lineWidth = 1;
@@ -2443,7 +2491,7 @@ Item {
                         StyledText {
                             anchors.horizontalCenter: histCanvas.horizontalCenter
                             y: histCanvas.y + histCanvas.height / 2 - height / 2
-                            visible: BatteryInfo.history.length < 6
+                            visible: BatteryInfo.history.length < 2
                             text: qsTr("L'historique se remplit (un point toutes les 5 min)")
                             color: root.fgDim
                             font.pointSize: 8.5
@@ -2456,13 +2504,13 @@ Item {
                             height: 14
 
                             StyledText {
-                                text: qsTr("il y a 24 h")
+                                text: histCanvas.spanLabel(1)
                                 color: root.fgDim
                                 font.pointSize: 7.5
                             }
                             StyledText {
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: qsTr("12 h")
+                                text: histCanvas.spanLabel(0.5)
                                 color: root.fgDim
                                 font.pointSize: 7.5
                             }
@@ -2503,23 +2551,43 @@ Item {
                             }
 
                             Repeater {
-                                model: BatteryInfo.consumers.slice(0, 5)
+                                model: root.mergedConsumers(BatteryInfo.consumers)
 
                                 Item {
                                     id: consumer
 
                                     required property var modelData
-                                    readonly property real maxCpu: Math.max(1, BatteryInfo.consumers[0]?.cpu ?? 1)
+                                    readonly property real maxCpu: Math.max(1, root.mergedConsumers(BatteryInfo.consumers)[0]?.cpu ?? 1)
+                                    readonly property string iconSrc: root.appIcon(consumer.modelData.key)
 
                                     width: appsCol.width
                                     height: 30
 
-                                    IconImage {
+                                    Rectangle {
                                         id: consIcon
 
                                         anchors.verticalCenter: parent.verticalCenter
-                                        implicitSize: 22
-                                        source: root.appIcon(consumer.modelData.key)
+                                        width: 24
+                                        height: 24
+                                        radius: 7
+                                        color: consumer.iconSrc ? "transparent" : Qt.alpha(root.accent, 0.16)
+                                        border.width: consumer.iconSrc ? 0 : 0.5
+                                        border.color: Qt.alpha(root.accent, 0.35)
+
+                                        IconImage {
+                                            anchors.centerIn: parent
+                                            visible: !!consumer.iconSrc
+                                            implicitSize: 22
+                                            source: consumer.iconSrc
+                                        }
+                                        MaterialIcon {
+                                            anchors.centerIn: parent
+                                            visible: !consumer.iconSrc
+                                            text: root.appGlyph(consumer.modelData.key)
+                                            color: root.accent
+                                            fontStyle: Tokens.font.icon.size(13).build()
+                                            fill: 1
+                                        }
                                     }
                                     StyledText {
                                         anchors.left: consIcon.right
@@ -2527,7 +2595,7 @@ Item {
                                         anchors.top: parent.top
                                         width: parent.width - 130
                                         elide: Text.ElideRight
-                                        text: root.appName(consumer.modelData.key)
+                                        text: consumer.modelData.name
                                         color: root.fg
                                         font.pointSize: 9.5
                                         font.weight: Font.DemiBold
@@ -3907,28 +3975,30 @@ Item {
 
     // Plaque de verre biseautée (Liquid Glass optique 0.5px + reflet spéculaire supérieur)
     component Tile: Item {
+        id: tileRoot
+
         property real radius: 22
         property color borderTint: root.tileBorder
 
         GlassControl {
             anchors.fill: parent
-            radius: parent.radius
+            radius: tileRoot.radius
             bevel: 16
             tintColour: Qt.alpha(Colours.palette.m3onSurface, Colours.light ? 0.05 : 0.065)
         }
 
         Rectangle {
             anchors.fill: parent
-            radius: parent.radius
+            radius: tileRoot.radius
             color: "transparent"
             border.width: 0.5
-            border.color: parent.borderTint
+            border.color: tileRoot.borderTint
 
             Rectangle {
                 anchors.top: parent.top
                 anchors.topMargin: 0.5
                 anchors.horizontalCenter: parent.horizontalCenter
-                width: Math.max(0, parent.width - parent.radius * 1.7)
+                width: Math.max(0, tileRoot.width - tileRoot.radius * 1.7)
                 height: 0.6
                 color: Qt.alpha("white", Colours.light ? 0.45 : 0.16)
             }
@@ -4087,7 +4157,7 @@ Item {
 
         Rectangle {
             anchors.fill: parent
-            radius: parent.radius
+            radius: wt.radius
             color: "transparent"
             border.width: 0.5
             border.color: wt.on ? Qt.alpha(wt.activeTint, 0.42) : root.tileBorder
@@ -4096,7 +4166,7 @@ Item {
                 anchors.top: parent.top
                 anchors.topMargin: 0.5
                 anchors.horizontalCenter: parent.horizontalCenter
-                width: Math.max(0, parent.width - parent.radius * 1.7)
+                width: Math.max(0, wt.width - wt.radius * 1.7)
                 height: 0.6
                 color: Qt.alpha("white", Colours.light ? 0.45 : 0.16)
             }
@@ -4180,73 +4250,54 @@ Item {
         }
     }
 
-    // Cellule matérielle biseautée pour la grille 4x2 de raccourcis rapides
-    component RoundToggle: GlassButton {
+    // Pastille ronde en verre + libellé (sans rectangle autour) pour les 8 raccourcis rapides
+    component RoundToggle: Column {
         id: rt
 
         property string icon
         property string label
         property bool on
         property color activeTint: Colours.palette.m3primary
+        signal clicked
 
-        width: 82
-        height: 58
-        radius: 16
-        bevel: 12
-        tint: rt.on ? Qt.alpha(rt.activeTint, 0.22) : Qt.alpha(Colours.palette.m3onSurface, rt.hovered ? 0.11 : 0.065)
+        width: 72
+        spacing: 5
 
-        Rectangle {
-            anchors.fill: parent
-            radius: parent.radius
-            color: "transparent"
-            border.width: 0.5
-            border.color: rt.on ? Qt.alpha(rt.activeTint, 0.55) : Qt.alpha(Colours.palette.m3onSurface, rt.hovered ? 0.18 : 0.09)
+        GlassButton {
+            id: rtCircle
+
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: 48
+            height: 48
+            radius: 24
+            tint: rt.on ? Qt.alpha(rt.activeTint, 0.9) : Qt.alpha(Colours.palette.m3onSurface, rtCircle.hovered ? 0.14 : 0.09)
+            onClicked: rt.clicked()
 
             Rectangle {
-                anchors.top: parent.top
-                anchors.topMargin: 0.5
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: Math.max(0, parent.width - parent.radius * 1.6)
-                height: 0.5
-                color: Qt.alpha("white", Colours.light ? 0.4 : 0.14)
+                anchors.fill: parent
+                radius: 24
+                color: "transparent"
+                border.width: 0.5
+                border.color: rt.on ? Qt.alpha("white", 0.32) : Qt.alpha(Colours.palette.m3onSurface, rtCircle.hovered ? 0.2 : 0.12)
             }
-        }
-
-        // Point témoin LED actif en haut à droite
-        Rectangle {
-            anchors.right: parent.right
-            anchors.rightMargin: 8
-            anchors.top: parent.top
-            anchors.topMargin: 8
-            width: 5
-            height: 5
-            radius: 2.5
-            visible: rt.on
-            color: rt.activeTint
-        }
-
-        Column {
-            anchors.centerIn: parent
-            width: parent.width - 8
-            spacing: 4
 
             MaterialIcon {
-                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.centerIn: parent
                 text: rt.icon
-                color: rt.on ? rt.activeTint : Colours.palette.m3onSurface
+                color: rt.on ? (rt.activeTint === root.amber ? "#241400" : Colours.palette.m3onPrimary) : Colours.palette.m3onSurface
                 fontStyle: Tokens.font.icon.size(15).build()
                 fill: rt.on ? 1 : 0
             }
+        }
 
-            StyledText {
-                width: parent.width
-                horizontalAlignment: Text.AlignHCenter
-                elide: Text.ElideRight
-                text: rt.label
-                color: rt.on ? Colours.palette.m3onSurface : Qt.alpha(Colours.palette.m3onSurface, 0.78)
-                font.pointSize: 7.4
-                font.weight: rt.on ? Font.Bold : Font.DemiBold
-            }
+        StyledText {
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
+            elide: Text.ElideRight
+            text: rt.label
+            color: rt.on ? Colours.palette.m3onSurface : Qt.alpha(Colours.palette.m3onSurface, 0.78)
+            font.pointSize: 7.5
+            font.weight: rt.on ? Font.Bold : Font.Medium
         }
     }
 
@@ -4392,7 +4443,7 @@ Item {
 
         Rectangle {
             anchors.fill: parent
-            radius: width / 2
+            radius: ib.width / 2
             color: "transparent"
             border.width: 0.5
             border.color: ib.danger ? Qt.alpha("#ff453a", 0.4) : Qt.alpha(Colours.palette.m3onSurface, ib.hovered ? 0.18 : 0.08)
@@ -4527,7 +4578,7 @@ Item {
 
         Rectangle {
             anchors.fill: parent
-            radius: height / 2
+            radius: bp.height / 2
             color: "transparent"
             border.width: 0.5
             border.color: bp.red ? Qt.alpha("white", 0.3) : Qt.alpha(Colours.palette.m3onSurface, 0.15)
