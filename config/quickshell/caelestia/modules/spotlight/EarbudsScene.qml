@@ -42,47 +42,81 @@ Item {
         meshObj.indexes = d.i;
     }
 
-    // Rotation continue style AirPodsDesktop quand on ne manipule pas à la souris
-    NumberAnimation on yaw {
-        running: root.active && !root.dragging
-        from: root.yaw
-        to: root.yaw + 360
-        duration: 13500
-        loops: Animation.Infinite
+    // Batterie faible : la LED de l'écouteur passe à l'orange / rouge
+    property int leftPct: 100
+    property int rightPct: 100
+
+    // ── Moteur d'animation physique (une seule horloge pour tout) ──
+    // Rotation à inertie : on lance le boîtier à la souris, il ralentit tout seul
+    // jusqu'à la vitesse de repos ; respiration, LEDs et balancement des écouteurs
+    // sont calculés à partir du même temps pour rester parfaitement synchrones.
+    property real time: 0
+    property real spinVel: idleSpeed
+    readonly property real idleSpeed: 24
+    property real dragVel: 0
+    readonly property real floatY: Math.sin(time * 1.5) * 2.0
+    readonly property real ledPulse: 0.72 + 0.28 * Math.sin(time * 2.6)
+    readonly property real budSway: Math.sin(time * 1.25)
+    property real caseScale: 1
+    property real leftFlash: 0
+    property real rightFlash: 0
+
+    FrameAnimation {
+        running: root.active
+        onTriggered: {
+            const dt = Math.min(0.05, frameTime);
+            root.time += dt;
+            if (root.dragging)
+                return;
+            root.spinVel += (root.idleSpeed - root.spinVel) * Math.min(1, dt * 1.4);
+            root.yaw = (root.yaw + root.spinVel * dt) % 360;
+        }
     }
 
-    // Oscillation verticale subtile (respiration 3D)
-    property real floatY: 0
-    SequentialAnimation on floatY {
-        running: root.active
-        loops: Animation.Infinite
-        NumberAnimation {
-            to: 2.2
-            duration: 2100
-            easing.type: Easing.InOutSine
-        }
-        NumberAnimation {
-            to: -2.2
-            duration: 2100
-            easing.type: Easing.InOutSine
+    // Entrée en scène : le boîtier arrive en tourbillon, grossit au ressort puis se pose
+    function playIntro(): void {
+        yaw = -160;
+        spinVel = 620;
+        caseScale = 0.55;
+        caseScale = 1;
+    }
+
+    Behavior on caseScale {
+        SpringAnimation {
+            spring: 3.2
+            damping: 0.22
+            epsilon: 0.002
         }
     }
 
-    // Pulsation des LEDs bleues des écouteurs actifs
-    property real ledPulse: 0.85
-    SequentialAnimation on ledPulse {
-        running: root.active
-        loops: Animation.Infinite
-        NumberAnimation {
-            to: 1.0
-            duration: 1200
-            easing.type: Easing.InOutSine
-        }
-        NumberAnimation {
-            to: 0.45
-            duration: 1200
-            easing.type: Easing.InOutSine
-        }
+    // Éclair de connexion : la LED flashe et l'écouteur fait un tour sur lui-même en sortant
+    NumberAnimation {
+        id: leftFlashAnim
+        target: root
+        property: "leftFlash"
+        from: 1
+        to: 0
+        duration: 1400
+        easing.type: Easing.OutCubic
+    }
+    NumberAnimation {
+        id: rightFlashAnim
+        target: root
+        property: "rightFlash"
+        from: 1
+        to: 0
+        duration: 1400
+        easing.type: Easing.OutCubic
+    }
+    onLeftConnectedChanged: if (leftConnected) leftFlashAnim.restart()
+    onRightConnectedChanged: if (rightConnected) rightFlashAnim.restart()
+
+    function ledColor(pct: int): vector3d {
+        if (pct < 20)
+            return Qt.vector3d(1.0, 0.18, 0.12);
+        if (pct < 40)
+            return Qt.vector3d(1.0, 0.55, 0.05);
+        return Qt.vector3d(0.35, 0.72, 1.0);
     }
 
     Behavior on lidOpen {
@@ -167,6 +201,11 @@ Item {
             eulerRotation.y: -32
             brightness: 1.45
             color: "#fff8f2"
+            // Ombres propres : le couvercle et les écouteurs s'ombrent entre eux
+            castsShadow: true
+            shadowMapQuality: Light.ShadowMapQualityMedium
+            shadowFactor: 40
+            shadowBias: 0.4
         }
 
         DirectionalLight {
@@ -281,9 +320,10 @@ Item {
         PrincipledMaterial {
             id: matLedLeft
 
-            readonly property real k: root.leftConnected ? root.ledPulse : 0.15
-            baseColor: root.leftConnected ? "#60a5fa" : "#1e293b"
-            emissiveFactor: Qt.vector3d(0.35 * k, 0.72 * k, 1.0 * k)
+            readonly property real k: root.leftConnected ? root.ledPulse + root.leftFlash * 2.5 : 0.08
+            readonly property vector3d c: root.ledColor(root.leftPct)
+            baseColor: root.leftConnected ? Qt.rgba(c.x, c.y, c.z, 1) : "#1e293b"
+            emissiveFactor: Qt.vector3d(c.x * k, c.y * k, c.z * k)
             roughness: 0.1
         }
 
@@ -291,9 +331,10 @@ Item {
         PrincipledMaterial {
             id: matLedRight
 
-            readonly property real k: root.rightConnected ? root.ledPulse : 0.15
-            baseColor: root.rightConnected ? "#60a5fa" : "#1e293b"
-            emissiveFactor: Qt.vector3d(0.35 * k, 0.72 * k, 1.0 * k)
+            readonly property real k: root.rightConnected ? root.ledPulse + root.rightFlash * 2.5 : 0.08
+            readonly property vector3d c: root.ledColor(root.rightPct)
+            baseColor: root.rightConnected ? Qt.rgba(c.x, c.y, c.z, 1) : "#1e293b"
+            emissiveFactor: Qt.vector3d(c.x * k, c.y * k, c.z * k)
             roughness: 0.1
         }
 
@@ -361,6 +402,7 @@ Item {
 
             position: Qt.vector3d(0, -2 + root.floatY, 0)
             eulerRotation: Qt.vector3d(root.pitch, root.yaw, 0)
+            scale: Qt.vector3d(root.caseScale, root.caseScale, root.caseScale)
 
             Model {
                 geometry: geoCaseShell
@@ -402,8 +444,9 @@ Item {
             Node {
                 id: leftBudNode
 
-                position: Qt.vector3d(-root.leftLift * 2.2, root.leftLift * 10.5, root.leftLift * 2.5)
-                eulerRotation: Qt.vector3d(root.leftLift * 14, 0, root.leftLift * 6)
+                // Sorti du boîtier : il flotte en balançant doucement, et tourne une fois à la connexion
+                position: Qt.vector3d(-root.leftLift * 2.2, root.leftLift * (10.5 + 1.6 * root.budSway), root.leftLift * 2.5)
+                eulerRotation: Qt.vector3d(root.leftLift * (14 + 4 * root.budSway), root.leftLift * (10 * root.budSway) + root.leftFlash * 360 * Math.min(1, root.leftLift * 2.3), root.leftLift * 6)
 
                 Model {
                     geometry: geoBudL
@@ -429,8 +472,8 @@ Item {
             Node {
                 id: rightBudNode
 
-                position: Qt.vector3d(root.rightLift * 2.2, root.rightLift * 10.5, root.rightLift * 2.5)
-                eulerRotation: Qt.vector3d(root.rightLift * 14, 0, -root.rightLift * 6)
+                position: Qt.vector3d(root.rightLift * 2.2, root.rightLift * (10.5 - 1.6 * root.budSway), root.rightLift * 2.5)
+                eulerRotation: Qt.vector3d(root.rightLift * (14 - 4 * root.budSway), -root.rightLift * (10 * root.budSway) - root.rightFlash * 360 * Math.min(1, root.rightLift * 2.3), -root.rightLift * 6)
 
                 Model {
                     geometry: geoBudR
@@ -484,23 +527,33 @@ Item {
 
         property real lastX: 0
         property real lastY: 0
+        property real lastT: 0
 
         onPressed: mouse => {
             root.dragging = true;
+            root.dragVel = 0;
             lastX = mouse.x;
             lastY = mouse.y;
+            lastT = Date.now();
         }
         onPositionChanged: mouse => {
             if (!pressed)
                 return;
             const dx = mouse.x - lastX;
             const dy = mouse.y - lastY;
+            const now = Date.now();
+            const dt = Math.max(0.004, (now - lastT) / 1000);
             lastX = mouse.x;
             lastY = mouse.y;
+            lastT = now;
             root.yaw = (root.yaw + dx * 0.65) % 360;
             root.pitch = Math.max(-25, Math.min(68, root.pitch + dy * 0.45));
+            // Vitesse lissée pour un lancer naturel au relâchement
+            root.dragVel = root.dragVel * 0.6 + (dx * 0.65 / dt) * 0.4;
         }
         onReleased: {
+            // Relâché immobile = pas d'élan ; lancé = le boîtier continue sur sa lancée
+            root.spinVel = Date.now() - lastT > 90 ? 0 : Math.max(-900, Math.min(900, root.dragVel));
             root.dragging = false;
         }
         onCanceled: {

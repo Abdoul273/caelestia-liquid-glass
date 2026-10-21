@@ -156,6 +156,7 @@ Item {
             scene.leftLift = 0;
             scene.rightLift = 0;
             scene.pitch = 22;
+            scene.playIntro();
             openAnimTimer.restart();
             profileProc.running = true;
             content.forceActiveFocus();
@@ -181,6 +182,12 @@ Item {
             syncLifts();
             profileProc.running = true;
         }
+    }
+
+    // Plus rien de connecté dans une fenêtre ouverte automatiquement : on range et on referme
+    onIsConnectedChanged: {
+        if (shown && !isConnected && openedByAuto)
+            autoCloseTimer.restart();
     }
 
     Timer {
@@ -578,6 +585,8 @@ Item {
                 active: root.visible
                 leftConnected: root.leftConnected
                 rightConnected: root.rightConnected
+                leftPct: root.leftHasBatt ? root.leftPct : 100
+                rightPct: root.rightHasBatt ? root.rightPct : 100
                 accentColor: root.accent
             }
 
@@ -594,12 +603,12 @@ Item {
                 PodCard {
                     label: "BX012"
                     sideBadge: "L"
-                    sublabel: qsTr("Non connecté")
+                    sublabel: root.leftConnected ? qsTr("Connecté") : qsTr("Non connecté")
                     glyph: "󰋋"
                     pct: root.leftPct
                     connected: root.leftConnected
                     busy: root.leftBusy
-                    showPct: root.leftConnected
+                    showPct: root.leftConnected && root.leftHasBatt
                     onClicked: {
                         root.openedByAuto = false;
                         if (root.leftDevice)
@@ -611,12 +620,12 @@ Item {
                 PodCard {
                     label: qsTr("Boîtier")
                     sideBadge: ""
-                    sublabel: qsTr("En veille")
+                    sublabel: scene.lidOpen > 0.5 ? qsTr("Ouvert") : qsTr("Fermé")
                     glyph: "󰂄"
                     pct: root.casePct
                     connected: root.isConnected
                     busy: false
-                    showPct: root.isConnected
+                    showPct: false
                     onClicked: {
                         root.openedByAuto = false;
                         if (scene.lidOpen > 0.5) {
@@ -634,12 +643,12 @@ Item {
                 PodCard {
                     label: "CETW572"
                     sideBadge: "R"
-                    sublabel: qsTr("Non connecté")
+                    sublabel: root.rightConnected ? qsTr("Connecté") : qsTr("Non connecté")
                     glyph: "󰋋"
                     pct: root.rightPct
                     connected: root.rightConnected
                     busy: root.rightBusy
-                    showPct: root.rightConnected
+                    showPct: root.rightConnected && root.rightHasBatt
                     onClicked: {
                         root.openedByAuto = false;
                         if (root.rightDevice)
