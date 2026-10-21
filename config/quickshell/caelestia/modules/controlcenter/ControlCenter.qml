@@ -2282,114 +2282,258 @@ Item {
 
                     readonly property color level: BatteryInfo.charging || BatteryInfo.full ? "#32d74b" : BatteryInfo.pct < 0.2 ? "#ff453a" : BatteryInfo.pct < 0.4 ? "#ff9f0a" : root.fg
 
-                    // État (cadran radial 270° + télémétrie électrique)
+                    // État : grand pourcentage, batterie façon macOS qui se remplit (reflet animé en charge)
+                    // et trois mesures réelles : puissance, temps, santé
                     Tile {
+                        id: battHero
+
                         width: parent.width
-                        height: 96
+                        height: 186
 
-                        Rectangle {
-                            id: bigBatt
+                        readonly property real shownPct: BatteryInfo.pct
+                        property real fillAnim: 0
+                        Component.onCompleted: fillAnim = shownPct
+                        onShownPctChanged: fillAnim = shownPct
+                        Connections {
+                            target: root
 
-                            x: 16
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: 64
-                            height: 64
-                            radius: 18
-                            color: Qt.alpha(batteryPage.level, 0.1)
-                            border.width: 0.5
-                            border.color: Qt.alpha(batteryPage.level, 0.35)
-
-                            Shape {
-                                anchors.fill: parent
-                                preferredRendererType: Shape.CurveRenderer
-
-                                ShapePath {
-                                    fillColor: "transparent"
-                                    strokeColor: Qt.alpha(root.fg, 0.14)
-                                    strokeWidth: 4
-                                    capStyle: ShapePath.RoundCap
-                                    PathAngleArc {
-                                        centerX: 32
-                                        centerY: 32
-                                        radiusX: 23
-                                        radiusY: 23
-                                        startAngle: 135
-                                        sweepAngle: 270
-                                    }
-                                }
-                                ShapePath {
-                                    fillColor: "transparent"
-                                    strokeColor: batteryPage.level
-                                    strokeWidth: 4
-                                    capStyle: ShapePath.RoundCap
-                                    PathAngleArc {
-                                        centerX: 32
-                                        centerY: 32
-                                        radiusX: 23
-                                        radiusY: 23
-                                        startAngle: 135
-                                        sweepAngle: 270 * Math.max(0.03, BatteryInfo.pct)
-                                    }
+                            function onBatteryShownChanged(): void {
+                                if (root.batteryShown) {
+                                    battHero.fillAnim = 0;
+                                    battHero.fillAnim = Qt.binding(() => battHero.shownPct);
                                 }
                             }
-
-                            MaterialIcon {
-                                anchors.centerIn: parent
-                                text: BatteryInfo.charging ? "bolt" : BatteryInfo.pct < 0.2 ? "battery_alert" : "battery_full"
-                                color: batteryPage.level
-                                fontStyle: Tokens.font.icon.size(20).build()
-                                fill: 1
+                        }
+                        Behavior on fillAnim {
+                            NumberAnimation {
+                                duration: 900
+                                easing.type: Easing.OutCubic
                             }
                         }
 
-                        Column {
-                            anchors.left: bigBatt.right
-                            anchors.leftMargin: 16
-                            anchors.right: parent.right
-                            anchors.rightMargin: 14
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: 2
+                        // Pourcentage + état
+                        Row {
+                            id: heroTop
+
+                            x: 18
+                            y: 14
+                            spacing: 10
 
                             StyledText {
-                                text: qsTr("CAPACITÉ ÉLECTRIQUE")
-                                color: batteryPage.level
-                                font.pointSize: 6.5
+                                text: Math.round(BatteryInfo.pct * 100)
+                                color: root.fg
+                                font.pointSize: 30
                                 font.weight: Font.Bold
-                                font.letterSpacing: 0.7
+                                font.features: { "tnum": 1 }
                             }
+                            Column {
+                                anchors.bottom: parent.bottom
+                                anchors.bottomMargin: 7
+                                spacing: 1
+
+                                StyledText {
+                                    text: "%"
+                                    color: root.fgDim
+                                    font.pointSize: 12
+                                    font.weight: Font.Bold
+                                }
+                            }
+                        }
+
+                        StyledText {
+                            anchors.left: heroTop.left
+                            anchors.top: heroTop.bottom
+                            anchors.topMargin: -2
+                            width: parent.width - 36
+                            elide: Text.ElideRight
+                            text: BatteryInfo.statusText
+                            color: BatteryInfo.charging || BatteryInfo.full ? root.green : root.fgDim
+                            font.pointSize: 9.5
+                            font.weight: Font.DemiBold
+                        }
+
+                        // Pastille d'état à droite (branché / batterie / économie)
+                        Rectangle {
+                            anchors.right: parent.right
+                            anchors.rightMargin: 16
+                            y: 20
+                            width: heroChip.implicitWidth + 22
+                            height: 26
+                            radius: 13
+                            color: Qt.alpha(batteryPage.level, 0.14)
+                            border.width: 0.5
+                            border.color: Qt.alpha(batteryPage.level, 0.4)
+
                             Row {
-                                spacing: 8
+                                id: heroChip
 
-                                StyledText {
-                                    anchors.baseline: battUnitSub.baseline
-                                    text: `${Math.round(BatteryInfo.pct * 100)} %`
-                                    color: root.fg
-                                    font.pointSize: 20
-                                    font.weight: Font.Bold
-                                    font.features: {
-                                        "tnum": 1
-                                    }
+                                anchors.centerIn: parent
+                                spacing: 5
+
+                                MaterialIcon {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: BatteryInfo.charging ? "bolt" : BatteryInfo.saverOn ? "energy_savings_leaf" : UPower.onBattery ? "battery_horiz_075" : "power"
+                                    color: batteryPage.level
+                                    fontStyle: Tokens.font.icon.size(13).build()
+                                    fill: 1
                                 }
                                 StyledText {
-                                    id: battUnitSub
-
-                                    visible: BatteryInfo.watts > 0.2
-                                    text: (BatteryInfo.charging ? `+${BatteryInfo.watts.toFixed(1).replace(".", ",")} W` : `-${BatteryInfo.watts.toFixed(1).replace(".", ",")} W`)
-                                    color: BatteryInfo.charging ? root.green : root.fgDim
-                                    font.pointSize: 9.5
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: BatteryInfo.charging ? qsTr("En charge") : BatteryInfo.saverOn ? qsTr("Économie") : UPower.onBattery ? qsTr("Sur batterie") : qsTr("Secteur")
+                                    color: batteryPage.level
+                                    font.pointSize: 8.5
                                     font.weight: Font.Bold
-                                    font.features: {
-                                        "tnum": 1
+                                }
+                            }
+                        }
+
+                        // Batterie dessinée
+                        Item {
+                            id: battBody
+
+                            x: 18
+                            y: 84
+                            width: parent.width - 36 - 8
+                            height: 30
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 9
+                                color: Qt.alpha(root.fg, 0.06)
+                                border.width: 1
+                                border.color: Qt.alpha(root.fg, 0.22)
+                            }
+
+                            // Remplissage
+                            Item {
+                                x: 3
+                                y: 3
+                                width: (parent.width - 6) * Math.max(0.02, battHero.fillAnim)
+                                height: parent.height - 6
+                                clip: true
+
+                                Rectangle {
+                                    anchors.fill: parent
+                                    radius: 6
+                                    gradient: Gradient {
+                                        orientation: Gradient.Horizontal
+                                        GradientStop { position: 0; color: Qt.darker(batteryPage.level, 1.35) }
+                                        GradientStop { position: 1; color: batteryPage.level }
+                                    }
+                                }
+                                // Reflet en haut, effet verre
+                                Rectangle {
+                                    x: 2
+                                    y: 2
+                                    width: parent.width - 4
+                                    height: parent.height * 0.38
+                                    radius: 4
+                                    color: Qt.alpha("white", 0.22)
+                                }
+                                // Vague lumineuse qui parcourt la batterie pendant la charge
+                                Rectangle {
+                                    id: shimmer
+
+                                    visible: BatteryInfo.charging && root.batteryShown
+                                    y: 0
+                                    width: 46
+                                    height: parent.height
+                                    rotation: 0
+                                    gradient: Gradient {
+                                        orientation: Gradient.Horizontal
+                                        GradientStop { position: 0; color: "transparent" }
+                                        GradientStop { position: 0.5; color: Qt.alpha("white", 0.45) }
+                                        GradientStop { position: 1; color: "transparent" }
+                                    }
+                                    NumberAnimation on x {
+                                        running: shimmer.visible
+                                        loops: Animation.Infinite
+                                        from: -60
+                                        to: battBody.width
+                                        duration: 1700
+                                        easing.type: Easing.InOutQuad
                                     }
                                 }
                             }
-                            StyledText {
-                                width: parent.width
-                                elide: Text.ElideRight
-                                text: BatteryInfo.statusText
-                                color: BatteryInfo.charging ? "#32d74b" : root.fgDim
-                                font.pointSize: 9
-                                font.weight: Font.DemiBold
+
+                            // Éclair au centre pendant la charge
+                            MaterialIcon {
+                                anchors.centerIn: parent
+                                visible: BatteryInfo.charging
+                                text: "bolt"
+                                color: "white"
+                                fontStyle: Tokens.font.icon.size(17).build()
+                                fill: 1
+                            }
+
+                            // Téton de la batterie
+                            Rectangle {
+                                anchors.left: parent.right
+                                anchors.leftMargin: 2
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 4
+                                height: 11
+                                radius: 2
+                                color: Qt.alpha(root.fg, 0.3)
+                            }
+                        }
+
+                        // Trois mesures
+                        Row {
+                            x: 18
+                            y: battBody.y + battBody.height + 14
+                            width: parent.width - 36
+                            spacing: 8
+
+                            Repeater {
+                                model: [
+                                    { icon: "electric_bolt", label: qsTr("Puissance"), value: BatteryInfo.watts > 0.2 ? `${BatteryInfo.charging ? "+" : "−"}${BatteryInfo.watts.toFixed(1).replace(".", ",")} W` : "—" },
+                                    { icon: "schedule", label: BatteryInfo.charging ? qsTr("Pleine dans") : qsTr("Autonomie"), value: BatteryInfo.fmtDuration(BatteryInfo.charging ? BatteryInfo.timeToFull : BatteryInfo.timeToEmpty) || "—" },
+                                    { icon: "favorite", label: qsTr("Santé"), value: BatteryInfo.health > 0 ? `${Math.round(BatteryInfo.health * 100)} %` : "—" }
+                                ]
+
+                                Rectangle {
+                                    required property var modelData
+
+                                    width: (parent.width - 16) / 3
+                                    height: 42
+                                    radius: 12
+                                    color: Qt.alpha(root.fg, 0.05)
+                                    border.width: 0.5
+                                    border.color: Qt.alpha(root.fg, 0.1)
+
+                                    Column {
+                                        anchors.left: parent.left
+                                        anchors.leftMargin: 10
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        spacing: 1
+
+                                        Row {
+                                            spacing: 4
+
+                                            MaterialIcon {
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                text: modelData.icon
+                                                color: root.fgDim
+                                                fontStyle: Tokens.font.icon.size(10).build()
+                                                fill: 1
+                                            }
+                                            StyledText {
+                                                text: modelData.label
+                                                color: root.fgDim
+                                                font.pointSize: 7.5
+                                                font.weight: Font.DemiBold
+                                            }
+                                        }
+                                        StyledText {
+                                            text: modelData.value
+                                            color: root.fg
+                                            font.pointSize: 10.5
+                                            font.weight: Font.Bold
+                                            font.features: { "tnum": 1 }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
