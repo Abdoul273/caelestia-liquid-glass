@@ -74,7 +74,7 @@ void main() {
 
     // Aberration chromatique sur le biseau : léger décalage des teintes selon la normale
     vec3 chroma = vec3(0.5 + 0.5 * n.x, 0.5 + 0.25 * (n.x + n.y), 0.5 + 0.5 * n.y);
-    vec3 rimCol = mix(vec3(1.0), chroma, 0.35);
+    vec3 rimCol = mix(vec3(1.0), chroma, 0.12);
 
     col = mix(col, rimCol, clamp(spec * 0.55 * light + lineLit * 0.85, 0.0, 1.0));
     a += spec * 0.28 * light + lineLit * 0.45;

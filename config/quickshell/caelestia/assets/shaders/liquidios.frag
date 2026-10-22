@@ -169,12 +169,12 @@ void main() {
         // La lentille « aspire » l'image depuis l'intérieur : effet de loupe sur les bords
         vec2 disp = -n * lens * 26.0 * texel;
         vec3 refr;
-        refr.r = texture(wallpaper, uv + disp * 1.12).r;
+        refr.r = texture(wallpaper, uv + disp * 1.06).r;
         refr.g = texture(wallpaper, uv + disp).g;
-        refr.b = texture(wallpaper, uv + disp * 0.86).b;
+        refr.b = texture(wallpaper, uv + disp * 0.94).b;
         // Le verre éclaircit et sature un peu ce qu'il réfracte
         float luma = dot(refr, vec3(0.299, 0.587, 0.114));
-        refr = mix(vec3(luma), refr, 1.25) * 1.06;
+        refr = mix(vec3(luma), refr, 1.15) * 1.05;
         float w = clamp(lens * 1.3, 0.0, 0.92);
         col = mix(col, refr, w / max(a + w * (1.0 - a), 1e-3));
         a = a + w * (1.0 - a);
@@ -190,7 +190,9 @@ void main() {
     a += fresnel * 0.06;
 
     // ─── Reflets spéculaires : large sur le biseau, net sur le liseré
-    vec3 rimTint = mix(vec3(1.0), vec3(0.5 + 0.5 * n.x, 0.55 + 0.2 * (n.x + n.y), 0.5 + 0.5 * n.y), 0.22);
+    // Frange de couleur du biseau : très légère, presque blanche (le verre colore à peine
+    // la lumière, comme sur iOS — plus de bord bleu/orange « autocollant »)
+    vec3 rimTint = mix(vec3(1.0), vec3(0.5 + 0.5 * n.x, 0.55 + 0.2 * (n.x + n.y), 0.5 + 0.5 * n.y), 0.08);
     float specWide = (key + back) * bevel * bevel * 0.45;
     float lineLit = line * (0.32 + 1.0 * max(key, back * 1.3));
     col = mix(col, rimTint, clamp((specWide + lineLit * 0.85) * light, 0.0, 1.0));
