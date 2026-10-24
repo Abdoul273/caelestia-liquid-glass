@@ -2809,7 +2809,7 @@ Item {
 
                             OptionRow {
                                 icon: "energy_savings_leaf"
-                                title: qsTr("Économie auto sous 20 %")
+                                title: qsTr("Économie auto sur batterie")
                                 subtitle: BatteryInfo.saverOn ? qsTr("Active en ce moment") : qsTr("Passe en économie d'énergie, revient en charge")
                                 on: BatteryInfo.autoSaver
                                 onToggled: BatteryInfo.setAutoSaver(!BatteryInfo.autoSaver)

@@ -3,6 +3,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Services.UPower
 
 // Réglages du liquid glass de tout le shell : barre, cadre, sidebar, utilitaires, OSD, launcher,
 // session, dashboard, menus de la barre et écran de verrouillage.
@@ -24,7 +25,8 @@ Singleton {
     readonly property bool ios: panels && style === "ios"
     // Verre plein façon iOS 26 / macOS 27 : tout l'intérieur des panneaux posés sur le bureau
     // montre le fond net à travers une lentille (et plus seulement les bords). false = flou d'avant.
-    readonly property bool clear: ios
+    // Sur batterie : flou classique, plus léger pour le GPU intégré.
+    readonly property bool clear: ios && !UPower.onBattery
     // Le verre montre aussi le fond animé (2ᵉ lecture de la vidéo, sur secteur seulement :
     // environ 15 % d'un cœur de plus). false = le verre montre l'image fixe de la vidéo.
     readonly property bool clearVideo: clear

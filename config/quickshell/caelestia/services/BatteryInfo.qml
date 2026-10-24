@@ -89,18 +89,30 @@ Singleton {
     function checkSaver(): void {
         if (!present || !PowerProfiles)
             return;
-        const low = UPower.onBattery && pct < 0.2;
+        // Dès le débranchement : sur une batterie usée, la jauge peut sauter de 48 % à 7 % sous
+        // charge, attendre 20 % arrive trop tard.
+        const low = UPower.onBattery;
         if (autoSaver && low && !saverOn && PowerProfiles.profile !== PowerProfile.PowerSaver) {
             profileBefore = PowerProfiles.profile;
             PowerProfiles.profile = PowerProfile.PowerSaver;
             saverOn = true;
+            hyprEco(true);
             save();
-        } else if (saverOn && (!UPower.onBattery || pct >= 0.25 || !autoSaver)) {
+        } else if (saverOn && (!UPower.onBattery || !autoSaver)) {
             if (PowerProfiles.profile === PowerProfile.PowerSaver)
                 PowerProfiles.profile = profileBefore;
             saverOn = false;
+            hyprEco(false);
             save();
         }
+    }
+
+    // Hyprland plus léger en économie : flou en 1 passe, sans ombres. Valeurs normales =
+    // blurPasses / shadowEnabled de ~/.config/hypr/variables.lua.
+    function hyprEco(on: bool): void {
+        Quickshell.execDetached(["hyprctl", "eval", on
+            ? "hl.config({ decoration = { blur = { passes = 1 }, shadow = { enabled = false } } })"
+            : "hl.config({ decoration = { blur = { passes = 2 }, shadow = { enabled = true } } })"]);
     }
 
     onPctChanged: checkSaver()
