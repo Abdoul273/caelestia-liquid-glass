@@ -69,7 +69,7 @@ Verre translucide partout, Mission Control, Spotlight, animations fluides façon
 | **Tous les raccourcis** (recherche, Entrée les déclenche) | `Super + H` |
 | Presse-papiers (texte, images, liens, favoris) | `Super + V` |
 | Emojis et symboles | `Super + .` |
-| Projection (écran du PC, dupliquer, étendre, deuxième écran) | `Super + P` |
+| Projection (écran du PC, dupliquer, étendre, deuxième écran, sans fil Miracast/Chromecast via `gnome-network-displays`) | `Super + P` |
 | Paramètres de Caelestia | `Super + I` |
 
 ### 🎧 Petits plus

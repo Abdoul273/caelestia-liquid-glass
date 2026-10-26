@@ -127,6 +127,11 @@ Item {
         applier.running = true;
     }
 
+    // Diffusion sans câble vers une télé / un écran Miracast ou Chromecast
+    function cast(): void {
+        caster.running = true;
+    }
+
     function showHint(text: string): void {
         hint = text;
         hintTimer.restart();
@@ -220,6 +225,18 @@ Item {
         }
     }
 
+    Process {
+        id: caster
+
+        command: ["sh", "-c", "command -v gnome-network-displays >/dev/null || exit 3; setsid -f gnome-network-displays >/dev/null 2>&1"]
+        onExited: code => {
+            if (code === 0)
+                root.close();
+            else
+                root.showHint(qsTr("Installe d'abord : yay -S gnome-network-displays"));
+        }
+    }
+
     // Le contenu suit la forme du verre qui tombe de l'île
     Item {
         id: clipper
@@ -254,6 +271,8 @@ Item {
                     root.sel = (root.sel + 3) % 4;
                 else if (k === Qt.Key_Return || k === Qt.Key_Enter || k === Qt.Key_Space)
                     root.apply(root.modes[root.sel].key);
+                else if (k === Qt.Key_C)
+                    root.cast();
                 else
                     return;
                 event.accepted = true;
@@ -304,7 +323,31 @@ Item {
                     }
                 }
 
+                // Écran sans fil (Miracast / Chromecast) via gnome-network-displays
                 GlassButton {
+                    anchors.right: moreBtn.left
+                    anchors.rightMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: castLbl.implicitWidth + 24
+                    height: 30
+                    tint: Qt.alpha(root.accent, 0.16)
+                    onClicked: root.cast()
+
+                    Text {
+                        id: castLbl
+
+                        anchors.centerIn: parent
+                        text: "󰐾  " + qsTr("Sans fil")
+                        color: root.accent
+                        font.family: root.glyphFont
+                        font.pixelSize: 12
+                    }
+
+                }
+
+                GlassButton {
+                    id: moreBtn
+
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
                     width: moreLbl.implicitWidth + 24
@@ -514,7 +557,7 @@ Item {
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: 14
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: root.busy ? qsTr("Application…") : root.hint || qsTr("1–4 ou ←/→ puis Entrée  ·  Échap : fermer")
+                text: root.busy ? qsTr("Application…") : root.hint || qsTr("1–4 ou ←/→ puis Entrée  ·  C : sans fil  ·  Échap : fermer")
                 color: root.hint.startsWith("✓") ? root.accent : Qt.alpha(root.fg, 0.45)
                 font.pixelSize: 12
             }

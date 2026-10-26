@@ -196,6 +196,15 @@ hl.window_rule({
 rebind("SUPER + V", hl.dsp.global("caelestia:clipboard")) -- Presse-papiers dans le verre du shell
 rebind("SUPER + Period", hl.dsp.global("caelestia:emoji")) -- Emojis dans le verre du shell
 rebind("SUPER + P", hl.dsp.global("caelestia:display")) -- Projection dans le verre du shell
+-- Écran sans fil (Miracast / Chromecast), lancé depuis le bouton « Sans fil » de Super + P
+hl.window_rule({
+    match        = { class = "org.gnome.NetworkDisplays" },
+    float        = true,
+    size         = "520 600",
+    move         = "(monitor_w*0.5-260) (monitor_h*0.12)",
+    border_size  = 2,
+    animation    = "popin 90%",
+})
 rebind("SUPER + Space", hl.dsp.global("caelestia:spotlight")) -- Spotlight dans le verre du shell
 rebind("SUPER + SHIFT + Space", hl.dsp.global("caelestia:siri")) -- Assistant vocal Gemini Live
 rebind("SUPER + O", hl.dsp.global("caelestia:calculator")) -- Calculatrice dans le verre du shell
