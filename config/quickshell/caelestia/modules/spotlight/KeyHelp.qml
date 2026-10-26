@@ -52,10 +52,17 @@ Item {
     property string query: ""
     property int sel: 0
     property string hint: ""
+    // « all », « tout », « tous », « * » ou « ? » (ou le bouton « Tout voir ») : toute la liste par catégorie
+    readonly property var allWords: ["all", "tout", "tous", "toutes", "*", "?"]
+    readonly property bool showAll: allWords.includes(fold(query))
     readonly property var items: {
         const q = fold(query);
         if (!q)
             return [];
+        if (showAll)
+            return all.map(it => Object.assign({}, it, {
+                    section: it.cat
+                }));
         const words = q.split(/\s+/).filter(w => w);
         const scored = [];
         for (const it of all) {
@@ -112,6 +119,17 @@ Item {
     function showHint(text: string): void {
         hint = text;
         hintTimer.restart();
+    }
+
+    function toggleAll(): void {
+        input.text = showAll ? "" : "tout";
+        input.forceActiveFocus();
+    }
+
+    // Ancienne fenêtre GTK : tous les raccourcis sur une page
+    function openWindow(): void {
+        close();
+        Quickshell.execDetached([tool]);
     }
 
     visible: morph > 0.001
@@ -225,8 +243,8 @@ Item {
 
                     anchors.left: lens.right
                     anchors.leftMargin: 14
-                    anchors.right: parent.right
-                    anchors.rightMargin: 22
+                    anchors.right: allBtn.left
+                    anchors.rightMargin: 12
                     anchors.verticalCenter: parent.verticalCenter
                     focus: true
                     color: root.fg
@@ -242,7 +260,11 @@ Item {
                     }
 
                     Keys.onPressed: event => {
-                        if (event.key === Qt.Key_Down || event.key === Qt.Key_Tab) {
+                        if (event.key === Qt.Key_Down && !text) {
+                            root.toggleAll();
+                        } else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && (event.modifiers & Qt.ControlModifier)) {
+                            root.openWindow();
+                        } else if (event.key === Qt.Key_Down || event.key === Qt.Key_Tab) {
                             root.sel = Math.min(root.items.length - 1, root.sel + 1);
                         } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Backtab) {
                             root.sel = Math.max(0, root.sel - 1);
@@ -262,9 +284,53 @@ Item {
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
                         visible: !input.text
-                        text: qsTr("Rechercher un raccourci  (ex. capture, bureau, volume…)")
+                        text: qsTr("Rechercher un raccourci  (ex. capture, volume, « tout »)")
                         color: Qt.alpha(root.fg, 0.38)
                         font: input.font
+                    }
+                }
+
+                // Tout voir dans le panneau (même effet que taper « tout » ou ↓ sur une ligne vide)
+                GlassButton {
+                    id: allBtn
+
+                    anchors.right: winBtn.left
+                    anchors.rightMargin: 6
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: allLbl.implicitWidth + 22
+                    height: 32
+                    tint: root.showAll ? Qt.alpha(root.accent, 0.32) : Qt.alpha(root.fg, 0.08)
+                    onClicked: root.toggleAll()
+
+                    Text {
+                        id: allLbl
+
+                        anchors.centerIn: parent
+                        text: "󰒺  " + (root.showAll ? qsTr("Masquer") : qsTr("Tout voir"))
+                        color: root.showAll ? root.accent : root.fgDim
+                        font.family: root.glyphFont
+                        font.pixelSize: 12
+                    }
+                }
+
+                // Ouvrir la fenêtre complète (Ctrl + Entrée)
+                GlassButton {
+                    id: winBtn
+
+                    anchors.right: parent.right
+                    anchors.rightMargin: 16
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 32
+                    height: 32
+                    tint: Qt.alpha(root.fg, 0.08)
+                    onClicked: root.openWindow()
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "󰖲"
+                        color: root.fgDim
+                        font.family: root.glyphFont
+                        font.pixelSize: 15
                     }
                 }
             }
