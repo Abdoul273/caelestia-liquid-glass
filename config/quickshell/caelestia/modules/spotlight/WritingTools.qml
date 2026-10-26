@@ -453,6 +453,12 @@ Item {
                     }
 
                     Flickable {
+                        id: manualFlick
+
+                        SmoothWheel {
+                            flick: manualFlick
+                        }
+
                         visible: root.manual
                         x: 14
                         y: 10
@@ -526,6 +532,10 @@ Item {
 
                     Flickable {
                         id: resultFlick
+
+                        SmoothWheel {
+                            flick: resultFlick
+                        }
 
                         anchors.fill: parent
                         anchors.margins: 14

@@ -449,6 +449,10 @@ Item {
             ListView {
                 id: list
 
+                SmoothWheel {
+                    flick: list
+                }
+
                 anchors.top: chips.bottom
                 anchors.topMargin: 19
                 x: 10
@@ -596,6 +600,12 @@ Item {
                 }
 
                 Flickable {
+                    id: previewFlick
+
+                    SmoothWheel {
+                        flick: previewFlick
+                    }
+
                     anchors.fill: parent
                     anchors.margins: 16
                     visible: root.preview && root.preview.kind !== "image"

@@ -342,6 +342,10 @@ Item {
             GridView {
                 id: grid
 
+                SmoothWheel {
+                    flick: grid
+                }
+
                 x: 14
                 anchors.top: search.bottom
                 anchors.topMargin: 34

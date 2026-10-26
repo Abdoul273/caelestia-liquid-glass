@@ -350,6 +350,10 @@ Item {
             ListView {
                 id: results
 
+                SmoothWheel {
+                    flick: results
+                }
+
                 anchors.top: bar.bottom
                 anchors.topMargin: 7
                 anchors.left: parent.left
