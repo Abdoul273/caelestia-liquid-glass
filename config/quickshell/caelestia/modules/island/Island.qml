@@ -1234,16 +1234,17 @@ Item {
         return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
     }
 
-    // ── Paroles synchronisées (cache d'Aura, .lrc voisin, puis LRCLIB) ──
+    // ── Paroles synchronisées (Onde CLI / Onde Web, cache d'Aura, .lrc voisin, puis LRCLIB) ──
     property var lyrics: []
     property string lyricsKey: ""
     property real lyricPos: 0
+    property bool lyricsRetried: false
     readonly property string lyricKeyNow: hasMedia ? `${player?.trackTitle ?? ""}|${player?.trackArtist ?? ""}` : ""
     readonly property int lyricIndex: {
         const l = lyrics;
         if (!l || l.length === 0)
             return -1;
-        const t = lyricPos + 0.25;
+        const t = lyricPos + 0.04;
         let lo = 0, hi = l.length - 1, ans = -1;
         while (lo <= hi) {
             const mid = (lo + hi) >> 1;
@@ -1254,6 +1255,10 @@ Item {
                 hi = mid - 1;
             }
         }
+        if (ans < 0)
+            return 0;
+        if (l[ans][1] === "♪" && ans + 1 < l.length && (l[ans + 1][0] - t) <= 1.2)
+            return ans + 1;
         return ans;
     }
     readonly property string lyricLine: lyricIndex >= 0 ? (lyrics[lyricIndex][1] || "♪") : ""
@@ -1278,20 +1283,55 @@ Item {
         }
     }
 
-    onLyricKeyNowChanged: lyricsDebounce.restart()
+    Connections {
+        target: root.player
+
+        function onPositionChanged(): void {
+            root.lyricPos = root.player?.position ?? 0;
+        }
+
+        function onPlaybackStateChanged(): void {
+            root.player?.positionChanged();
+            root.lyricPos = root.player?.position ?? 0;
+        }
+
+        function onPostTrackChanged(): void {
+            root.lyricPos = root.player?.position ?? 0;
+        }
+    }
+
+    onLyricKeyNowChanged: {
+        root.lyricsRetried = false;
+        root.lyricPos = root.player?.position ?? 0;
+        lyricsDebounce.restart();
+    }
 
     Timer {
         id: lyricsDebounce
 
-        interval: 700
+        interval: 250
         onTriggered: {
             root.lyrics = [];
             root.lyricsKey = root.lyricKeyNow;
+            root.lyricPos = root.player?.position ?? 0;
             if (!root.lyricKeyNow || !Island.lyrics)
                 return;
             const len = root.player?.length ?? 0;
             lyricsProc.command = ["python3", Quickshell.shellPath("assets/island-lyrics.py"), root.player?.trackTitle ?? "", root.player?.trackArtist ?? "", String(len > 0 && len < 2147483 ? len : 0), String(root.player?.metadata?.["xesam:url"] ?? "")];
             lyricsProc.running = true;
+        }
+    }
+
+    Timer {
+        id: lyricsRetry
+
+        interval: 2200
+        onTriggered: {
+            if (root.lyrics.length === 0 && root.lyricKeyNow && Island.lyrics && !lyricsProc.running) {
+                const len = root.player?.length ?? 0;
+                lyricsProc.command = ["python3", Quickshell.shellPath("assets/island-lyrics.py"), root.player?.trackTitle ?? "", root.player?.trackArtist ?? "", String(len > 0 && len < 2147483 ? len : 0), String(root.player?.metadata?.["xesam:url"] ?? "")];
+                lyricsProc.running = true;
+            }
         }
     }
 
@@ -1305,10 +1345,16 @@ Item {
             onStreamFinished: {
                 if (lyricsProc.key !== root.lyricKeyNow)
                     return;
+                root.player?.positionChanged();
+                root.lyricPos = root.player?.position ?? 0;
                 try {
                     root.lyrics = JSON.parse(text).lines ?? [];
                 } catch (e) {
                     root.lyrics = [];
+                }
+                if (root.lyrics.length === 0 && !root.lyricsRetried) {
+                    root.lyricsRetried = true;
+                    lyricsRetry.restart();
                 }
             }
         }
@@ -1316,7 +1362,7 @@ Item {
 
     Timer {
         running: root.playing && root.lyrics.length > 0
-        interval: 200
+        interval: 80
         repeat: true
         onTriggered: {
             root.player?.positionChanged();

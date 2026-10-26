@@ -12,12 +12,16 @@ Ordre de recherche :
   4. LRCLIB en ligne (résultat mis en cache, y compris « rien trouvé »).
 """
 
+import contextlib
 import hashlib
 import json
 import os
 import re
+import shutil
+import socket
 import sqlite3
 import sys
+import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -29,6 +33,7 @@ ONDE_DATA = Path(os.getenv("XDG_DATA_HOME", HOME / ".local/share")) / "onde"
 ONDE_DB = ONDE_DATA / "onde.db"
 ONDE_LYRICS = ONDE_DATA / "paroles"
 ONDE_API = f"http://127.0.0.1:{os.getenv('ONDE_PORT', '5070')}/api/paroles/"
+ONDE_CLI_SOCK = f"/tmp/onde_cli_ctrl_{os.getuid()}.sock"
 CACHE = HOME / ".cache/caelestia/island-lyrics"
 TAG = re.compile(r"\[(\d+):(\d+(?:[.:]\d+)?)\]")
 
@@ -48,8 +53,8 @@ def parse_lrc(text: str) -> list:
 
 
 def clean_title(title: str) -> str:
-    t = re.sub(r"[\(\[][^\)\]]*(official|video|audio|lyric|clip|visuali[sz]er|remaster|hd|4k)[^\)\]]*[\)\]]", "", title, flags=re.I)
-    t = re.sub(r"\b(official\s+)?(music\s+)?(video|audio|lyrics?|clip officiel|clip)\b", "", t, flags=re.I)
+    t = re.sub(r"[\(\[][^\)\]]*(official|video|audio|lyric|clip|visuali[sz]er|remaster|hd|4k)[^\)\]]*[\)\]]", "", title, flags=re.IGNORECASE)
+    t = re.sub(r"\b(official\s+)?(music\s+)?(video|audio|lyrics?|clip officiel|clip)\b", "", t, flags=re.IGNORECASE)
     return re.sub(r"\s+", " ", t).strip(" -|")
 
 
@@ -95,8 +100,92 @@ def from_aura(title: str, artist: str, url: str) -> list | None:
     return None
 
 
+def preparer_lignes_onde(synchro: list, mots_liste: list | None = None) -> list:
+    """Aligne les lignes et pauses instrumentales (♪) exactement comme Onde CLI (`preparer_synchro_cli`)."""
+    if not synchro:
+        return []
+    groupes = []
+    for i, item in enumerate(synchro):
+        if not item or len(item) < 2:
+            continue
+        t, l = float(item[0]), str(item[1] or "").strip()
+        if groupes and abs(groupes[-1]["t"] - t) < 0.05:
+            if l and l not in groupes[-1]["textes"]:
+                groupes[-1]["textes"].append(l)
+                groupes[-1]["mots"] = None
+        else:
+            m = mots_liste[i] if mots_liste and i < len(mots_liste) else None
+            groupes.append({"t": t, "textes": [l], "mots": m})
+
+    out = []
+    if groupes and groupes[0]["t"] > 2.0:
+        out.append([0.0, "♪"])
+
+    for i, grp in enumerate(groupes):
+        t = grp["t"]
+        suiv_t = groupes[i + 1]["t"] if i + 1 < len(groupes) else t + 7.0
+        txt = " / ".join(filter(None, grp["textes"]))
+        if not txt or all(c in "♪♫·. \t\n\r" for c in txt):
+            if suiv_t - t >= 2.5:
+                out.append([round(t, 3), "♪"])
+            continue
+
+        reperes = grp["mots"]
+        fin_chant = suiv_t
+        if reperes and len(reperes) > 1:
+            dernier = reperes[-1]
+            if len(dernier) >= 2 and not str(dernier[1]).strip() and t < float(dernier[0]) < suiv_t:
+                fin_chant = float(dernier[0])
+
+        out.append([round(t, 3), txt])
+        if suiv_t - fin_chant >= 3.0:
+            out.append([round(fin_chant, 3), "♪"])
+    return out
+
+
+def from_onde_cli(title: str) -> list | None:
+    """Interroge l'instance Onde CLI active en direct via son socket UNIX."""
+    if not os.path.exists(ONDE_CLI_SOCK):
+        return None
+    deadline = time.monotonic() + 3.5
+    while time.monotonic() < deadline:
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+                s.settimeout(0.8)
+                s.connect(ONDE_CLI_SOCK)
+                s.sendall(json.dumps({"action": "lyrics", "arg": title}).encode("utf-8"))
+                chunks = []
+                while True:
+                    b = s.recv(8192)
+                    if not b:
+                        break
+                    chunks.append(b)
+                    if b"\n" in b:
+                        break
+                rep = json.loads(b"".join(chunks).decode("utf-8", errors="ignore"))
+        except (OSError, ValueError):
+            return None
+        if not isinstance(rep, dict) or not rep.get("ok"):
+            return None
+        rep_titre = (rep.get("titre") or "").strip().lower()
+        if title and rep_titre and rep_titre != title.strip().lower():
+            return None
+        if rep.get("en_chargement"):
+            time.sleep(0.15)
+            continue
+        lines = rep.get("lines")
+        if isinstance(lines, list) and lines:
+            return lines
+        break
+    return None
+
+
 def from_onde(title: str, artist: str, duration: float, url: str) -> list | None:
-    """Paroles telles qu'Onde les affiche (même morceau, même source)."""
+    """Paroles telles qu'Onde les affiche (même morceau, même source et alignement acoustique)."""
+    lines_cli = from_onde_cli(title)
+    if lines_cli:
+        return lines_cli
+
     if not ONDE_DB.exists():
         return None
     try:
@@ -123,23 +212,37 @@ def from_onde(title: str, artist: str, duration: float, url: str) -> list | None
     cached = ONDE_LYRICS / f"{track_id}.json"
     if cached.exists():
         try:
-            synced = json.loads(cached.read_text()).get("synchro") or []
+            data_c = json.loads(cached.read_text())
+            synced = data_c.get("synchro") or []
             if synced:
-                return synced
+                return preparer_lignes_onde(synced, data_c.get("mots"))
         except (OSError, ValueError):
             pass
     lrc = Path(path).with_suffix(".lrc")
     if lrc.exists():
         lines = parse_lrc(lrc.read_text(errors="ignore"))
         if lines:
-            return lines
-    # pas encore en cache : on demande à Onde (s'il tourne), qui cherche et met en cache
-    try:
-        with urllib.request.urlopen(ONDE_API + str(track_id), timeout=12) as r:
-            synced = json.loads(r.read()).get("synchro") or []
-            return synced or []
-    except Exception:
-        return None
+            return preparer_lignes_onde(lines)
+    # pas encore en cache : on demande à Onde Web (s'il tourne)
+    with contextlib.suppress(Exception), urllib.request.urlopen(ONDE_API + str(track_id), timeout=6) as r:
+        data_api = json.loads(r.read())
+        synced = data_api.get("synchro") or []
+        if synced:
+            return preparer_lignes_onde(synced, data_api.get("mots"))
+        return []
+    # ou directement via le moteur Python d'Onde (même si seul onde-cli tourne)
+    cli_bin = shutil.which("onde-cli") or str(HOME / ".local/bin/onde-cli")
+    if os.path.exists(cli_bin):
+        with contextlib.suppress(Exception):
+            onde_repo = Path(cli_bin).resolve().parent
+            if (onde_repo / "onde").is_dir():
+                if str(onde_repo) not in sys.path:
+                    sys.path.insert(0, str(onde_repo))
+                from onde import paroles as onde_paroles
+                res_p = onde_paroles.paroles(track_id)
+                if res_p and res_p.get("synchro"):
+                    return preparer_lignes_onde(res_p["synchro"], res_p.get("mots"))
+    return None
 
 
 def fetch(url: str):
@@ -154,19 +257,15 @@ def from_lrclib(title: str, artist: str, duration: float) -> list:
         q["artist_name"] = artist
     if duration > 0:
         q["duration"] = round(duration)
-    try:
+    with contextlib.suppress(Exception):
         data = fetch("https://lrclib.net/api/get?" + urllib.parse.urlencode(q))
         if data.get("syncedLyrics"):
             return parse_lrc(data["syncedLyrics"])
-    except Exception:
-        pass
-    try:
+    with contextlib.suppress(Exception):
         results = fetch("https://lrclib.net/api/search?" + urllib.parse.urlencode({"q": f"{artist} {title}".strip()}))
         for r in results:
             if r.get("syncedLyrics") and (duration <= 0 or abs((r.get("duration") or duration) - duration) < 8):
                 return parse_lrc(r["syncedLyrics"])
-    except Exception:
-        pass
     return []
 
 
