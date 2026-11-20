@@ -14,7 +14,44 @@ Verre translucide partout, Dynamic Island (9 pages + agents IA), Centre de contr
 
 **🇫🇷 Français** · [🇬🇧 English](README.md)
 
+<br>
+
+<img src="docs/screenshots/hero-dock-projection.webp" alt="Caelestia Liquid Glass — Dynamic Island, panneau en verre réfractif et Dock" width="100%" />
+
 </div>
+
+---
+
+## 📸 Captures d'écran
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="docs/screenshots/kitty-nautilus-glass.webp" alt="Terminal kitty et Nautilus en Liquid Glass" />
+      <br /><sub><b>Terminal &amp; applis GTK4 en verre</b> — kitty (onglets en pilules, prompt Starship) et Nautilus façon Finder</sub>
+    </td>
+    <td width="50%">
+      <img src="docs/screenshots/control-center-battery.webp" alt="Centre de contrôle Liquid Glass — page Batterie" />
+      <br /><sub><b>Centre de contrôle &amp; Énergie</b> — télémétrie en watts, historique 24 h, économie auto et santé batterie</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="docs/screenshots/island-ai-agents.webp" alt="Dynamic Island — suivi en direct des agents IA Claude Code et Codex" />
+      <br /><sub><b>Dynamic Island · Agents IA</b> — suivi en direct de Claude Code &amp; Codex + validation des permissions</sub>
+    </td>
+    <td width="50%">
+      <img src="docs/screenshots/wallpaper-picker.webp" alt="Sélecteur de fonds d'écran en verre" />
+      <br /><sub><b>Cadre en verre unifié</b> — sélecteur de fonds d'écran fondu dans la bordure de l'écran</sub>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center">
+      <img src="docs/screenshots/voice-assistant.webp" alt="Assistant vocal Liquid Glass façon Siri" width="75%" />
+      <br /><sub><b>Assistant vocal optionnel</b> — bulle en verre façon Siri propulsée par Gemini Live</sub>
+    </td>
+  </tr>
+</table>
 
 ---
 

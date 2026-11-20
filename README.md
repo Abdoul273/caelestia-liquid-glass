@@ -14,7 +14,44 @@ Custom Qt6 liquid-glass shaders, a 9-page Dynamic Island with live AI agent moni
 
 **🇬🇧 English** · [🇫🇷 Français](README.fr.md)
 
+<br>
+
+<img src="docs/screenshots/hero-dock-projection.webp" alt="Caelestia Liquid Glass — Dynamic Island, refractive glass panel, and auto-hiding Dock" width="100%" />
+
 </div>
+
+---
+
+## 📸 Screenshots
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="docs/screenshots/kitty-nautilus-glass.webp" alt="Liquid Glass kitty terminal and Nautilus file manager" />
+      <br /><sub><b>Glass Terminal &amp; GTK4 Apps</b> — kitty with pill tab bar &amp; Starship prompt + translucent Nautilus</sub>
+    </td>
+    <td width="50%">
+      <img src="docs/screenshots/control-center-battery.webp" alt="macOS-style Liquid Glass Control Center battery page" />
+      <br /><sub><b>Control Center &amp; Power</b> — live wattage telemetry, 24h history, auto power saver &amp; battery health</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="docs/screenshots/island-ai-agents.webp" alt="Dynamic Island live AI coding agents HUD for Claude Code and Codex" />
+      <br /><sub><b>Dynamic Island · AI Agents HUD</b> — live Claude Code &amp; Codex status + interactive permission prompts</sub>
+    </td>
+    <td width="50%">
+      <img src="docs/screenshots/wallpaper-picker.webp" alt="Liquid Glass wallpaper picker carousel" />
+      <br /><sub><b>Unified Glass Shell</b> — wallpaper picker morphing seamlessly out of the screen frame</sub>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center">
+      <img src="docs/screenshots/voice-assistant.webp" alt="Liquid Glass Voice Assistant popup" width="75%" />
+      <br /><sub><b>Optional AI Voice Assistant</b> — Siri-style glass overlay powered by Gemini Live</sub>
+    </td>
+  </tr>
+</table>
 
 ---
 
