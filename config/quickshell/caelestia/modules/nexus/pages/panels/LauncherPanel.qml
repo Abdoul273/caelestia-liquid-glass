@@ -4,11 +4,12 @@ import QtQuick
 import QtQuick.Layouts
 import Caelestia.Config
 import qs.modules.nexus.common
+import qs.services
 
 PageBase {
     id: root
 
-    title: qsTr("Lanceur")
+    title: I18n.tr("Lanceur")
     isSubPage: true
 
     ColumnLayout {
@@ -20,19 +21,19 @@ PageBase {
         // General
         SectionHeader {
             first: true
-            text: qsTr("Général")
+            text: I18n.tr("Général")
         }
 
         ToggleRow {
             first: true
-            text: qsTr("Activé")
+            text: I18n.tr("Activé")
             checked: Config.launcher.enabled
             onToggled: GlobalConfig.launcher.enabled = checked
         }
 
         ToggleRow {
-            text: qsTr("Afficher au survol")
-            subtext: qsTr("Afficher au bord de l'écran")
+            text: I18n.tr("Afficher au survol")
+            subtext: I18n.tr("Afficher au bord de l'écran")
             checked: Config.launcher.showOnHover
             onToggled: GlobalConfig.launcher.showOnHover = checked
         }
@@ -41,9 +42,9 @@ PageBase {
             id: prefixRow
 
             last: true
-            label: qsTr("Préfixe d'action")
-            subtext: qsTr("Préfixe pour exécuter des actions dans le lanceur")
-            errorText: qsTr("Le préfixe ne doit pas être alphanumérique")
+            label: I18n.tr("Préfixe d'action")
+            subtext: I18n.tr("Préfixe pour exécuter des actions dans le lanceur")
+            errorText: I18n.tr("Le préfixe ne doit pas être alphanumérique")
             value: GlobalConfig.launcher.actionPrefix === ">" ? "" : GlobalConfig.launcher.actionPrefix // TODO: replace with empty only when not loaded once loaded state is exposed
             placeholderText: ">"
             maximumLength: 1
@@ -61,12 +62,12 @@ PageBase {
 
         // Display
         SectionHeader {
-            text: qsTr("Affichage")
+            text: I18n.tr("Affichage")
         }
 
         StepperRow {
             first: true
-            label: qsTr("Nombre max d'éléments affichés")
+            label: I18n.tr("Nombre max d'éléments affichés")
             value: Config.launcher.maxShown
             from: 1
             to: 20
@@ -75,7 +76,7 @@ PageBase {
         }
 
         StepperRow {
-            label: qsTr("Fonds d'écran max")
+            label: I18n.tr("Fonds d'écran max")
             value: Config.launcher.maxWallpapers
             from: 1
             to: 30
@@ -85,8 +86,8 @@ PageBase {
 
         StepperRow {
             last: true
-            label: qsTr("Seuil de glissement")
-            subtext: qsTr("Distance de glissement avant d'ouvrir le lanceur (px)")
+            label: I18n.tr("Seuil de glissement")
+            subtext: I18n.tr("Distance de glissement avant d'ouvrir le lanceur (px)")
             value: Config.launcher.dragThreshold
             from: 0
             to: 200
@@ -96,58 +97,58 @@ PageBase {
 
         // Behaviour
         SectionHeader {
-            text: qsTr("Comportement")
+            text: I18n.tr("Comportement")
         }
 
         ToggleRow {
             first: true
-            text: qsTr("Raccourcis Vim")
-            subtext: qsTr("Naviguer dans les résultats avec Ctrl+hjkl")
+            text: I18n.tr("Raccourcis Vim")
+            subtext: I18n.tr("Naviguer dans les résultats avec Ctrl+hjkl")
             checked: GlobalConfig.launcher.vimKeybinds
             onToggled: GlobalConfig.launcher.vimKeybinds = checked
         }
 
         ToggleRow {
             last: true
-            text: qsTr("Autoriser les actions à risque")
-            subtext: qsTr("Autoriser les actions d'extinction ou de déconnexion")
+            text: I18n.tr("Autoriser les actions à risque")
+            subtext: I18n.tr("Autoriser les actions d'extinction ou de déconnexion")
             checked: GlobalConfig.launcher.enableDangerousActions
             onToggled: GlobalConfig.launcher.enableDangerousActions = checked
         }
 
         // Fuzzy search
         SectionHeader {
-            text: qsTr("Recherche floue")
+            text: I18n.tr("Recherche floue")
         }
 
         ToggleRow {
             first: true
-            text: qsTr("Applications")
+            text: I18n.tr("Applications")
             checked: GlobalConfig.launcher.useFuzzy.apps
             onToggled: GlobalConfig.launcher.useFuzzy.apps = checked
         }
 
         ToggleRow {
-            text: qsTr("Actions")
+            text: I18n.tr("Actions")
             checked: GlobalConfig.launcher.useFuzzy.actions
             onToggled: GlobalConfig.launcher.useFuzzy.actions = checked
         }
 
         ToggleRow {
-            text: qsTr("Schémas")
+            text: I18n.tr("Schémas")
             checked: GlobalConfig.launcher.useFuzzy.schemes
             onToggled: GlobalConfig.launcher.useFuzzy.schemes = checked
         }
 
         ToggleRow {
-            text: qsTr("Nuances")
+            text: I18n.tr("Nuances")
             checked: GlobalConfig.launcher.useFuzzy.variants
             onToggled: GlobalConfig.launcher.useFuzzy.variants = checked
         }
 
         ToggleRow {
             last: true
-            text: qsTr("Fonds d'écran")
+            text: I18n.tr("Fonds d'écran")
             checked: GlobalConfig.launcher.useFuzzy.wallpapers
             onToggled: GlobalConfig.launcher.useFuzzy.wallpapers = checked
         }

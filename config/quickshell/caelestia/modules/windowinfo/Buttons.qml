@@ -24,7 +24,7 @@ ColumnLayout {
 
         StyledText {
             Layout.fillWidth: true
-            text: qsTr("Déplacer vers l'espace")
+            text: I18n.tr("Déplacer vers l'espace")
             elide: Text.ElideRight
         }
 
@@ -117,7 +117,7 @@ ColumnLayout {
         Button {
             color: Colours.palette.m3secondaryContainer
             onColor: Colours.palette.m3onSecondaryContainer
-            text: root.client?.lastIpcObject.floating ? qsTr("Organiser") : qsTr("Détacher")
+            text: root.client?.lastIpcObject.floating ? I18n.tr("Organiser") : I18n.tr("Détacher")
             onClicked: Hypr.dispatch(Hypr.usingLua ? `hl.dsp.window.float({ window = "address:0x${root.client?.address}" })` : `togglefloating address:0x${root.client?.address}`)
         }
 
@@ -131,7 +131,7 @@ ColumnLayout {
             sourceComponent: Button {
                 color: Colours.palette.m3secondaryContainer
                 onColor: Colours.palette.m3onSecondaryContainer
-                text: root.client?.lastIpcObject.pinned ? qsTr("Désépingler") : qsTr("Épingler")
+                text: root.client?.lastIpcObject.pinned ? I18n.tr("Désépingler") : I18n.tr("Épingler")
                 onClicked: Hypr.dispatch(Hypr.usingLua ? `hl.dsp.window.pin({ window = "address:0x${root.client?.address}" })` : `pin address:0x${root.client?.address}`)
             }
         }
@@ -139,7 +139,7 @@ ColumnLayout {
         Button {
             color: Colours.palette.m3errorContainer
             onColor: Colours.palette.m3onErrorContainer
-            text: qsTr("Fermer")
+            text: I18n.tr("Fermer")
             onClicked: Hypr.dispatch(Hypr.usingLua ? `hl.dsp.window.kill({ window = "address:0x${root.client?.address}" })` : `killwindow address:0x${root.client?.address}`)
         }
     }

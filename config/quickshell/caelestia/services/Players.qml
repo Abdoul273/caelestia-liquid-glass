@@ -61,7 +61,7 @@ Singleton {
             return;
 
         lastNowPlayingKey = key;
-        Toaster.toast(qsTr("En cours de lecture"), qsTr("%1 - %2").arg(artist).arg(title), "music_note");
+        Toaster.toast(I18n.tr("En cours de lecture"), I18n.tr("%1 - %2").arg(artist).arg(title), "music_note");
     }
 
     onActiveChanged: lastNowPlayingKey = ""
@@ -94,7 +94,7 @@ Singleton {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "mediaToggle"
-        description: qsTr("Lecture / Pause")
+        description: I18n.tr("Lecture / Pause")
         onPressed: {
             const active = root.active;
             if (active && active.canTogglePlaying)
@@ -106,7 +106,7 @@ Singleton {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "mediaPrev"
-        description: qsTr("Piste précédente")
+        description: I18n.tr("Piste précédente")
         onPressed: {
             const active = root.active;
             if (active && active.canGoPrevious)
@@ -118,7 +118,7 @@ Singleton {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "mediaNext"
-        description: qsTr("Piste suivante")
+        description: I18n.tr("Piste suivante")
         onPressed: {
             const active = root.active;
             if (active && active.canGoNext)
@@ -130,7 +130,7 @@ Singleton {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "mediaStop"
-        description: qsTr("Arrêter la lecture")
+        description: I18n.tr("Arrêter la lecture")
         onPressed: root.active?.stop()
     }
 

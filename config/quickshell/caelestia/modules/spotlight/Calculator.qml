@@ -74,14 +74,14 @@ Item {
     function commit(): void {
         const expr = input.text.trim();
         if (!hasResult) {
-            showHint(qsTr("Calcul incomplet"));
+            showHint(I18n.tr("Calcul incomplet"));
             return;
         }
         backend.send({
             commit: expr,
             result: result
         });
-        showHint(qsTr("Copié dans le presse-papiers ✓"));
+        showHint(I18n.tr("Copié dans le presse-papiers ✓"));
         bump.restart();
         histIndex = -1;
     }
@@ -268,7 +268,7 @@ Item {
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
                         visible: !input.text
-                        text: qsTr("Calcul ou conversion…  (↑ pour l'historique)")
+                        text: I18n.tr("Calcul ou conversion…  (↑ pour l'historique)")
                         color: Qt.alpha(root.fg, 0.38)
                         font: input.font
                     }
@@ -389,7 +389,7 @@ Item {
                     }
 
                     Text {
-                        text: root.hint || qsTr("Calculatrice  ·  Entrée pour copier")
+                        text: root.hint || I18n.tr("Calculatrice  ·  Entrée pour copier")
                         color: root.hint.startsWith("Calcul i") ? "#ff453a" : root.hint ? root.orange : Qt.alpha(root.fg, 0.4)
                         font.pixelSize: 12
                     }

@@ -107,7 +107,7 @@ ColumnLayout {
                 visible: !input.text
                 width: parent.width
                 elide: Text.ElideRight
-                text: root.watchMode ? qsTr("Surveiller sur internet…   ex. iPhone 18 sous 900 € chaque jour") : qsTr("Ajouter une tâche…   ! haute · demain · surveille …   (œil : surveillance)")
+                text: root.watchMode ? I18n.tr("Surveiller sur internet…   ex. iPhone 18 sous 900 € chaque jour") : I18n.tr("Ajouter une tâche…   ! haute · demain · surveille …   (œil : surveillance)")
                 color: Colours.palette.m3outline
                 font: input.font
             }
@@ -189,7 +189,7 @@ ColumnLayout {
 
                 visible: task.firstDone
                 x: Tokens.padding.large
-                text: qsTr("Terminées · %1").arg(Tasks.doneCount)
+                text: I18n.tr("Terminées · %1").arg(Tasks.doneCount)
                 font: Tokens.font.label.medium
                 color: Colours.palette.m3onSurfaceVariant
             }
@@ -460,7 +460,7 @@ ColumnLayout {
 
             StyledText {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: root.filter === "overdue" ? qsTr("Rien en retard 👌") : root.filter === "today" ? qsTr("Rien de prévu aujourd'hui") : qsTr("Rien à faire. Profite !")
+                text: root.filter === "overdue" ? I18n.tr("Rien en retard 👌") : root.filter === "today" ? I18n.tr("Rien de prévu aujourd'hui") : I18n.tr("Rien à faire. Profite !")
                 color: Colours.palette.m3onSurfaceVariant
                 font: Tokens.font.body.small
             }

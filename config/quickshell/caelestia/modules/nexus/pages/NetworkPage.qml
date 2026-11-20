@@ -12,7 +12,7 @@ import qs.modules.nexus.common
 PageBase {
     id: root
 
-    title: qsTr("Réseau")
+    title: I18n.tr("Réseau")
 
     ColumnLayout {
         anchors.horizontalCenter: parent.horizontalCenter
@@ -59,7 +59,7 @@ PageBase {
         ToggleRow {
             Layout.topMargin: Nmcli.hasAvailableEthernet ? Tokens.spacing.large : 0
             first: true
-            text: qsTr("Wi-Fi")
+            text: I18n.tr("Wi-Fi")
             font: Tokens.font.body.medium
             horizontalPadding: Tokens.padding.largeIncreased
             checked: Nmcli.wifiEnabled
@@ -84,7 +84,7 @@ PageBase {
             clip: true
 
             icon: "expand_content"
-            text: qsTr("Afficher tous les réseaux (%1)").arg(Nmcli.networks.length)
+            text: I18n.tr("Afficher tous les réseaux (%1)").arg(Nmcli.networks.length)
             trailingIcon: "chevron_right"
             onClicked: root.nState.openSubPage(5) // All networks sub-page
 
@@ -98,7 +98,7 @@ PageBase {
         // Saved networks button
         RowButton {
             icon: "bookmark"
-            text: qsTr("Réseaux enregistrés")
+            text: I18n.tr("Réseaux enregistrés")
             trailingIcon: "chevron_right"
             onClicked: root.nState.openSubPage(6) // Saved networks sub-page
         }
@@ -106,7 +106,7 @@ PageBase {
         RowButton {
             last: true
             icon: "add"
-            text: qsTr("Ajouter un réseau")
+            text: I18n.tr("Ajouter un réseau")
             disabled: !Nmcli.wifiEnabled
             onClicked: root.nState.openSubPage(2) // Add network sub-page
         }
@@ -116,7 +116,7 @@ PageBase {
             Layout.topMargin: Tokens.spacing.large
             Layout.fillWidth: true
             first: true
-            text: qsTr("VPN")
+            text: I18n.tr("VPN")
             font: Tokens.font.body.medium
             horizontalPadding: Tokens.padding.largeIncreased
             checked: VPN.connected
@@ -142,7 +142,7 @@ PageBase {
 
             showList: true
             placeholderIcon: "add_circle"
-            placeholderText: qsTr("Aucun fournisseur VPN configuré")
+            placeholderText: I18n.tr("Aucun fournisseur VPN configuré")
 
             model: ScriptModel {
                 values: [...VPN.providers]
@@ -210,20 +210,20 @@ PageBase {
                             Layout.fillWidth: true
                             text: {
                                 if (!provider.isSelected)
-                                    return qsTr("Appuyer pour sélectionner");
+                                    return I18n.tr("Appuyer pour sélectionner");
                                 if (VPN.connecting)
-                                    return qsTr("Connexion en cours...");
+                                    return I18n.tr("Connexion en cours...");
                                 if (VPN.disconnecting)
-                                    return qsTr("Déconnexion en cours...");
+                                    return I18n.tr("Déconnexion en cours...");
                                 switch (VPN.status.state) {
                                 case "connected":
-                                    return qsTr("Connecté");
+                                    return I18n.tr("Connecté");
                                 case "needs-auth":
-                                    return VPN.status.reason || qsTr("Authentification requise");
+                                    return VPN.status.reason || I18n.tr("Authentification requise");
                                 case "error":
-                                    return VPN.status.reason || qsTr("Une erreur est survenue");
+                                    return VPN.status.reason || I18n.tr("Une erreur est survenue");
                                 default:
-                                    return qsTr("Sélectionné");
+                                    return I18n.tr("Sélectionné");
                                 }
                             }
                             color: {
@@ -270,7 +270,7 @@ PageBase {
 
                                 StyledText {
                                     Layout.alignment: Qt.AlignRight
-                                    text: qsTr("Interface")
+                                    text: I18n.tr("Interface")
                                     color: Colours.palette.m3onSurfaceVariant
                                     font: Tokens.font.label.small
                                     elide: Text.ElideRight
@@ -292,7 +292,7 @@ PageBase {
 
                                 StyledText {
                                     Layout.alignment: Qt.AlignRight
-                                    text: qsTr("Ping actuel")
+                                    text: I18n.tr("Ping actuel")
                                     color: Colours.palette.m3onSurfaceVariant
                                     font: Tokens.font.label.small
                                     elide: Text.ElideRight
@@ -312,7 +312,7 @@ PageBase {
                                     }
 
                                     StyledText {
-                                        text: qsTr("%1 ms").arg(VPN.pingMs)
+                                        text: I18n.tr("%1 ms").arg(VPN.pingMs)
                                         color: Colours.palette.m3outline
                                         font: Tokens.font.label.small
                                         elide: Text.ElideRight
@@ -341,7 +341,7 @@ PageBase {
         RowButton {
             last: true
             icon: "add"
-            text: qsTr("Ajouter un fournisseur")
+            text: I18n.tr("Ajouter un fournisseur")
             onClicked: {
                 root.nState.editingVpnIndex = -1;
                 root.nState.openSubPage(4); // Add/edit provider sub-page

@@ -114,12 +114,12 @@ Item {
 
                     StyledText {
                         Layout.alignment: Qt.AlignHCenter
-                        text: qsTr("Rien en cours de lecture")
+                        text: I18n.tr("Rien en cours de lecture")
                         font: Tokens.font.headline.medium
                     }
 
                     StyledText {
-                        text: qsTr("Lancez un morceau pour l'afficher ici !")
+                        text: I18n.tr("Lancez un morceau pour l'afficher ici !")
                         color: Colours.palette.m3onSurfaceVariant
                         font: Tokens.font.body.large
                     }

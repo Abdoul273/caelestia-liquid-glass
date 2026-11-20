@@ -49,45 +49,45 @@ Item {
     readonly property var modes: [
         {
             key: "internal",
-            title: qsTr("Écran du PC"),
-            sub: qsTr("Le portable seul")
+            title: I18n.tr("Écran du PC"),
+            sub: I18n.tr("Le portable seul")
         },
         {
             key: "duplicate",
-            title: qsTr("Dupliquer"),
-            sub: qsTr("La même image")
+            title: I18n.tr("Dupliquer"),
+            sub: I18n.tr("La même image")
         },
         {
             key: "extend",
-            title: qsTr("Étendre"),
-            sub: qsTr("Un bureau plus large")
+            title: I18n.tr("Étendre"),
+            sub: I18n.tr("Un bureau plus large")
         },
         {
             key: "external",
-            title: qsTr("Deuxième écran"),
-            sub: qsTr("L'externe seul")
+            title: I18n.tr("Deuxième écran"),
+            sub: I18n.tr("L'externe seul")
         }
     ]
     readonly property var positions: [
         {
             key: "left",
             glyph: "󰁍",
-            title: qsTr("À gauche")
+            title: I18n.tr("À gauche")
         },
         {
             key: "up",
             glyph: "󰁝",
-            title: qsTr("Au-dessus")
+            title: I18n.tr("Au-dessus")
         },
         {
             key: "down",
             glyph: "󰁅",
-            title: qsTr("En dessous")
+            title: I18n.tr("En dessous")
         },
         {
             key: "right",
             glyph: "󰁔",
-            title: qsTr("À droite")
+            title: I18n.tr("À droite")
         }
     ]
     property string mode: "internal"
@@ -109,7 +109,7 @@ Item {
     function apply(key: string): void {
         if (busy || (key !== "internal" && !connected)) {
             if (!connected && key !== "internal")
-                showHint(qsTr("Branche un écran HDMI ou DisplayPort d'abord"));
+                showHint(I18n.tr("Branche un écran HDMI ou DisplayPort d'abord"));
             return;
         }
         busy = true;
@@ -233,7 +233,7 @@ Item {
             if (code === 0)
                 root.close();
             else
-                root.showHint(qsTr("Installe d'abord : yay -S gnome-network-displays"));
+                root.showHint(I18n.tr("Installe d'abord : yay -S gnome-network-displays"));
         }
     }
 
@@ -311,13 +311,13 @@ Item {
                     spacing: 1
 
                     Text {
-                        text: qsTr("Projection")
+                        text: I18n.tr("Projection")
                         color: root.fg
                         font.pixelSize: 16
                         font.weight: Font.DemiBold
                     }
                     Text {
-                        text: root.connected ? qsTr("Écran externe : ") + root.externals.map(e => e.title).join(", ") : qsTr("Aucun écran externe branché")
+                        text: root.connected ? I18n.tr("Écran externe : ") + root.externals.map(e => e.title).join(", ") : I18n.tr("Aucun écran externe branché")
                         color: root.connected ? root.accent : root.fgDim
                         font.pixelSize: 12
                     }
@@ -337,7 +337,7 @@ Item {
                         id: castLbl
 
                         anchors.centerIn: parent
-                        text: "󰐾  " + qsTr("Sans fil")
+                        text: "󰐾  " + I18n.tr("Sans fil")
                         color: root.accent
                         font.family: root.glyphFont
                         font.pixelSize: 12
@@ -362,7 +362,7 @@ Item {
                         id: moreLbl
 
                         anchors.centerIn: parent
-                        text: qsTr("Plus d'options")
+                        text: I18n.tr("Plus d'options")
                         color: root.fgDim
                         font.pixelSize: 12
                     }
@@ -557,7 +557,7 @@ Item {
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: 14
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: root.busy ? qsTr("Application…") : root.hint || qsTr("1–4 ou ←/→ puis Entrée  ·  C : sans fil  ·  Échap : fermer")
+                text: root.busy ? I18n.tr("Application…") : root.hint || I18n.tr("1–4 ou ←/→ puis Entrée  ·  C : sans fil  ·  Échap : fermer")
                 color: root.hint.startsWith("✓") ? root.accent : Qt.alpha(root.fg, 0.45)
                 font.pixelSize: 12
             }

@@ -42,9 +42,9 @@ Singleton {
             return;
 
         if (dnd)
-            Toaster.toast(qsTr("Mode Ne pas déranger activé"), qsTr("Les notifications contextuelles sont désactivées"), "do_not_disturb_on");
+            Toaster.toast(I18n.tr("Mode Ne pas déranger activé"), I18n.tr("Les notifications contextuelles sont désactivées"), "do_not_disturb_on");
         else
-            Toaster.toast(qsTr("Mode Ne pas déranger désactivé"), qsTr("Les notifications contextuelles sont activées"), "do_not_disturb_off");
+            Toaster.toast(I18n.tr("Mode Ne pas déranger désactivé"), I18n.tr("Les notifications contextuelles sont activées"), "do_not_disturb_off");
     }
 
     onListChanged: {

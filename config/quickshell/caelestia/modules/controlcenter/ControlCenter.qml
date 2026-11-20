@@ -141,13 +141,13 @@ Item {
     function idleName(action: var): string {
         const a = Array.isArray(action) ? action.join(" ") : String(action ?? "");
         if (a === "lock")
-            return qsTr("Verrouiller");
+            return I18n.tr("Verrouiller");
         if (a.includes("dpms"))
-            return qsTr("Éteindre l'écran");
+            return I18n.tr("Éteindre l'écran");
         if (a.includes("hibernate") && !a.includes("suspend"))
-            return qsTr("Hiberner");
+            return I18n.tr("Hiberner");
         if (a.includes("suspend") || a.includes("sleep"))
-            return qsTr("Mettre en veille");
+            return I18n.tr("Mettre en veille");
         return a;
     }
 
@@ -471,8 +471,8 @@ Item {
 
                             ConnRow {
                                 icon: Nmcli.wifiEnabled ? "wifi" : "wifi_off"
-                                title: qsTr("Wi-Fi")
-                                subtitle: !Nmcli.wifiEnabled ? qsTr("Désactivé") : Nmcli.active?.ssid ?? (Nmcli.activeEthernet ? qsTr("Ethernet") : qsTr("Non connecté"))
+                                title: I18n.tr("Wi-Fi")
+                                subtitle: !Nmcli.wifiEnabled ? I18n.tr("Désactivé") : Nmcli.active?.ssid ?? (Nmcli.activeEthernet ? I18n.tr("Ethernet") : I18n.tr("Non connecté"))
                                 badgeText: Nmcli.wifiEnabled && Nmcli.active ? `${Nmcli.active.strength} %` : ""
                                 hasSubpage: true
                                 on: Nmcli.wifiEnabled
@@ -484,8 +484,8 @@ Item {
                             }
                             ConnRow {
                                 icon: root.adapter?.enabled ? "bluetooth" : "bluetooth_disabled"
-                                title: qsTr("Bluetooth")
-                                subtitle: !root.adapter?.enabled ? qsTr("Désactivé") : root.btConnected.length > 0 ? root.btConnected.map(d => d.name).join(", ") : qsTr("Activé")
+                                title: I18n.tr("Bluetooth")
+                                subtitle: !root.adapter?.enabled ? I18n.tr("Désactivé") : root.btConnected.length > 0 ? root.btConnected.map(d => d.name).join(", ") : I18n.tr("Activé")
                                 badgeText: root.btConnected.length > 0 && root.btConnected[0].batteryAvailable ? `${Math.round(root.btConnected[0].battery * 100)} %` : root.btConnected.length > 1 ? `${root.btConnected.length}` : ""
                                 hasSubpage: true
                                 on: root.adapter?.enabled ?? false
@@ -497,9 +497,9 @@ Item {
                             }
                             ConnRow {
                                 icon: "vpn_key"
-                                title: qsTr("VPN")
-                                subtitle: VPN.connecting ? qsTr("Connexion…") : VPN.connected ? qsTr("Tunnel chiffré actif") : qsTr("Déconnecté")
-                                badgeText: VPN.connected ? qsTr("ACTIF") : ""
+                                title: I18n.tr("VPN")
+                                subtitle: VPN.connecting ? I18n.tr("Connexion…") : VPN.connected ? I18n.tr("Tunnel chiffré actif") : I18n.tr("Déconnecté")
+                                badgeText: VPN.connected ? I18n.tr("ACTIF") : ""
                                 activeTint: root.green
                                 on: VPN.connected
                                 onToggle: VPN.toggle()
@@ -515,8 +515,8 @@ Item {
                         WideToggle {
                             width: parent.width
                             icon: FocusMode.active ? FocusMode.info.icon : Notifs.dnd ? "do_not_disturb_on" : "do_not_disturb_off"
-                            title: qsTr("Concentration")
-                            subtitle: FocusMode.active ? FocusMode.info.name : Notifs.dnd ? qsTr("Ne pas déranger") : qsTr("Désactivée")
+                            title: I18n.tr("Concentration")
+                            subtitle: FocusMode.active ? FocusMode.info.name : Notifs.dnd ? I18n.tr("Ne pas déranger") : I18n.tr("Désactivée")
                             activeTint: FocusMode.active ? (FocusMode.info.tint ?? root.accent) : root.accent
                             hasSubpage: true
                             on: FocusMode.active || Notifs.dnd
@@ -525,8 +525,8 @@ Item {
                         WideToggle {
                             width: parent.width
                             icon: Colours.light ? "light_mode" : "dark_mode"
-                            title: qsTr("Apparence")
-                            subtitle: Colours.light ? qsTr("Mode clair") : qsTr("Mode sombre")
+                            title: I18n.tr("Apparence")
+                            subtitle: Colours.light ? I18n.tr("Mode clair") : I18n.tr("Mode sombre")
                             on: !Colours.light
                             onClicked: Colours.setMode(Colours.light ? "dark" : "light")
                         }
@@ -601,7 +601,7 @@ Item {
 
                             StyledText {
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: (Players.getIdentity(root.player) || qsTr("Audio")).toUpperCase()
+                                text: (Players.getIdentity(root.player) || I18n.tr("Audio")).toUpperCase()
                                 color: root.accent
                                 font.pointSize: 6.8
                                 font.weight: Font.Bold
@@ -641,7 +641,7 @@ Item {
                         StyledText {
                             width: parent.width
                             elide: Text.ElideRight
-                            text: root.player?.trackTitle || qsTr("Rien en lecture")
+                            text: root.player?.trackTitle || I18n.tr("Rien en lecture")
                             color: root.fg
                             font.pointSize: 10.2
                             font.weight: Font.Bold
@@ -776,7 +776,7 @@ Item {
 
                         StyledText {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: qsTr("ÉCRAN")
+                            text: I18n.tr("ÉCRAN")
                             color: root.fgDim
                             font.pointSize: 7.2
                             font.weight: Font.Bold
@@ -834,7 +834,7 @@ Item {
                             }
                             StyledText {
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: NightLight.enabled ? qsTr("Nuit · %1 K").arg(NightLight.temperature) : root.projMode === "duplicate" ? qsTr("Dupliqué") : root.projMode === "extend" ? qsTr("Étendu") : root.projMode === "external" ? qsTr("Second écran") : qsTr("Nuit, projection")
+                                text: NightLight.enabled ? I18n.tr("Nuit · %1 K").arg(NightLight.temperature) : root.projMode === "duplicate" ? I18n.tr("Dupliqué") : root.projMode === "extend" ? I18n.tr("Étendu") : root.projMode === "external" ? I18n.tr("Second écran") : I18n.tr("Nuit, projection")
                                 color: NightLight.enabled ? root.amber : root.fgDim
                                 font.pointSize: 7.8
                                 font.weight: Font.DemiBold
@@ -883,7 +883,7 @@ Item {
 
                         StyledText {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: qsTr("AUDIO")
+                            text: I18n.tr("AUDIO")
                             color: root.fgDim
                             font.pointSize: 7.2
                             font.weight: Font.Bold
@@ -902,7 +902,7 @@ Item {
                                 id: volPctTxt
 
                                 anchors.centerIn: parent
-                                text: Audio.muted ? qsTr("MUET") : `${Math.round(Audio.volume * 100)} %`
+                                text: Audio.muted ? I18n.tr("MUET") : `${Math.round(Audio.volume * 100)} %`
                                 color: Audio.muted ? root.red : root.fg
                                 font.pointSize: 7.8
                                 font.weight: Font.Bold
@@ -996,19 +996,19 @@ Item {
 
                         RoundToggle {
                             icon: "coffee"
-                            label: IdleInhibitor.enabled ? IdleInhibitor.remainingText() : qsTr("Caféine")
+                            label: IdleInhibitor.enabled ? IdleInhibitor.remainingText() : I18n.tr("Caféine")
                             on: IdleInhibitor.enabled
                             onClicked: root.page = "caffeine"
                         }
                         RoundToggle {
                             icon: "sports_esports"
-                            label: qsTr("Mode jeu")
+                            label: I18n.tr("Mode jeu")
                             on: GameMode.enabled
                             onClicked: GameMode.enabled = !GameMode.enabled
                         }
                         RoundToggle {
                             icon: Audio.sourceMuted ? "mic_off" : "mic"
-                            label: Audio.sourceMuted ? qsTr("Muet") : qsTr("Micro")
+                            label: Audio.sourceMuted ? I18n.tr("Muet") : I18n.tr("Micro")
                             activeTint: Audio.sourceMuted ? root.red : root.accent
                             on: !Audio.sourceMuted
                             onClicked: {
@@ -1018,14 +1018,14 @@ Item {
                         }
                         RoundToggle {
                             icon: Recorder.running ? "radio_button_checked" : "screen_record"
-                            label: Recorder.running ? qsTr("En cours") : qsTr("Capturer")
+                            label: Recorder.running ? I18n.tr("En cours") : I18n.tr("Capturer")
                             activeTint: Recorder.running ? root.red : root.accent
                             on: Recorder.running
                             onClicked: root.page = "record"
                         }
                         RoundToggle {
                             icon: "screenshot_region"
-                            label: qsTr("Photo")
+                            label: I18n.tr("Photo")
                             onClicked: {
                                 root.close();
                                 captureDelay.start();
@@ -1033,7 +1033,7 @@ Item {
                         }
                         RoundToggle {
                             icon: "timer"
-                            label: qsTr("Horloge")
+                            label: I18n.tr("Horloge")
                             onClicked: {
                                 root.close();
                                 root.run([`${Quickshell.env("HOME")}/.local/bin/caelestia-clock`]);
@@ -1041,14 +1041,14 @@ Item {
                         }
                         RoundToggle {
                             icon: "nightlight"
-                            label: NightLight.enabled ? qsTr("%1 K").arg(NightLight.temperature) : qsTr("Nuit")
+                            label: NightLight.enabled ? I18n.tr("%1 K").arg(NightLight.temperature) : I18n.tr("Nuit")
                             activeTint: root.amber
                             on: NightLight.enabled
                             onClicked: NightLight.toggle()
                         }
                         RoundToggle {
                             icon: "calculate"
-                            label: qsTr("Calcul")
+                            label: I18n.tr("Calcul")
                             onClicked: {
                                 root.close();
                                 root.run([`${Quickshell.env("HOME")}/.local/bin/caelestia-spotlight`, "calc"]);
@@ -1226,19 +1226,19 @@ Item {
                                 model: [
                                     {
                                         icon: "energy_savings_leaf",
-                                        lbl: qsTr("ÉCO"),
+                                        lbl: I18n.tr("ÉCO"),
                                         tint: root.green,
                                         p: PowerProfile.PowerSaver
                                     },
                                     {
                                         icon: "balance",
-                                        lbl: qsTr("ÉQUIL."),
+                                        lbl: I18n.tr("ÉQUIL."),
                                         tint: root.accent,
                                         p: PowerProfile.Balanced
                                     },
                                     {
                                         icon: "speed",
-                                        lbl: qsTr("PERF."),
+                                        lbl: I18n.tr("PERF."),
                                         tint: root.amber,
                                         p: PowerProfile.Performance
                                     }
@@ -1296,7 +1296,7 @@ Item {
                         anchors.left: parent.left
                         anchors.leftMargin: 14
                         anchors.verticalCenter: parent.verticalCenter
-                        text: qsTr("ACTIFS")
+                        text: I18n.tr("ACTIFS")
                         color: root.fgDim
                         font.pointSize: 6.8
                         font.weight: Font.Bold
@@ -1449,7 +1449,7 @@ Item {
                             spacing: -1
 
                             StyledText {
-                                text: qsTr("SESSION ACTIVE")
+                                text: I18n.tr("SESSION ACTIVE")
                                 color: root.fgDim
                                 font.pointSize: 6.5
                                 font.weight: Font.Bold
@@ -1544,14 +1544,14 @@ Item {
                         spacing: 1
 
                         StyledText {
-                            text: root.page === "wifi" || root.page === "bt" ? qsTr("CONNECTIVITÉ SANS FIL") : root.page === "audio" ? qsTr("CONSOLE AUDIO PIPEWIRE") : root.page === "battery" ? qsTr("GESTION ÉNERGÉTIQUE") : root.page === "display" ? qsTr("AFFICHAGE & COLORIMÉTRIE") : root.page === "focus" ? qsTr("PROFIL DE CONCENTRATION") : root.page === "caffeine" ? qsTr("INHIBITION DE VEILLE") : qsTr("CAPTURE STUDIO")
+                            text: root.page === "wifi" || root.page === "bt" ? I18n.tr("CONNECTIVITÉ SANS FIL") : root.page === "audio" ? I18n.tr("CONSOLE AUDIO PIPEWIRE") : root.page === "battery" ? I18n.tr("GESTION ÉNERGÉTIQUE") : root.page === "display" ? I18n.tr("AFFICHAGE & COLORIMÉTRIE") : root.page === "focus" ? I18n.tr("PROFIL DE CONCENTRATION") : root.page === "caffeine" ? I18n.tr("INHIBITION DE VEILLE") : I18n.tr("CAPTURE STUDIO")
                             color: root.accent
                             font.pointSize: 6.5
                             font.weight: Font.Bold
                             font.letterSpacing: 0.7
                         }
                         StyledText {
-                            text: root.page === "wifi" ? qsTr("Wi-Fi") : root.page === "bt" ? qsTr("Bluetooth") : root.page === "record" ? qsTr("Enregistrement") : root.page === "caffeine" ? qsTr("Caféine") : root.page === "display" ? qsTr("Écran") : root.page === "battery" ? qsTr("Batterie") : root.page === "focus" ? qsTr("Concentration") : qsTr("Studio Audio")
+                            text: root.page === "wifi" ? I18n.tr("Wi-Fi") : root.page === "bt" ? I18n.tr("Bluetooth") : root.page === "record" ? I18n.tr("Enregistrement") : root.page === "caffeine" ? I18n.tr("Caféine") : root.page === "display" ? I18n.tr("Écran") : root.page === "battery" ? I18n.tr("Batterie") : root.page === "focus" ? I18n.tr("Concentration") : I18n.tr("Studio Audio")
                             color: root.fg
                             font.pointSize: 12.5
                             font.weight: Font.Bold
@@ -1696,7 +1696,7 @@ Item {
                                 font.weight: net.modelData.active ? Font.Bold : Font.DemiBold
                             }
                             StyledText {
-                                text: wifiList.connecting === net.modelData.ssid && !net.modelData.active ? qsTr("Connexion en cours…") : net.modelData.active ? qsTr("Connecté · %1 %").arg(net.modelData.strength) : (net.modelData.isSecure ? qsTr("Sécurisé WPA") : qsTr("Réseau ouvert"))
+                                text: wifiList.connecting === net.modelData.ssid && !net.modelData.active ? I18n.tr("Connexion en cours…") : net.modelData.active ? I18n.tr("Connecté · %1 %").arg(net.modelData.strength) : (net.modelData.isSecure ? I18n.tr("Sécurisé WPA") : I18n.tr("Réseau ouvert"))
                                 color: net.modelData.active ? root.accent : root.fgDim
                                 font.pointSize: 7.8
                                 font.features: { "tnum": 1 }
@@ -1795,7 +1795,7 @@ Item {
                                 StyledText {
                                     anchors.verticalCenter: parent.verticalCenter
                                     visible: !pwd.text
-                                    text: qsTr("Mot de passe")
+                                    text: I18n.tr("Mot de passe")
                                     color: root.fgDim
                                     font.pointSize: 10
                                 }
@@ -1892,7 +1892,7 @@ Item {
                                 font.weight: dev.modelData.connected ? Font.Bold : Font.DemiBold
                             }
                             StyledText {
-                                text: dev.busy ? qsTr("Synchronisation…") : dev.modelData.connected ? qsTr("Connecté · Audio actif") : (dev.modelData.paired || dev.modelData.bonded || dev.modelData.trusted) ? qsTr("Associé") : qsTr("Disponible")
+                                text: dev.busy ? I18n.tr("Synchronisation…") : dev.modelData.connected ? I18n.tr("Connecté · Audio actif") : (dev.modelData.paired || dev.modelData.bonded || dev.modelData.trusted) ? I18n.tr("Associé") : I18n.tr("Disponible")
                                 color: dev.modelData.connected ? root.accent : root.fgDim
                                 font.pointSize: 7.8
                             }
@@ -1949,7 +1949,7 @@ Item {
                     StyledText {
                         anchors.centerIn: parent
                         visible: btList.count === 0
-                        text: root.adapter?.enabled ? qsTr("Aucun appareil — actualise pour chercher") : qsTr("Bluetooth désactivé")
+                        text: root.adapter?.enabled ? I18n.tr("Aucun appareil — actualise pour chercher") : I18n.tr("Bluetooth désactivé")
                         color: root.fgDim
                         font.pointSize: 9.5
                     }
@@ -2072,7 +2072,7 @@ Item {
                             spacing: 9
 
                             StyledText {
-                                text: FocusMode.active ? qsTr("ACTIVÉ %1").arg(FocusMode.untilText().toUpperCase()) : qsTr("DURÉE")
+                                text: FocusMode.active ? I18n.tr("ACTIVÉ %1").arg(FocusMode.untilText().toUpperCase()) : I18n.tr("DURÉE")
                                 color: FocusMode.active ? focusPage.tint : root.fgDim
                                 font.pointSize: 7.5
                                 font.weight: Font.Bold
@@ -2083,7 +2083,7 @@ Item {
                                 spacing: 6
 
                                 Repeater {
-                                    model: [[30, "30 min"], [60, "1 h"], [120, "2 h"], [-1, qsTr("Ce soir")], [0, "∞"]]
+                                    model: [[30, "30 min"], [60, "1 h"], [120, "2 h"], [-1, I18n.tr("Ce soir")], [0, "∞"]]
 
                                     Rectangle {
                                         id: fdur
@@ -2167,13 +2167,13 @@ Item {
                                     anchors.verticalCenter: parent.verticalCenter
 
                                     StyledText {
-                                        text: qsTr("Notifications coupées")
+                                        text: I18n.tr("Notifications coupées")
                                         color: root.fg
                                         font.pointSize: 9.5
                                         font.weight: Font.DemiBold
                                     }
                                     StyledText {
-                                        text: qsTr("Toujours : elles t'attendent dans le centre de notifications")
+                                        text: I18n.tr("Toujours : elles t'attendent dans le centre de notifications")
                                         color: root.fgDim
                                         font.pointSize: 8
                                     }
@@ -2181,29 +2181,29 @@ Item {
                             }
                             OptionRow {
                                 icon: "volume_off"
-                                title: qsTr("Messageries en sourdine")
-                                subtitle: qsTr("Telegram, Discord, WhatsApp, Slack…")
+                                title: I18n.tr("Messageries en sourdine")
+                                subtitle: I18n.tr("Telegram, Discord, WhatsApp, Slack…")
                                 on: root.focusOpt("muteApps")
                                 onToggled: root.focusSetOpt("muteApps", !root.focusOpt("muteApps"))
                             }
                             OptionRow {
                                 icon: "dock_to_bottom"
-                                title: qsTr("Masquer le Dock")
-                                subtitle: qsTr("Plus rien ne dépasse en bas de l'écran")
+                                title: I18n.tr("Masquer le Dock")
+                                subtitle: I18n.tr("Plus rien ne dépasse en bas de l'écran")
                                 on: root.focusOpt("hideDock")
                                 onToggled: root.focusSetOpt("hideDock", !root.focusOpt("hideDock"))
                             }
                             OptionRow {
                                 icon: "timer"
-                                title: qsTr("Lancer un Pomodoro")
-                                subtitle: qsTr("25 min de travail, 5 min de pause, dans l'île")
+                                title: I18n.tr("Lancer un Pomodoro")
+                                subtitle: I18n.tr("25 min de travail, 5 min de pause, dans l'île")
                                 on: root.focusOpt("pomodoro")
                                 onToggled: root.focusSetOpt("pomodoro", !root.focusOpt("pomodoro"))
                             }
                             OptionRow {
                                 icon: "nightlight"
-                                title: qsTr("Éclairage de nuit")
-                                subtitle: qsTr("Écran plus chaud, pour le soir")
+                                title: I18n.tr("Éclairage de nuit")
+                                subtitle: I18n.tr("Écran plus chaud, pour le soir")
                                 on: root.focusOpt("night")
                                 onToggled: root.focusSetOpt("night", !root.focusOpt("night"))
                             }
@@ -2253,7 +2253,7 @@ Item {
                             }
                             StyledText {
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: FocusMode.active ? qsTr("Arrêter la concentration") : qsTr("Activer « %1 »").arg(FocusMode.modes[focusPage.shownMode]?.name ?? "")
+                                text: FocusMode.active ? I18n.tr("Arrêter la concentration") : I18n.tr("Activer « %1 »").arg(FocusMode.modes[focusPage.shownMode]?.name ?? "")
                                 color: "white"
                                 font.pointSize: 10.5
                                 font.weight: Font.Bold
@@ -2379,7 +2379,7 @@ Item {
                                 }
                                 StyledText {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: BatteryInfo.charging ? qsTr("En charge") : BatteryInfo.saverOn ? qsTr("Économie") : UPower.onBattery ? qsTr("Sur batterie") : qsTr("Secteur")
+                                    text: BatteryInfo.charging ? I18n.tr("En charge") : BatteryInfo.saverOn ? I18n.tr("Économie") : UPower.onBattery ? I18n.tr("Sur batterie") : I18n.tr("Secteur")
                                     color: batteryPage.level
                                     font.pointSize: 8.5
                                     font.weight: Font.Bold
@@ -2487,9 +2487,9 @@ Item {
 
                             Repeater {
                                 model: [
-                                    { icon: "electric_bolt", label: qsTr("Puissance"), value: BatteryInfo.watts > 0.2 ? `${BatteryInfo.charging ? "+" : "−"}${BatteryInfo.watts.toFixed(1).replace(".", ",")} W` : "—" },
-                                    { icon: "schedule", label: BatteryInfo.charging ? qsTr("Pleine dans") : qsTr("Autonomie"), value: BatteryInfo.fmtDuration(BatteryInfo.charging ? BatteryInfo.timeToFull : BatteryInfo.timeToEmpty) || "—" },
-                                    { icon: "favorite", label: qsTr("Santé"), value: BatteryInfo.health > 0 ? `${Math.round(BatteryInfo.health * 100)} %` : "—" }
+                                    { icon: "electric_bolt", label: I18n.tr("Puissance"), value: BatteryInfo.watts > 0.2 ? `${BatteryInfo.charging ? "+" : "−"}${BatteryInfo.watts.toFixed(1).replace(".", ",")} W` : "—" },
+                                    { icon: "schedule", label: BatteryInfo.charging ? I18n.tr("Pleine dans") : I18n.tr("Autonomie"), value: BatteryInfo.fmtDuration(BatteryInfo.charging ? BatteryInfo.timeToFull : BatteryInfo.timeToEmpty) || "—" },
+                                    { icon: "favorite", label: I18n.tr("Santé"), value: BatteryInfo.health > 0 ? `${Math.round(BatteryInfo.health * 100)} %` : "—" }
                                 ]
 
                                 Rectangle {
@@ -2546,7 +2546,7 @@ Item {
                         StyledText {
                             x: 14
                             y: 10
-                            text: histCanvas.span >= 23 * 3600 * 1000 ? qsTr("DERNIÈRES 24 H") : qsTr("HISTORIQUE")
+                            text: histCanvas.span >= 23 * 3600 * 1000 ? I18n.tr("DERNIÈRES 24 H") : I18n.tr("HISTORIQUE")
                             color: root.fgDim
                             font.pointSize: 7.5
                             font.weight: Font.Bold
@@ -2571,7 +2571,7 @@ Item {
                             }
                             function spanLabel(f: real): string {
                                 const m = Math.round(span * f / 60000);
-                                return m >= 60 ? qsTr("il y a %1 h").arg(Math.round(m / 6) / 10) : qsTr("il y a %1 min").arg(m);
+                                return m >= 60 ? I18n.tr("il y a %1 h").arg(Math.round(m / 6) / 10) : I18n.tr("il y a %1 min").arg(m);
                             }
                             onPtsChanged: requestPaint()
                             onWidthChanged: requestPaint()
@@ -2636,7 +2636,7 @@ Item {
                             anchors.horizontalCenter: histCanvas.horizontalCenter
                             y: histCanvas.y + histCanvas.height / 2 - height / 2
                             visible: BatteryInfo.history.length < 2
-                            text: qsTr("L'historique se remplit (un point toutes les 5 min)")
+                            text: I18n.tr("L'historique se remplit (un point toutes les 5 min)")
                             color: root.fgDim
                             font.pointSize: 8.5
                         }
@@ -2660,7 +2660,7 @@ Item {
                             }
                             StyledText {
                                 anchors.right: parent.right
-                                text: qsTr("maintenant")
+                                text: I18n.tr("maintenant")
                                 color: root.fgDim
                                 font.pointSize: 7.5
                             }
@@ -2681,7 +2681,7 @@ Item {
                             spacing: 8
 
                             StyledText {
-                                text: qsTr("PROCESSUS LES PLUS ÉNERGIVORES")
+                                text: I18n.tr("PROCESSUS LES PLUS ÉNERGIVORES")
                                 color: root.fgDim
                                 font.pointSize: 7.5
                                 font.weight: Font.Bold
@@ -2689,7 +2689,7 @@ Item {
                             }
                             StyledText {
                                 visible: BatteryInfo.consumers.length === 0
-                                text: qsTr("Rien de gourmand en ce moment")
+                                text: I18n.tr("Rien de gourmand en ce moment")
                                 color: root.fgDim
                                 font.pointSize: 9
                             }
@@ -2783,7 +2783,7 @@ Item {
                                             id: consBadgeTxt
 
                                             anchors.centerIn: parent
-                                            text: `${Math.round(consumer.modelData.cpu)} % · ` + (consumer.modelData.cpu >= 15 ? qsTr("Élevé") : consumer.modelData.cpu >= 4 ? qsTr("Moyen") : qsTr("Faible"))
+                                            text: `${Math.round(consumer.modelData.cpu)} % · ` + (consumer.modelData.cpu >= 15 ? I18n.tr("Élevé") : consumer.modelData.cpu >= 4 ? I18n.tr("Moyen") : I18n.tr("Faible"))
                                             color: consumer.modelData.cpu >= 15 ? root.amber : root.fgDim
                                             font.pointSize: 7.5
                                             font.weight: Font.Bold
@@ -2809,8 +2809,8 @@ Item {
 
                             OptionRow {
                                 icon: "energy_savings_leaf"
-                                title: qsTr("Économie auto sur batterie")
-                                subtitle: BatteryInfo.saverOn ? qsTr("Active en ce moment") : qsTr("Passe en économie d'énergie, revient en charge")
+                                title: I18n.tr("Économie auto sur batterie")
+                                subtitle: BatteryInfo.saverOn ? I18n.tr("Active en ce moment") : I18n.tr("Passe en économie d'énergie, revient en charge")
                                 on: BatteryInfo.autoSaver
                                 onToggled: BatteryInfo.setAutoSaver(!BatteryInfo.autoSaver)
                             }
@@ -2831,13 +2831,13 @@ Item {
                                     anchors.verticalCenter: parent.verticalCenter
 
                                     StyledText {
-                                        text: qsTr("Santé de la batterie : %1 %").arg(Math.round(BatteryInfo.health * 100))
+                                        text: I18n.tr("Santé de la batterie : %1 %").arg(Math.round(BatteryInfo.health * 100))
                                         color: root.fg
                                         font.pointSize: 9.5
                                         font.weight: Font.DemiBold
                                     }
                                     StyledText {
-                                        text: (BatteryInfo.health < 0.8 ? qsTr("Capacité réduite par rapport à l'origine") : qsTr("Capacité proche de l'origine")) + (BatteryInfo.cycles > 0 ? qsTr(" · %1 cycles").arg(BatteryInfo.cycles) : "")
+                                        text: (BatteryInfo.health < 0.8 ? I18n.tr("Capacité réduite par rapport à l'origine") : I18n.tr("Capacité proche de l'origine")) + (BatteryInfo.cycles > 0 ? I18n.tr(" · %1 cycles").arg(BatteryInfo.cycles) : "")
                                         color: root.fgDim
                                         font.pointSize: 8
                                     }
@@ -2907,7 +2907,7 @@ Item {
                                     spacing: 2
 
                                     StyledText {
-                                        text: qsTr("Éclairage de nuit")
+                                        text: I18n.tr("Éclairage de nuit")
                                         color: root.fg
                                         font.pointSize: 12
                                         font.weight: Font.Bold
@@ -2915,7 +2915,7 @@ Item {
                                     StyledText {
                                         width: parent.width
                                         elide: Text.ElideRight
-                                        text: (NightLight.enabled ? qsTr("Activé · %1 K").arg(NightLight.temperature) : qsTr("Désactivé")) + (NightLight.scheduled ? qsTr(" · auto %1 → %2").arg(NightLight.from).arg(NightLight.to) : "")
+                                        text: (NightLight.enabled ? I18n.tr("Activé · %1 K").arg(NightLight.temperature) : I18n.tr("Désactivé")) + (NightLight.scheduled ? I18n.tr(" · auto %1 → %2").arg(NightLight.from).arg(NightLight.to) : "")
                                         color: root.fgDim
                                         font.pointSize: 9
                                     }
@@ -2923,7 +2923,7 @@ Item {
                             }
 
                             StyledText {
-                                text: qsTr("CHALEUR")
+                                text: I18n.tr("CHALEUR")
                                 color: root.fgDim
                                 font.pointSize: 7.5
                                 font.weight: Font.Bold
@@ -2945,7 +2945,7 @@ Item {
                                 spacing: 6
 
                                 Repeater {
-                                    model: [[5200, qsTr("Léger")], [4200, qsTr("Doux")], [3400, qsTr("Chaud")], [2700, qsTr("Bougie")]]
+                                    model: [[5200, I18n.tr("Léger")], [4200, I18n.tr("Doux")], [3400, I18n.tr("Chaud")], [2700, I18n.tr("Bougie")]]
 
                                     Rectangle {
                                         id: preset
@@ -3015,14 +3015,14 @@ Item {
 
                             OptionRow {
                                 icon: "schedule"
-                                title: qsTr("Programmer")
-                                subtitle: NightLight.scheduled ? qsTr("S'allume à %1, s'éteint à %2").arg(NightLight.from).arg(NightLight.to) : qsTr("Allumer et éteindre tout seul")
+                                title: I18n.tr("Programmer")
+                                subtitle: NightLight.scheduled ? I18n.tr("S'allume à %1, s'éteint à %2").arg(NightLight.from).arg(NightLight.to) : I18n.tr("Allumer et éteindre tout seul")
                                 on: NightLight.scheduled
                                 onToggled: NightLight.setSchedule(!NightLight.scheduled)
                             }
 
                             Repeater {
-                                model: NightLight.scheduled ? [["from", qsTr("Allumer"), ["19:00", "20:00", "21:00", "22:00"]], ["to", qsTr("Éteindre"), ["06:00", "07:00", "08:00", "09:00"]]] : []
+                                model: NightLight.scheduled ? [["from", I18n.tr("Allumer"), ["19:00", "20:00", "21:00", "22:00"]], ["to", I18n.tr("Éteindre"), ["06:00", "07:00", "08:00", "09:00"]]] : []
 
                                 Row {
                                     id: schedRow
@@ -3107,7 +3107,7 @@ Item {
                                 height: 16
 
                                 StyledText {
-                                    text: qsTr("PROJECTION")
+                                    text: I18n.tr("PROJECTION")
                                     color: root.fgDim
                                     font.pointSize: 7.5
                                     font.weight: Font.Bold
@@ -3117,7 +3117,7 @@ Item {
                                     anchors.right: parent.right
                                     width: Math.min(implicitWidth, parent.width - 90)
                                     elide: Text.ElideRight
-                                    text: root.projMessage || (root.projExternals.length > 0 ? root.projExternals.map(e => e.title).join(", ") : qsTr("Aucun second écran branché"))
+                                    text: root.projMessage || (root.projExternals.length > 0 ? root.projExternals.map(e => e.title).join(", ") : I18n.tr("Aucun second écran branché"))
                                     color: root.projMessage ? "#ff453a" : root.fgDim
                                     font.pointSize: 8
                                 }
@@ -3128,7 +3128,7 @@ Item {
                                 spacing: 6
 
                                 Repeater {
-                                    model: [["internal", "laptop_chromebook", qsTr("PC seul")], ["duplicate", "content_copy", qsTr("Dupliquer")], ["extend", "width_full", qsTr("Étendre")], ["external", "tv", qsTr("2d écran")]]
+                                    model: [["internal", "laptop_chromebook", I18n.tr("PC seul")], ["duplicate", "content_copy", I18n.tr("Dupliquer")], ["extend", "width_full", I18n.tr("Étendre")], ["external", "tv", I18n.tr("2d écran")]]
 
                                     Rectangle {
                                         id: proj
@@ -3205,7 +3205,7 @@ Item {
                             }
 
                             BigPill {
-                                text: qsTr("Position, résolution, échelle…")
+                                text: I18n.tr("Position, résolution, échelle…")
                                 onClicked: {
                                     root.close();
                                     root.run([root.displayTool]);
@@ -3293,14 +3293,14 @@ Item {
                             spacing: 2
 
                             StyledText {
-                                text: IdleInhibitor.enabled ? qsTr("VERROU D'ÉVEIL ACTIF") : qsTr("VEILLE AUTOMATIQUE")
+                                text: IdleInhibitor.enabled ? I18n.tr("VERROU D'ÉVEIL ACTIF") : I18n.tr("VEILLE AUTOMATIQUE")
                                 color: IdleInhibitor.enabled ? root.amber : root.fgDim
                                 font.pointSize: 6.5
                                 font.weight: Font.Bold
                                 font.letterSpacing: 0.7
                             }
                             StyledText {
-                                text: IdleInhibitor.enabled ? qsTr("L'écran reste allumé") : qsTr("Veille normale")
+                                text: IdleInhibitor.enabled ? I18n.tr("L'écran reste allumé") : I18n.tr("Veille normale")
                                 color: root.fg
                                 font.pointSize: 12
                                 font.weight: Font.Bold
@@ -3308,7 +3308,7 @@ Item {
                             StyledText {
                                 width: parent.width
                                 elide: Text.ElideRight
-                                text: !IdleInhibitor.enabled ? qsTr("Choisis une durée pour l'activer") : IdleInhibitor.until > 0 ? qsTr("Encore %1 · jusqu'à %2").arg(IdleInhibitor.remainingText()).arg(Qt.formatTime(new Date(IdleInhibitor.until), "HH:mm")) : qsTr("Sans limite · depuis %1").arg(Qt.formatTime(IdleInhibitor.enabledSince, "HH:mm"))
+                                text: !IdleInhibitor.enabled ? I18n.tr("Choisis une durée pour l'activer") : IdleInhibitor.until > 0 ? I18n.tr("Encore %1 · jusqu'à %2").arg(IdleInhibitor.remainingText()).arg(Qt.formatTime(new Date(IdleInhibitor.until), "HH:mm")) : I18n.tr("Sans limite · depuis %1").arg(Qt.formatTime(IdleInhibitor.enabledSince, "HH:mm"))
                                 color: root.fgDim
                                 font.pointSize: 8.5
                                 font.features: { "tnum": 1 }
@@ -3327,7 +3327,7 @@ Item {
                             spacing: 10
 
                             StyledText {
-                                text: qsTr("DURÉE D'ACTIVATION")
+                                text: I18n.tr("DURÉE D'ACTIVATION")
                                 color: root.fgDim
                                 font.pointSize: 7.5
                                 font.weight: Font.Bold
@@ -3404,7 +3404,7 @@ Item {
                             spacing: 6
 
                             StyledText {
-                                text: qsTr("MINUTERIES D'INACTIVITÉ (SANS CAFÉINE)")
+                                text: I18n.tr("MINUTERIES D'INACTIVITÉ (SANS CAFÉINE)")
                                 color: root.fgDim
                                 font.pointSize: 7.5
                                 font.weight: Font.Bold
@@ -3462,7 +3462,7 @@ Item {
                                             anchors.verticalCenter: parent.verticalCenter
                                             width: 48
                                             horizontalAlignment: Text.AlignHCenter
-                                            text: idleRow.active ? (idleRow.minutes >= 60 && idleRow.minutes % 60 === 0 ? qsTr("%1 h").arg(idleRow.minutes / 60) : qsTr("%1 min").arg(idleRow.minutes)) : qsTr("Jamais")
+                                            text: idleRow.active ? (idleRow.minutes >= 60 && idleRow.minutes % 60 === 0 ? I18n.tr("%1 h").arg(idleRow.minutes / 60) : I18n.tr("%1 min").arg(idleRow.minutes)) : I18n.tr("Jamais")
                                             color: idleRow.active ? root.fg : root.fgDim
                                             font.pointSize: 9.5
                                             font.weight: Font.DemiBold
@@ -3578,7 +3578,7 @@ Item {
                             spacing: 1
 
                             StyledText {
-                                text: Recorder.paused ? qsTr("EN PAUSE") : qsTr("CAPTURE EN DIRECT")
+                                text: Recorder.paused ? I18n.tr("EN PAUSE") : I18n.tr("CAPTURE EN DIRECT")
                                 color: Recorder.paused ? root.amber : root.red
                                 font.pointSize: 6.5
                                 font.weight: Font.Bold
@@ -3604,11 +3604,11 @@ Item {
                             spacing: 8
 
                             BigPill {
-                                text: Recorder.paused ? qsTr("Reprendre") : qsTr("Pause")
+                                text: Recorder.paused ? I18n.tr("Reprendre") : I18n.tr("Pause")
                                 onClicked: Recorder.togglePause()
                             }
                             BigPill {
-                                text: qsTr("Arrêter")
+                                text: I18n.tr("Arrêter")
                                 red: true
                                 onClicked: {
                                     Recorder.stop();
@@ -3627,16 +3627,16 @@ Item {
                         ChoiceCard {
                             width: (parent.width - 10) / 2
                             icon: "desktop_windows"
-                            title: qsTr("Plein écran")
-                            subtitle: qsTr("Tout l'écran")
+                            title: I18n.tr("Plein écran")
+                            subtitle: I18n.tr("Tout l'écran")
                             on: !root.recRegion
                             onClicked: root.recRegion = false
                         }
                         ChoiceCard {
                             width: (parent.width - 10) / 2
                             icon: "crop_free"
-                            title: qsTr("Zone")
-                            subtitle: qsTr("Choisie à la souris")
+                            title: I18n.tr("Zone")
+                            subtitle: I18n.tr("Choisie à la souris")
                             on: root.recRegion
                             onClicked: root.recRegion = true
                         }
@@ -3654,7 +3654,7 @@ Item {
                             spacing: 4
 
                             StyledText {
-                                text: qsTr("PISTES AUDIO")
+                                text: I18n.tr("PISTES AUDIO")
                                 color: root.fgDim
                                 font.pointSize: 7.5
                                 font.weight: Font.Bold
@@ -3662,15 +3662,15 @@ Item {
                             }
                             OptionRow {
                                 icon: "volume_up"
-                                title: qsTr("Son de l'ordinateur")
-                                subtitle: Audio.sink?.description || Audio.sink?.nickname || qsTr("Sortie actuelle")
+                                title: I18n.tr("Son de l'ordinateur")
+                                subtitle: Audio.sink?.description || Audio.sink?.nickname || I18n.tr("Sortie actuelle")
                                 on: root.recSound
                                 onToggled: root.recSound = !root.recSound
                             }
                             OptionRow {
                                 icon: "mic"
-                                title: qsTr("Micro")
-                                subtitle: Audio.source?.description || Audio.source?.nickname || qsTr("Entrée actuelle")
+                                title: I18n.tr("Micro")
+                                subtitle: Audio.source?.description || Audio.source?.nickname || I18n.tr("Entrée actuelle")
                                 on: root.recMic
                                 onToggled: root.recMic = !root.recMic
                             }
@@ -3680,7 +3680,7 @@ Item {
                             anchors.right: parent.right
                             anchors.rightMargin: 14
                             y: 12
-                            text: root.recSound && root.recMic ? qsTr("Son + micro") : root.recSound ? qsTr("Son seulement") : root.recMic ? qsTr("Voix seulement") : qsTr("Sans son")
+                            text: root.recSound && root.recMic ? I18n.tr("Son + micro") : root.recSound ? I18n.tr("Son seulement") : root.recMic ? I18n.tr("Voix seulement") : I18n.tr("Sans son")
                             color: root.accent
                             font.pointSize: 8
                             font.weight: Font.DemiBold
@@ -3700,16 +3700,16 @@ Item {
 
                             OptionRow {
                                 icon: "timer_3"
-                                title: qsTr("Compte à rebours")
-                                subtitle: root.recRegion ? qsTr("Plein écran seulement") : qsTr("3 secondes dans l'île")
+                                title: I18n.tr("Compte à rebours")
+                                subtitle: root.recRegion ? I18n.tr("Plein écran seulement") : I18n.tr("3 secondes dans l'île")
                                 on: root.recCountdown && !root.recRegion
                                 enabled: !root.recRegion
                                 onToggled: root.recCountdown = !root.recCountdown
                             }
                             OptionRow {
                                 icon: "content_paste"
-                                title: qsTr("Copier la vidéo")
-                                subtitle: qsTr("Chemin dans le presse-papiers à la fin")
+                                title: I18n.tr("Copier la vidéo")
+                                subtitle: I18n.tr("Chemin dans le presse-papiers à la fin")
                                 on: root.recCopy
                                 onToggled: root.recCopy = !root.recCopy
                             }
@@ -3758,7 +3758,7 @@ Item {
                             }
                             StyledText {
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: root.recRegion ? qsTr("Choisir la zone et enregistrer") : qsTr("Démarrer l'enregistrement")
+                                text: root.recRegion ? I18n.tr("Choisir la zone et enregistrer") : I18n.tr("Démarrer l'enregistrement")
                                 color: "white"
                                 font.pointSize: 10.5
                                 font.weight: Font.Bold
@@ -3809,7 +3809,7 @@ Item {
                                 spacing: 5
 
                                 StyledText {
-                                    text: qsTr("PÉRIPHÉRIQUES DE SORTIE")
+                                    text: I18n.tr("PÉRIPHÉRIQUES DE SORTIE")
                                     color: root.fgDim
                                     font.pointSize: 7.2
                                     font.weight: Font.Bold
@@ -3917,7 +3917,7 @@ Item {
 
                                         StyledText {
                                             anchors.verticalCenter: parent.verticalCenter
-                                            text: qsTr("ENTRÉE MICROPHONE")
+                                            text: I18n.tr("ENTRÉE MICROPHONE")
                                             color: root.fgDim
                                             font.pointSize: 7.2
                                             font.weight: Font.Bold
@@ -3936,7 +3936,7 @@ Item {
                                                 id: micPctTxt
 
                                                 anchors.centerIn: parent
-                                                text: Audio.sourceMuted ? qsTr("COUPÉ") : `${Math.round(Audio.sourceVolume * 100)} %`
+                                                text: Audio.sourceMuted ? I18n.tr("COUPÉ") : `${Math.round(Audio.sourceVolume * 100)} %`
                                                 color: Audio.sourceMuted ? root.red : root.fg
                                                 font.pointSize: 7
                                                 font.weight: Font.Bold
@@ -4041,7 +4041,7 @@ Item {
                                 spacing: 8
 
                                 StyledText {
-                                    text: qsTr("MIXEUR D'APPLICATIONS (%1)").arg(Audio.streams.length)
+                                    text: I18n.tr("MIXEUR D'APPLICATIONS (%1)").arg(Audio.streams.length)
                                     color: root.fgDim
                                     font.pointSize: 7.2
                                     font.weight: Font.Bold
@@ -4079,7 +4079,7 @@ Item {
                                             StyledText {
                                                 anchors.right: parent.right
                                                 anchors.verticalCenter: parent.verticalCenter
-                                                text: streamRow.sMuted ? qsTr("MUET") : `${Math.round(streamRow.sVol * 100)} %`
+                                                text: streamRow.sMuted ? I18n.tr("MUET") : `${Math.round(streamRow.sVol * 100)} %`
                                                 color: streamRow.sMuted ? root.red : root.fgDim
                                                 font.pointSize: 7.8
                                                 font.weight: Font.Bold

@@ -18,8 +18,8 @@ Custom Qt6 liquid-glass shaders, a 9-page Dynamic Island with live AI agent moni
 
 ---
 
-> [!NOTE]
-> **UI language:** The shell UI is currently in **French**, while the installer, Hyprland Lua configuration, shaders, and companion tools work with any keyboard layout and locale. English localization (`i18n`) contributions are very welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+> [!TIP]
+> **Automatic English & French UI:** The shell automatically follows your system locale (`fr_*` → French, everything else → English) and can be switched live anytime in **Settings (`Super + I`) → Language & region** (or `~/.config/caelestia/lang.json` / `CAELESTIA_LANG=en|fr`). Contributions for additional languages are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
@@ -182,7 +182,7 @@ sudo config/plymouth/install-boot-splash --remove
 Contributions, bug reports, and feature ideas are welcome! See **[CONTRIBUTING.md](CONTRIBUTING.md)** to get started.
 
 High-impact areas where help is especially appreciated:
-- **English / i18n localization** of the QML shell strings (`qsTr`) and companion tools;
+- **Additional languages (i18n)**: English & French are built in (`services/I18n.qml`, `services/I18nEn.js`); PRs for more languages are welcome;
 - **Testing on additional Arch setups** (multi-monitor, NVIDIA, different Hyprland/caelestia-shell versions);
 - **Shader & performance refinements**.
 

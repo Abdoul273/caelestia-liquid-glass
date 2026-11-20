@@ -42,14 +42,14 @@ Singleton {
 
     function titleOf(note: var): string {
         if (note?.locked)
-            return note.full?.title || qsTr("Note chiffrée");
+            return note.full?.title || I18n.tr("Note chiffrée");
         const first = (note?.body ?? "").split("\n").find(l => l.trim().length > 0) ?? "";
-        return first.replace(/^#+\s*/, "").trim() || qsTr("Nouvelle note");
+        return first.replace(/^#+\s*/, "").trim() || I18n.tr("Nouvelle note");
     }
 
     function previewOf(note: var): string {
         if (note?.locked)
-            return qsTr("Chiffrée · à ouvrir dans AetherNotes");
+            return I18n.tr("Chiffrée · à ouvrir dans AetherNotes");
         const lines = (note?.body ?? "").split("\n").filter(l => l.trim().length > 0);
         return lines.slice(1).join(" · ").trim();
     }
@@ -166,7 +166,7 @@ Singleton {
         if (currentId === id)
             currentId = sorted[0]?.id ?? "";
         if (note.locked || note.body.trim())
-            Toaster.toast(qsTr("Note supprimée"), root.titleOf(note), "delete");
+            Toaster.toast(I18n.tr("Note supprimée"), root.titleOf(note), "delete");
         scheduleSave();
     }
 

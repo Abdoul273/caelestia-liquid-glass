@@ -14,23 +14,23 @@ Item {
     readonly property string msg: {
         // Errors
         if (pam.fprint.state === Pam.Error)
-            return qsTr("ERREUR EMPREINTE : %1").arg(pam.fprint.message);
+            return I18n.tr("ERREUR EMPREINTE : %1").arg(pam.fprint.message);
         if (pam.howdy.state === Pam.Error)
-            return qsTr("ERREUR VISAGE : %1").arg(pam.howdy.message);
+            return I18n.tr("ERREUR VISAGE : %1").arg(pam.howdy.message);
         if (pam.state === Pam.Error)
-            return qsTr("ERREUR MDP : %1").arg(pam.passwd.message);
+            return I18n.tr("ERREUR MDP : %1").arg(pam.passwd.message);
 
         // Fprint/howdy fail
         if (pam.state !== Pam.MaxTries) {
             if (pam.fprint.state === Pam.Failed)
-                return qsTr("Empreinte non reconnue (%1/%2). Réessayez ou utilisez votre mot de passe.").arg(pam.fprint.tries).arg(GlobalConfig.lock.maxFprintTries);
+                return I18n.tr("Empreinte non reconnue (%1/%2). Réessayez ou utilisez votre mot de passe.").arg(pam.fprint.tries).arg(GlobalConfig.lock.maxFprintTries);
             if (pam.howdy.state === Pam.Failed)
-                return qsTr("Visage non reconnu (%1/%2). Réessayez ou utilisez votre mot de passe.").arg(pam.howdy.tries).arg(GlobalConfig.lock.maxHowdyTries);
+                return I18n.tr("Visage non reconnu (%1/%2). Réessayez ou utilisez votre mot de passe.").arg(pam.howdy.tries).arg(GlobalConfig.lock.maxHowdyTries);
         } else {
             if (pam.fprint.state === Pam.Failed)
-                return qsTr("Empreinte non reconnue (%1/%2). Veuillez réessayer.").arg(pam.fprint.tries).arg(GlobalConfig.lock.maxFprintTries);
+                return I18n.tr("Empreinte non reconnue (%1/%2). Veuillez réessayer.").arg(pam.fprint.tries).arg(GlobalConfig.lock.maxFprintTries);
             if (pam.howdy.state === Pam.Failed)
-                return qsTr("Visage non reconnu (%1/%2). Veuillez réessayer.").arg(pam.howdy.tries).arg(GlobalConfig.lock.maxHowdyTries);
+                return I18n.tr("Visage non reconnu (%1/%2). Veuillez réessayer.").arg(pam.howdy.tries).arg(GlobalConfig.lock.maxHowdyTries);
         }
 
         if (pam.lockMessage) // Password max tries message
@@ -39,26 +39,26 @@ Item {
         // Password fail
         if (pam.state === Pam.Failed) {
             if (pam.fprint.available && pam.fprint.state !== Pam.MaxTries)
-                return qsTr("Mot de passe incorrect. Réessayez ou utilisez l'empreinte.");
+                return I18n.tr("Mot de passe incorrect. Réessayez ou utilisez l'empreinte.");
             if (pam.howdy.available && pam.howdy.state !== Pam.MaxTries)
-                return qsTr("Mot de passe incorrect. Réessayez ou utilisez la reconnaissance faciale.");
-            return qsTr("Mot de passe incorrect. Veuillez réessayer.");
+                return I18n.tr("Mot de passe incorrect. Réessayez ou utilisez la reconnaissance faciale.");
+            return I18n.tr("Mot de passe incorrect. Veuillez réessayer.");
         }
 
         // Maxed out
         if (pam.state === Pam.MaxTries) {
             if (pam.fprint.available && pam.fprint.state !== Pam.MaxTries)
-                return qsTr("Tentatives de mot de passe épuisées. Utilisez votre empreinte.");
+                return I18n.tr("Tentatives de mot de passe épuisées. Utilisez votre empreinte.");
             if (pam.howdy.available && pam.howdy.state !== Pam.MaxTries)
-                return qsTr("Tentatives de mot de passe épuisées. Utilisez la reconnaissance faciale.");
+                return I18n.tr("Tentatives de mot de passe épuisées. Utilisez la reconnaissance faciale.");
             if (pam.fprint.available || pam.howdy.available)
-                return qsTr("Nombre maximal de tentatives atteint pour tous les modes d'authentification.");
-            return qsTr("Nombre maximal de tentatives de mot de passe atteint.");
+                return I18n.tr("Nombre maximal de tentatives atteint pour tous les modes d'authentification.");
+            return I18n.tr("Nombre maximal de tentatives de mot de passe atteint.");
         }
         if (pam.fprint.state === Pam.MaxTries)
-            return qsTr("Tentatives d'empreinte épuisées. Utilisez votre mot de passe.");
+            return I18n.tr("Tentatives d'empreinte épuisées. Utilisez votre mot de passe.");
         if (pam.howdy.state === Pam.MaxTries)
-            return qsTr("Tentatives faciales épuisées. Utilisez votre mot de passe.");
+            return I18n.tr("Tentatives faciales épuisées. Utilisez votre mot de passe.");
 
         return "";
     }
@@ -66,20 +66,20 @@ Item {
     readonly property string stateMsg: {
         if (Hypr.kbLayout !== Hypr.defaultKbLayout) {
             if (Hypr.capsLock && Hypr.numLock)
-                return qsTr("Verr. Maj et Verr. Num sont activés.\nDisposition du clavier : %1").arg(Hypr.kbLayoutFull);
+                return I18n.tr("Verr. Maj et Verr. Num sont activés.\nDisposition du clavier : %1").arg(Hypr.kbLayoutFull);
             if (Hypr.capsLock)
-                return qsTr("Verr. Maj activé. Disposition : %1").arg(Hypr.kbLayoutFull);
+                return I18n.tr("Verr. Maj activé. Disposition : %1").arg(Hypr.kbLayoutFull);
             if (Hypr.numLock)
-                return qsTr("Verr. Num activé. Disposition : %1").arg(Hypr.kbLayoutFull);
-            return qsTr("Disposition du clavier : %1").arg(Hypr.kbLayoutFull);
+                return I18n.tr("Verr. Num activé. Disposition : %1").arg(Hypr.kbLayoutFull);
+            return I18n.tr("Disposition du clavier : %1").arg(Hypr.kbLayoutFull);
         }
 
         if (Hypr.capsLock && Hypr.numLock)
-            return qsTr("Verr. Maj et Verr. Num sont activés.");
+            return I18n.tr("Verr. Maj et Verr. Num sont activés.");
         if (Hypr.capsLock)
-            return qsTr("Verrouillage majuscule activé.");
+            return I18n.tr("Verrouillage majuscule activé.");
         if (Hypr.numLock)
-            return qsTr("Pavé numérique activé.");
+            return I18n.tr("Pavé numérique activé.");
 
         return "";
     }

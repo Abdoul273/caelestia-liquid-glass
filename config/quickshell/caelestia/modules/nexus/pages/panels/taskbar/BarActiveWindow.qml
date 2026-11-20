@@ -3,11 +3,12 @@ pragma ComponentBehavior: Bound
 import QtQuick.Layouts
 import Caelestia.Config
 import qs.modules.nexus.common
+import qs.services
 
 PageBase {
     id: root
 
-    title: qsTr("Fenêtre active")
+    title: I18n.tr("Fenêtre active")
     isSubPage: true
 
     ColumnLayout {
@@ -18,28 +19,28 @@ PageBase {
 
         ToggleRow {
             first: true
-            text: qsTr("Compact")
+            text: I18n.tr("Compact")
             checked: Config.bar.activeWindow.compact
             onToggled: GlobalConfig.bar.activeWindow.compact = checked
         }
 
         ToggleRow {
-            text: qsTr("Inversé")
+            text: I18n.tr("Inversé")
             checked: Config.bar.activeWindow.inverted
             onToggled: GlobalConfig.bar.activeWindow.inverted = checked
         }
 
         ToggleRow {
-            text: qsTr("Afficher au survol")
-            subtext: qsTr("Afficher le titre de la fenêtre active uniquement au survol")
+            text: I18n.tr("Afficher au survol")
+            subtext: I18n.tr("Afficher le titre de la fenêtre active uniquement au survol")
             checked: Config.bar.activeWindow.showOnHover
             onToggled: GlobalConfig.bar.activeWindow.showOnHover = checked
         }
 
         ToggleRow {
             last: true
-            text: qsTr("Volet au survol")
-            subtext: qsTr("Afficher les détails de la fenêtre au survol")
+            text: I18n.tr("Volet au survol")
+            subtext: I18n.tr("Afficher les détails de la fenêtre au survol")
             checked: Config.bar.popouts.activeWindow
             onToggled: GlobalConfig.bar.popouts.activeWindow = checked
         }

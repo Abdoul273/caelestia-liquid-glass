@@ -103,9 +103,9 @@ Singleton {
             return;
 
         if (capsLock)
-            Toaster.toast(qsTr("Verrouillage majuscule activé"), qsTr("Le verrouillage majuscule est actuellement activé"), "keyboard_capslock_badge");
+            Toaster.toast(I18n.tr("Verrouillage majuscule activé"), I18n.tr("Le verrouillage majuscule est actuellement activé"), "keyboard_capslock_badge");
         else
-            Toaster.toast(qsTr("Verrouillage majuscule désactivé"), qsTr("Le verrouillage majuscule est actuellement désactivé"), "keyboard_capslock");
+            Toaster.toast(I18n.tr("Verrouillage majuscule désactivé"), I18n.tr("Le verrouillage majuscule est actuellement désactivé"), "keyboard_capslock");
     }
 
     onNumLockChanged: {
@@ -113,9 +113,9 @@ Singleton {
             return;
 
         if (numLock)
-            Toaster.toast(qsTr("Pavé numérique activé"), qsTr("Le pavé numérique est actuellement activé"), "looks_one");
+            Toaster.toast(I18n.tr("Pavé numérique activé"), I18n.tr("Le pavé numérique est actuellement activé"), "looks_one");
         else
-            Toaster.toast(qsTr("Pavé numérique désactivé"), qsTr("Le pavé numérique est actuellement désactivé"), "timer_1");
+            Toaster.toast(I18n.tr("Pavé numérique désactivé"), I18n.tr("Le pavé numérique est actuellement désactivé"), "timer_1");
     }
 
     onKbLayoutFullChanged: {
@@ -125,7 +125,7 @@ Singleton {
             return;
 
         if (hadKeyboard && lastKbLayout && kbLayoutFull !== lastKbLayout && GlobalConfig.utilities.toasts.kbLayoutChanged)
-            Toaster.toast(qsTr("Disposition du clavier modifiée"), qsTr("Disposition changée pour : %1").arg(kbLayoutFull), "keyboard");
+            Toaster.toast(I18n.tr("Disposition du clavier modifiée"), I18n.tr("Disposition changée pour : %1").arg(kbLayoutFull), "keyboard");
 
         hadKeyboard = true;
         lastKbLayout = kbLayoutFull;

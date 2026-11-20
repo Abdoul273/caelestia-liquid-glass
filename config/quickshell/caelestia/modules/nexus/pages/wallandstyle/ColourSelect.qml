@@ -8,7 +8,7 @@ import qs.modules.nexus.common
 PageBase {
     id: root
 
-    title: qsTr("Couleurs")
+    title: I18n.tr("Couleurs")
     isSubPage: true
 
     Item {
@@ -31,14 +31,14 @@ PageBase {
 
             StyledText {
                 Layout.alignment: Qt.AlignHCenter
-                text: qsTr("Page en cours de construction")
+                text: I18n.tr("Page en cours de construction")
                 color: Colours.palette.m3outlineVariant
                 font: Tokens.font.title.large
             }
 
             StyledText {
                 Layout.alignment: Qt.AlignHCenter
-                text: qsTr("Cette page sera disponible dans une prochaine mise à jour.")
+                text: I18n.tr("Cette page sera disponible dans une prochaine mise à jour.")
                 color: Colours.palette.m3outlineVariant
                 font: Tokens.font.body.large
             }

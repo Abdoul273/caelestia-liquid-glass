@@ -82,9 +82,9 @@ Singleton {
         if (!enabled)
             return "";
         if (until <= 0)
-            return qsTr("Sans limite");
+            return I18n.tr("Sans limite");
         const min = Math.ceil(remaining / 60000);
-        return min >= 60 ? qsTr("%1 h %2").arg(Math.floor(min / 60)).arg((min % 60).toString().padStart(2, "0")) : qsTr("%1 min").arg(min);
+        return min >= 60 ? I18n.tr("%1 h %2").arg(Math.floor(min / 60)).arg((min % 60).toString().padStart(2, "0")) : I18n.tr("%1 min").arg(min);
     }
 
     Timer {

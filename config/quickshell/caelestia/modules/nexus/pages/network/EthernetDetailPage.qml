@@ -95,7 +95,7 @@ PageBase {
         });
     }
 
-    title: root.device?.connection || root.ifaceName || qsTr("Ethernet")
+    title: root.device?.connection || root.ifaceName || I18n.tr("Ethernet")
     isSubPage: true
 
     Component.onCompleted: {
@@ -151,7 +151,7 @@ PageBase {
 
                     StyledText {
                         Layout.alignment: Qt.AlignHCenter
-                        text: root.device?.connected ? qsTr("Se déconnecter") : qsTr("Se connecter")
+                        text: root.device?.connected ? I18n.tr("Se déconnecter") : I18n.tr("Se connecter")
                         color: connectBtn.onColour
                     }
                 }
@@ -161,51 +161,51 @@ PageBase {
         // ---- Connection info ------------------------------------------------
         SectionHeader {
             first: true
-            text: qsTr("Connexion")
+            text: I18n.tr("Connexion")
         }
 
         InfoRow {
             first: true
             icon: "link"
-            label: qsTr("État")
-            value: root.device?.connected ? qsTr("Connecté") : qsTr("Non connecté")
+            label: I18n.tr("État")
+            value: root.device?.connected ? I18n.tr("Connecté") : I18n.tr("Non connecté")
         }
 
         InfoRow {
             icon: "settings_ethernet"
-            label: qsTr("Interface")
-            value: root.ifaceName || qsTr("—")
+            label: I18n.tr("Interface")
+            value: root.ifaceName || I18n.tr("—")
         }
 
         InfoRow {
             icon: "speed"
-            label: qsTr("Vitesse")
+            label: I18n.tr("Vitesse")
             visible: Nmcli.ethernetSpeed.length > 0
             value: Nmcli.ethernetSpeed
         }
 
         InfoRow {
             icon: "lan"
-            label: qsTr("Adresse IP")
-            value: root.details?.ipAddress || qsTr("—")
+            label: I18n.tr("Adresse IP")
+            value: root.details?.ipAddress || I18n.tr("—")
         }
 
         InfoRow {
             icon: "router"
-            label: qsTr("Passerelle")
-            value: root.details?.gateway || qsTr("—")
+            label: I18n.tr("Passerelle")
+            value: root.details?.gateway || I18n.tr("—")
         }
 
         InfoRow {
             last: true
             icon: "memory"
-            label: qsTr("Adresse MAC")
-            value: root.details?.macAddress || qsTr("—")
+            label: I18n.tr("Adresse MAC")
+            value: root.details?.macAddress || I18n.tr("—")
         }
 
         // ---- IPv4 ------------------------------------------------------------
         SectionHeader {
-            text: qsTr("IPv4")
+            text: I18n.tr("IPv4")
         }
 
         SelectRow {
@@ -214,8 +214,8 @@ PageBase {
             Layout.fillWidth: true
             first: true
             last: root.ipMethod === "auto"
-            label: qsTr("Attribution IP")
-            fallbackText: qsTr("Automatique (DHCP)")
+            label: I18n.tr("Attribution IP")
+            fallbackText: I18n.tr("Automatique (DHCP)")
             fallbackIcon: "lan"
 
             menuItems: [autoItem, autoDnsItem, manualItem]
@@ -226,21 +226,21 @@ PageBase {
                 id: autoItem
 
                 icon: "lan"
-                text: qsTr("Automatique (DHCP)")
+                text: I18n.tr("Automatique (DHCP)")
             }
 
             MenuItem {
                 id: autoDnsItem
 
                 icon: "dns"
-                text: qsTr("Automatique, DNS uniquement")
+                text: I18n.tr("Automatique, DNS uniquement")
             }
 
             MenuItem {
                 id: manualItem
 
                 icon: "edit"
-                text: qsTr("Manuel")
+                text: I18n.tr("Manuel")
             }
         }
 
@@ -255,10 +255,10 @@ PageBase {
 
                 Layout.fillWidth: true
                 visible: root.ipMethod === "manual"
-                placeholderText: qsTr("Adresse (CIDR)")
+                placeholderText: I18n.tr("Adresse (CIDR)")
                 leadingIcon: "router"
-                supportingText: qsTr("IP et masque, ex. 192.168.1.50/24")
-                errorText: qsTr("Entrez une adresse valide en notation CIDR")
+                supportingText: I18n.tr("IP et masque, ex. 192.168.1.50/24")
+                errorText: I18n.tr("Entrez une adresse valide en notation CIDR")
                 inputMethodHints: Qt.ImhNoPredictiveText
                 validate: /^(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\/(?:3[0-2]|[12]?\d)$/
             }
@@ -268,9 +268,9 @@ PageBase {
 
                 Layout.fillWidth: true
                 visible: root.ipMethod === "manual"
-                placeholderText: qsTr("Passerelle")
+                placeholderText: I18n.tr("Passerelle")
                 leadingIcon: "exit_to_app"
-                errorText: qsTr("Entrez une adresse de passerelle valide")
+                errorText: I18n.tr("Entrez une adresse de passerelle valide")
                 inputMethodHints: Qt.ImhNoPredictiveText
                 validate: /^$|^(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)$/
             }
@@ -279,10 +279,10 @@ PageBase {
                 id: dnsField
 
                 Layout.fillWidth: true
-                placeholderText: qsTr("Serveurs DNS")
+                placeholderText: I18n.tr("Serveurs DNS")
                 leadingIcon: "dns"
-                supportingText: qsTr("Séparés par des virgules")
-                errorText: qsTr("Entrez des adresses DNS valides")
+                supportingText: I18n.tr("Séparés par des virgules")
+                errorText: I18n.tr("Entrez des adresses DNS valides")
                 inputMethodHints: Qt.ImhNoPredictiveText
                 validate: /^$|^\s*(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\s*,\s*(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d))*\s*$/
             }
@@ -337,7 +337,7 @@ PageBase {
                     id: applyTextComp
 
                     StyledText {
-                        text: qsTr("Appliquer")
+                        text: I18n.tr("Appliquer")
                         color: applyBtn.onColour
                         animate: true
                     }

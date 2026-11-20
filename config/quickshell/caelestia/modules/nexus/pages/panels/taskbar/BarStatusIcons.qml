@@ -3,21 +3,22 @@ pragma ComponentBehavior: Bound
 import QtQuick.Layouts
 import Caelestia.Config
 import qs.modules.nexus.common
+import qs.services
 
 PageBase {
     id: root
 
     readonly property var builtinIcons: ({
-            lockStatus: qsTr("Touches de verrouillage"),
-            kbLayout: qsTr("Disposition du clavier"),
-            audio: qsTr("Haut-parleurs"),
-            microphone: qsTr("Microphone"),
-            network: qsTr("Réseau"),
-            bluetooth: qsTr("Bluetooth"),
-            battery: qsTr("Batterie")
+            lockStatus: I18n.tr("Touches de verrouillage"),
+            kbLayout: I18n.tr("Disposition du clavier"),
+            audio: I18n.tr("Haut-parleurs"),
+            microphone: I18n.tr("Microphone"),
+            network: I18n.tr("Réseau"),
+            bluetooth: I18n.tr("Bluetooth"),
+            battery: I18n.tr("Batterie")
         })
 
-    title: qsTr("Icônes d'état")
+    title: I18n.tr("Icônes d'état")
     isSubPage: true
 
     ColumnLayout {
@@ -29,7 +30,7 @@ PageBase {
         // Visible icons
         SectionHeader {
             first: true
-            text: qsTr("Icônes visibles")
+            text: I18n.tr("Icônes visibles")
         }
 
         ListEditor {
@@ -58,9 +59,9 @@ PageBase {
 
             rootParent: root.flickable
             icon: "add"
-            label: qsTr("Ajouter une entrée")
-            header: qsTr("Ajouter une entrée")
-            acceptLabel: qsTr("Ajouter")
+            label: I18n.tr("Ajouter une entrée")
+            header: I18n.tr("Ajouter une entrée")
+            acceptLabel: I18n.tr("Ajouter")
 
             model: {
                 const builtins = Object.keys(root.builtinIcons).map(k => ({
@@ -83,14 +84,14 @@ PageBase {
 
         // Behaviour
         SectionHeader {
-            text: qsTr("Comportement")
+            text: I18n.tr("Comportement")
         }
 
         ToggleRow {
             first: true
             last: true
-            text: qsTr("Volet au survol")
-            subtext: qsTr("Afficher les détails au survol des icônes d'état")
+            text: I18n.tr("Volet au survol")
+            subtext: I18n.tr("Afficher les détails au survol des icônes d'état")
             checked: Config.bar.popouts.statusIcons
             onToggled: GlobalConfig.bar.popouts.statusIcons = checked
         }

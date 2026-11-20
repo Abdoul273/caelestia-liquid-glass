@@ -11,7 +11,7 @@ import qs.modules.nexus.common
 PageBase {
     id: root
 
-    title: qsTr("Tous les réseaux")
+    title: I18n.tr("Tous les réseaux")
     isSubPage: true
     flickable.bottomMargin: Tokens.padding.extraExtraLarge * 2 // Extra scrolling space at the bottom
 
@@ -47,7 +47,7 @@ PageBase {
                 spacing: Tokens.spacing.extraSmall / 2
 
                 StyledText {
-                    text: qsTr("Filtres")
+                    text: I18n.tr("Filtres")
                     font: Tokens.font.title.small
                 }
 
@@ -62,7 +62,7 @@ PageBase {
                         return Nmcli.hasSavedProfile(ap.ssid);
                     }
 
-                    text: qsTr("Enregistré")
+                    text: I18n.tr("Enregistré")
                     topLeftRadius: pressed ? pressedRadius : implicitHeight / 2
                     bottomLeftRadius: pressed ? pressedRadius : implicitHeight / 2
 
@@ -86,7 +86,7 @@ PageBase {
                         return ap.security !== "none";
                     }
 
-                    text: qsTr("Sécurisé")
+                    text: I18n.tr("Sécurisé")
                 }
 
                 FilterButton {
@@ -96,7 +96,7 @@ PageBase {
                         return ap.frequency >= 4900 && ap.frequency <= 5900;
                     }
 
-                    text: qsTr("5 GHz")
+                    text: I18n.tr("5 GHz")
                 }
 
                 FilterButton {
@@ -106,7 +106,7 @@ PageBase {
                         return ap.frequency >= 2400 && ap.frequency <= 2500;
                     }
 
-                    text: qsTr("2,4 GHz")
+                    text: I18n.tr("2,4 GHz")
                     topRightRadius: pressed ? pressedRadius : implicitHeight / 2
                     bottomRightRadius: pressed ? pressedRadius : implicitHeight / 2
 

@@ -1,6 +1,7 @@
 pragma Singleton
 
 import QtQuick
+import qs.services
 
 QtObject {
     id: root
@@ -8,9 +9,9 @@ QtObject {
     readonly property list<var> pages: [
         // Appearance
         {
-            label: qsTr("Fond d'écran et style"),
+            label: I18n.tr("Fond d'écran et style"),
             icon: "palette",
-            description: qsTr("Fond d'écran, polices, couleurs"),
+            description: I18n.tr("Fond d'écran, polices, couleurs"),
             category: "appearance"
         },
 
@@ -23,83 +24,83 @@ QtObject {
         //     category: "connectivity"
         // },
         {
-            label: qsTr("Réseau"),
+            label: I18n.tr("Réseau"),
             icon: "wifi",
-            description: qsTr("Wi-Fi, Ethernet, VPN"),
+            description: I18n.tr("Wi-Fi, Ethernet, VPN"),
             category: "connectivity"
         },
         {
-            label: qsTr("Appareils connectés"),
+            label: I18n.tr("Appareils connectés"),
             icon: "devices_other",
-            description: qsTr("Bluetooth, appairage"),
+            description: I18n.tr("Bluetooth, appairage"),
             category: "connectivity",
             noFill: true
         },
         {
-            label: qsTr("Audio"),
+            label: I18n.tr("Audio"),
             icon: "volume_up",
-            description: qsTr("Volumes des applications, périphériques audio"),
+            description: I18n.tr("Volumes des applications, périphériques audio"),
             category: "connectivity"
         },
 
         // System
         {
-            label: qsTr("Alimentation"),
+            label: I18n.tr("Alimentation"),
             icon: "settings_power",
-            description: qsTr("Capot, veille"),
+            description: I18n.tr("Capot, veille"),
             category: "system"
         },
         {
-            label: qsTr("Mises à jour"),
+            label: I18n.tr("Mises à jour"),
             icon: "update",
-            description: qsTr("Mises à jour système"),
+            description: I18n.tr("Mises à jour système"),
             category: "system"
         },
         {
-            label: qsTr("Extensions"),
+            label: I18n.tr("Extensions"),
             icon: "extension",
-            description: qsTr("Gérer les extensions"),
+            description: I18n.tr("Gérer les extensions"),
             category: "system"
         },
 
         // Shell
         {
-            label: qsTr("Panneaux"),
+            label: I18n.tr("Panneaux"),
             icon: "dock_to_bottom",
-            description: qsTr("Tableau de bord, barre des tâches, lanceur, volet latéral"),
+            description: I18n.tr("Tableau de bord, barre des tâches, lanceur, volet latéral"),
             category: "shell"
         },
         {
-            label: qsTr("Applications"),
+            label: I18n.tr("Applications"),
             icon: "apps",
-            description: qsTr("Applications par défaut, favoris, masquées"),
+            description: I18n.tr("Applications par défaut, favoris, masquées"),
             category: "shell"
         },
         {
-            label: qsTr("Services"),
+            label: I18n.tr("Services"),
             icon: "build",
-            description: qsTr("Intervalles d'actualisation, fournisseur des paroles"),
+            description: I18n.tr("Intervalles d'actualisation, fournisseur des paroles"),
             category: "shell"
         },
         {
-            label: qsTr("Langue et région"),
+            label: I18n.tr("Langue et région"),
             icon: "globe",
-            description: qsTr("Langue de l'interface, ville météo, unités d'affichage"),
+            description: I18n.tr("Langue de l'interface, ville météo, unités d'affichage"),
             category: "shell"
         },
 
         {
-            label: qsTr("Façon macOS"),
+            label: I18n.tr("Façon macOS"),
             icon: "auto_awesome",
-            description: qsTr("Dynamic Island, Centre de contrôle, Dock"),
+            description: I18n.tr("Dynamic Island, Centre de contrôle, Dock"),
             category: "shell"
         },
 
         // About
         {
-            label: qsTr("À propos"),
+            label: I18n.tr("À propos"),
             icon: "info",
-            description: qsTr("Informations système, crédits"),
+            description: I18n.tr("Informations système, crédits"),
             category: "about"
         },
     ]

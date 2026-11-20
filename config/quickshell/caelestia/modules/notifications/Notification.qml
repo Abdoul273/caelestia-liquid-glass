@@ -525,7 +525,7 @@ StyledRect {
                         fillWidth: true
                         inactiveColour: root.critical ? Qt.alpha(Colours.palette.m3secondary, 0.75) : Qt.alpha(Colours.palette.m3onSurface, 0.1)
                         inactiveOnColour: root.modelData.urgency === NotificationUrgency.Critical ? Colours.palette.m3onSecondary : Colours.palette.m3onSurfaceVariant
-                        text: modelData.text || qsTr("Voir")
+                        text: modelData.text || I18n.tr("Voir")
                         onClicked: modelData.invoke()
 
                         label.horizontalAlignment: Text.AlignHCenter

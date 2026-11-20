@@ -36,16 +36,16 @@ Item {
     function relTime(ms: real): string {
         const diff = (Date.now() - ms) / 1000;
         if (diff < 60)
-            return qsTr("à l'instant");
+            return I18n.tr("à l'instant");
         if (diff < 3600)
-            return qsTr("il y a %1 min").arg(Math.floor(diff / 60));
+            return I18n.tr("il y a %1 min").arg(Math.floor(diff / 60));
         const d = new Date(ms);
         const today = new Date();
         if (d.toDateString() === today.toDateString())
             return d.toLocaleTimeString(Qt.locale(), "HH:mm");
         const yest = new Date(today.getTime() - 86400000);
         if (d.toDateString() === yest.toDateString())
-            return qsTr("hier");
+            return I18n.tr("hier");
         if (d.getFullYear() === today.getFullYear())
             return d.toLocaleDateString(Qt.locale(), "d MMM");
         return d.toLocaleDateString(Qt.locale(), "d MMM yyyy");
@@ -207,7 +207,7 @@ Item {
                         StyledText {
                             Layout.fillWidth: true
                             Layout.minimumWidth: 0
-                            text: root.shownMode === "tasks" ? qsTr("Tâches") : qsTr("Notes")
+                            text: root.shownMode === "tasks" ? I18n.tr("Tâches") : I18n.tr("Notes")
                             elide: Text.ElideRight
                             font: Tokens.font.body.builders.large.size(15).weight(Font.DemiBold).build()
                             color: Colours.palette.m3onSurface
@@ -318,13 +318,13 @@ Item {
                         ModeButton {
                             mode: "notes"
                             icon: "sticky_note_2"
-                            label: qsTr("Notes")
+                            label: I18n.tr("Notes")
                         }
 
                         ModeButton {
                             mode: "tasks"
                             icon: "task_alt"
-                            label: Tasks.todoCount > 0 ? qsTr("Tâches · %1").arg(Tasks.todoCount) : qsTr("Tâches")
+                            label: Tasks.todoCount > 0 ? I18n.tr("Tâches · %1").arg(Tasks.todoCount) : I18n.tr("Tâches")
                         }
                     }
                 }
@@ -339,7 +339,7 @@ Item {
 
                         Layout.fillWidth: true
                         Layout.minimumWidth: 0
-                        placeholderText: qsTr("Rechercher")
+                        placeholderText: I18n.tr("Rechercher")
                         text: root.query
                         onTextChanged: root.query = text
                         Keys.onEscapePressed: {
@@ -502,7 +502,7 @@ Item {
                         anchors.centerIn: parent
                         visible: list.count === 0
                         horizontalAlignment: Text.AlignHCenter
-                        text: root.query ? qsTr("Aucun résultat") : qsTr("Aucune note\nCtrl+N pour commencer")
+                        text: root.query ? I18n.tr("Aucun résultat") : I18n.tr("Aucune note\nCtrl+N pour commencer")
                         color: Colours.palette.m3onSurfaceVariant
                         font: Tokens.font.body.small
                     }
@@ -545,7 +545,7 @@ Item {
 
                             StyledText {
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: qsTr("accompli")
+                                text: I18n.tr("accompli")
                                 font: Tokens.font.label.small
                                 color: Colours.palette.m3onSurfaceVariant
                             }
@@ -555,7 +555,7 @@ Item {
                     StyledText {
                         Layout.alignment: Qt.AlignHCenter
                         horizontalAlignment: Text.AlignHCenter
-                        text: Tasks.tasks.length === 0 ? qsTr("Aucune tâche") : Tasks.todoCount === 0 ? qsTr("Tout est fait 🎉") : Tasks.todoCount === 1 ? qsTr("1 tâche à faire") : qsTr("%1 tâches à faire").arg(Tasks.todoCount)
+                        text: Tasks.tasks.length === 0 ? I18n.tr("Aucune tâche") : Tasks.todoCount === 0 ? I18n.tr("Tout est fait 🎉") : Tasks.todoCount === 1 ? I18n.tr("1 tâche à faire") : I18n.tr("%1 tâches à faire").arg(Tasks.todoCount)
                         font: Tokens.font.body.medium
                         color: Colours.palette.m3onSurface
                     }
@@ -569,21 +569,21 @@ Item {
                         FilterRow {
                             filter: "all"
                             icon: "inbox"
-                            label: qsTr("Toutes")
+                            label: I18n.tr("Toutes")
                             count: Tasks.todoCount
                         }
 
                         FilterRow {
                             filter: "today"
                             icon: "today"
-                            label: qsTr("Aujourd'hui")
+                            label: I18n.tr("Aujourd'hui")
                             count: Tasks.todayCount
                         }
 
                         FilterRow {
                             filter: "overdue"
                             icon: "event_busy"
-                            label: qsTr("En retard")
+                            label: I18n.tr("En retard")
                             count: Tasks.overdueCount
                             alert: true
                         }
@@ -596,7 +596,7 @@ Item {
                     TextButton {
                         Layout.alignment: Qt.AlignHCenter
                         visible: Tasks.doneCount > 0
-                        text: qsTr("Effacer les terminées")
+                        text: I18n.tr("Effacer les terminées")
                         type: TextButton.Text
                         onClicked: Tasks.clearDone()
                     }
@@ -607,7 +607,7 @@ Item {
                     Layout.alignment: Qt.AlignHCenter
                     readonly property int n: Notes.notes.filter(n => n.locked || n.body.trim()).length
 
-                    text: n === 1 ? qsTr("1 note") : qsTr("%1 notes").arg(n)
+                    text: n === 1 ? I18n.tr("1 note") : I18n.tr("%1 notes").arg(n)
                     font: Tokens.font.label.small
                     color: Colours.palette.m3outline
                 }
@@ -653,7 +653,7 @@ Item {
                     StyledText {
                         Layout.fillWidth: true
                         Layout.leftMargin: Tokens.padding.small
-                        text: Notes.current ? qsTr("Modifiée %1").arg(root.relTime(Notes.current.updated)) : ""
+                        text: Notes.current ? I18n.tr("Modifiée %1").arg(root.relTime(Notes.current.updated)) : ""
                         font: Tokens.font.label.medium
                         color: Colours.palette.m3onSurfaceVariant
                         elide: Text.ElideRight
@@ -678,7 +678,7 @@ Item {
 
                         StyledText {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: Notes.syncFailed ? qsTr("Synchro impossible") : Notes.dirty ? qsTr("Synchronisation…") : qsTr("Synchronisé")
+                            text: Notes.syncFailed ? I18n.tr("Synchro impossible") : Notes.dirty ? I18n.tr("Synchronisation…") : I18n.tr("Synchronisé")
                             font: Tokens.font.label.medium
                             color: Colours.palette.m3onSurfaceVariant
                         }
@@ -712,7 +712,7 @@ Item {
                             editor.selectAll();
                             editor.copy();
                             editor.deselect();
-                            Toaster.toast(qsTr("Note copiée"), Notes.titleOf(Notes.current), "content_copy");
+                            Toaster.toast(I18n.tr("Note copiée"), Notes.titleOf(Notes.current), "content_copy");
                         }
                     }
 
@@ -886,7 +886,7 @@ Item {
                         StyledText {
                             x: editor.leftPadding
                             visible: !editor.text
-                            text: Notes.current?.locked ? qsTr("🔒 Note chiffrée\nOuvre-la dans AetherNotes pour la lire.") : Notes.current ? qsTr("Commence à écrire…\nLa première ligne sert de titre.") : qsTr("Crée une note avec + ou Ctrl+N")
+                            text: Notes.current?.locked ? I18n.tr("🔒 Note chiffrée\nOuvre-la dans AetherNotes pour la lire.") : Notes.current ? I18n.tr("Commence à écrire…\nLa première ligne sert de titre.") : I18n.tr("Crée une note avec + ou Ctrl+N")
                             color: Colours.palette.m3outline
                             font: editor.font
                         }

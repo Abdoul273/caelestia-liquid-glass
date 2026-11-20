@@ -45,39 +45,39 @@ Item {
     readonly property var targets: [
         {
             id: "auto",
-            label: qsTr("Auto")
+            label: I18n.tr("Auto")
         },
         {
             id: "anglais",
-            label: qsTr("Anglais")
+            label: I18n.tr("Anglais")
         },
         {
             id: "français",
-            label: qsTr("Français")
+            label: I18n.tr("Français")
         },
         {
             id: "arabe",
-            label: qsTr("Arabe")
+            label: I18n.tr("Arabe")
         },
         {
             id: "espagnol",
-            label: qsTr("Espagnol")
+            label: I18n.tr("Espagnol")
         },
         {
             id: "allemand",
-            label: qsTr("Allemand")
+            label: I18n.tr("Allemand")
         },
         {
             id: "italien",
-            label: qsTr("Italien")
+            label: I18n.tr("Italien")
         },
         {
             id: "portugais",
-            label: qsTr("Portugais")
+            label: I18n.tr("Portugais")
         },
         {
             id: "chinois simplifié",
-            label: qsTr("Chinois")
+            label: I18n.tr("Chinois")
         }
     ]
 
@@ -136,7 +136,7 @@ Item {
         backend.send({
             copy: result
         });
-        hint = qsTr("Copié dans le presse-papiers ✓");
+        hint = I18n.tr("Copié dans le presse-papiers ✓");
         hintTimer.restart();
     }
 
@@ -340,7 +340,7 @@ Item {
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
                         visible: !input.text
-                        text: qsTr("Texte à traduire…")
+                        text: I18n.tr("Texte à traduire…")
                         color: Qt.alpha(root.fg, 0.38)
                         font: input.font
                     }
@@ -421,7 +421,7 @@ Item {
                 }
 
                 Text {
-                    text: (root.sourceLang || "…") + "  →  " + (root.targets[root.target].id === "auto" ? (root.sourceLang === "Français" ? qsTr("Anglais") : root.sourceLang ? qsTr("Français") : "…") : root.targets[root.target].label)
+                    text: (root.sourceLang || "…") + "  →  " + (root.targets[root.target].id === "auto" ? (root.sourceLang === "Français" ? I18n.tr("Anglais") : root.sourceLang ? I18n.tr("Français") : "…") : root.targets[root.target].label)
                     color: root.blue
                     font.pixelSize: 13
                     font.weight: Font.Medium
@@ -432,7 +432,7 @@ Item {
                     readOnly: true
                     selectByMouse: true
                     activeFocusOnPress: false
-                    text: root.error ? qsTr("Erreur : %1").arg(root.error) : root.result || qsTr("Traduction…")
+                    text: root.error ? I18n.tr("Erreur : %1").arg(root.error) : root.result || I18n.tr("Traduction…")
                     color: root.error ? "#ff453a" : root.result ? (root.busy ? root.fgDim : root.fg) : Qt.alpha(root.fg, 0.35)
                     wrapMode: TextEdit.Wrap
                     font.pixelSize: root.result.length > 220 ? 17 : 24
@@ -447,7 +447,7 @@ Item {
                 }
 
                 Text {
-                    text: root.hint || qsTr("Entrée insérer dans le champ  ·  Ctrl + C copier  ·  Tab langue  ·  Échap effacer / fermer")
+                    text: root.hint || I18n.tr("Entrée insérer dans le champ  ·  Ctrl + C copier  ·  Tab langue  ·  Échap effacer / fermer")
                     color: root.hint ? root.blue : Qt.alpha(root.fg, 0.4)
                     font.pixelSize: 12
                 }

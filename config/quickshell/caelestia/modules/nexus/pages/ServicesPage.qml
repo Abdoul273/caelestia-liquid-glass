@@ -13,7 +13,7 @@ PageBase {
     // Lyrics backends, ordered to match LyricsBackend::Backend (Auto, Local, LRCLIB, NetEase)
     readonly property list<MenuItem> lyricsItems: [
         MenuItem {
-            text: qsTr("Auto")
+            text: I18n.tr("Auto")
         },
         MenuItem {
             text: "Local"
@@ -29,16 +29,16 @@ PageBase {
     // GPU options + the config string each maps to (see Gpu::parseType)
     readonly property list<MenuItem> gpuItems: [
         MenuItem {
-            text: qsTr("Auto")
+            text: I18n.tr("Auto")
         },
         MenuItem {
             text: "NVIDIA"
         },
         MenuItem {
-            text: qsTr("Générique")
+            text: I18n.tr("Générique")
         },
         MenuItem {
-            text: qsTr("Aucun")
+            text: I18n.tr("Aucun")
         }
     ]
     readonly property list<string> gpuValues: ["", "NVIDIA", "GENERIC", "None"]
@@ -54,7 +54,7 @@ PageBase {
         return 3; // None
     }
 
-    title: qsTr("Services")
+    title: I18n.tr("Services")
 
     ColumnLayout {
         anchors.horizontalCenter: parent.horizontalCenter
@@ -80,27 +80,27 @@ PageBase {
         // Notifications
         SectionHeader {
             first: true
-            text: qsTr("Notifications")
+            text: I18n.tr("Notifications")
         }
 
         NavRow {
             first: true
             last: true
             icon: "notifications"
-            text: qsTr("Notifications")
-            subtext: qsTr("Notifications, toasts, délais")
+            text: I18n.tr("Notifications")
+            subtext: I18n.tr("Notifications, toasts, délais")
             onClicked: root.nState.openSubPage(1)
         }
 
         // Polling
         SectionHeader {
-            text: qsTr("Actualisation")
+            text: I18n.tr("Actualisation")
         }
 
         StepperRow {
             first: true
-            label: qsTr("Actualisation média")
-            subtext: qsTr("Fréquence de suivi de lecture (ms)")
+            label: I18n.tr("Actualisation média")
+            subtext: I18n.tr("Fréquence de suivi de lecture (ms)")
             value: GlobalConfig.dashboard.mediaUpdateInterval
             from: 100
             to: 2000
@@ -109,8 +109,8 @@ PageBase {
         }
 
         StepperRow {
-            label: qsTr("Actualisation des statistiques système")
-            subtext: qsTr("Intervalle d'actualisation CPU, mémoire et GPU (secondes)")
+            label: I18n.tr("Actualisation des statistiques système")
+            subtext: I18n.tr("Intervalle d'actualisation CPU, mémoire et GPU (secondes)")
             value: GlobalConfig.dashboard.resourceUpdateInterval / 1000
             from: 0.5
             to: 10
@@ -120,8 +120,8 @@ PageBase {
 
         StepperRow {
             last: true
-            label: qsTr("Recherche Wi-Fi")
-            subtext: qsTr("Fréquence de détection des réseaux (secondes)")
+            label: I18n.tr("Recherche Wi-Fi")
+            subtext: I18n.tr("Fréquence de détection des réseaux (secondes)")
             value: GlobalConfig.nexus.networkRescanInterval / 1000
             from: 5
             to: 120
@@ -131,13 +131,13 @@ PageBase {
 
         // Media & lyrics
         SectionHeader {
-            text: qsTr("Médias et paroles")
+            text: I18n.tr("Médias et paroles")
         }
 
         SelectRow {
             first: true
-            label: qsTr("Fournisseur des paroles")
-            subtext: qsTr("Source utilisée pour récupérer les paroles synchronisées")
+            label: I18n.tr("Fournisseur des paroles")
+            subtext: I18n.tr("Source utilisée pour récupérer les paroles synchronisées")
             menuItems: root.lyricsItems
             active: root.lyricsItems[Lyrics.preferredBackend] ?? root.lyricsItems[0]
             onSelected: item => Lyrics.preferredBackend = root.lyricsItems.indexOf(item)
@@ -145,24 +145,24 @@ PageBase {
 
         SelectRow {
             last: true
-            label: qsTr("Lecteur par défaut")
-            subtext: qsTr("Lecteur multimédia par défaut lorsque plusieurs sont actifs")
+            label: I18n.tr("Lecteur par défaut")
+            subtext: I18n.tr("Lecteur multimédia par défaut lorsque plusieurs sont actifs")
             menuItems: playerVariants.instances
             active: menuItems.find(i => i.text === GlobalConfig.services.defaultPlayer) ?? null
             fallbackIcon: "music_note"
-            fallbackText: GlobalConfig.services.defaultPlayer || qsTr("Auto")
+            fallbackText: GlobalConfig.services.defaultPlayer || I18n.tr("Auto")
             onSelected: item => GlobalConfig.services.defaultPlayer = item.text
         }
 
         // Input increments
         SectionHeader {
-            text: qsTr("Incréments de saisie")
+            text: I18n.tr("Incréments de saisie")
         }
 
         StepperRow {
             first: true
-            label: qsTr("Pas de volume")
-            subtext: qsTr("Variation de volume par défilement (%)")
+            label: I18n.tr("Pas de volume")
+            subtext: I18n.tr("Variation de volume par défilement (%)")
             value: Math.round(GlobalConfig.services.audioIncrement * 100)
             from: 1
             to: 50
@@ -171,8 +171,8 @@ PageBase {
         }
 
         StepperRow {
-            label: qsTr("Pas de luminosité")
-            subtext: qsTr("Variation de luminosité par défilement (%)")
+            label: I18n.tr("Pas de luminosité")
+            subtext: I18n.tr("Variation de luminosité par défilement (%)")
             value: Math.round(GlobalConfig.services.brightnessIncrement * 100)
             from: 1
             to: 50
@@ -182,8 +182,8 @@ PageBase {
 
         StepperRow {
             last: true
-            label: qsTr("Volume maximal")
-            subtext: qsTr("Limite maximale du volume de sortie (%)")
+            label: I18n.tr("Volume maximal")
+            subtext: I18n.tr("Limite maximale du volume de sortie (%)")
             value: Math.round(GlobalConfig.services.maxVolume * 100)
             from: 50
             to: 200
@@ -193,13 +193,13 @@ PageBase {
 
         // Service tuning
         SectionHeader {
-            text: qsTr("Ajustement des services")
+            text: I18n.tr("Ajustement des services")
         }
 
         StepperRow {
             first: true
-            label: qsTr("Barres du visualiseur")
-            subtext: qsTr("Nombre de barres pour les visualiseurs")
+            label: I18n.tr("Barres du visualiseur")
+            subtext: I18n.tr("Nombre de barres pour les visualiseurs")
             value: GlobalConfig.services.visualiserBars
             from: 10
             to: 120
@@ -208,16 +208,16 @@ PageBase {
         }
 
         ToggleRow {
-            text: qsTr("Schéma de couleurs dynamique")
-            subtext: qsTr("Adapter le thème et la nuance au fond d'écran")
+            text: I18n.tr("Schéma de couleurs dynamique")
+            subtext: I18n.tr("Adapter le thème et la nuance au fond d'écran")
             checked: GlobalConfig.services.smartScheme
             onToggled: GlobalConfig.services.smartScheme = checked
         }
 
         SelectRow {
             last: true
-            label: qsTr("GPU")
-            subtext: Gpu.name ? qsTr("Surveillance : %1").arg(Gpu.name) : qsTr("Forcer le type de GPU")
+            label: I18n.tr("GPU")
+            subtext: Gpu.name ? I18n.tr("Surveillance : %1").arg(Gpu.name) : I18n.tr("Forcer le type de GPU")
             menuOnTop: true
             menuItems: root.gpuItems
             active: root.gpuItems[root.gpuKeyToIndex(GlobalConfig.services.gpuType)]

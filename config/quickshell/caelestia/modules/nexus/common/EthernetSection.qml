@@ -50,7 +50,7 @@ ColumnLayout {
 
             StyledText {
                 Layout.fillWidth: true
-                text: qsTr("Ethernet")
+                text: I18n.tr("Ethernet")
                 font: Tokens.font.body.medium
             }
 
@@ -60,7 +60,7 @@ ColumnLayout {
 
                 StyledText {
                     Layout.alignment: Qt.AlignRight
-                    text: Nmcli.activeEthernet ? qsTr("Connecté") : qsTr("Non connecté")
+                    text: Nmcli.activeEthernet ? I18n.tr("Connecté") : I18n.tr("Non connecté")
                     color: Nmcli.activeEthernet ? Colours.palette.m3primary : Colours.palette.m3outline
                     font: Tokens.font.label.small
                 }
@@ -68,7 +68,7 @@ ColumnLayout {
                 StyledText {
                     Layout.alignment: Qt.AlignRight
                     visible: Nmcli.activeEthernet && Nmcli.ethernetDataUsage.length > 0
-                    text: qsTr("Données consommées : %1").arg(Nmcli.ethernetDataUsage)
+                    text: I18n.tr("Données consommées : %1").arg(Nmcli.ethernetDataUsage)
                     color: Colours.palette.m3outline
                     font: Tokens.font.label.small
                 }
@@ -140,7 +140,7 @@ ColumnLayout {
 
                     StyledText {
                         Layout.fillWidth: true
-                        text: ethRow.modelData.connection || ethRow.modelData.iface || qsTr("Connexion filaire")
+                        text: ethRow.modelData.connection || ethRow.modelData.iface || I18n.tr("Connexion filaire")
                         font: Tokens.font.body.medium
                         elide: Text.ElideRight
                         animate: true
@@ -148,7 +148,7 @@ ColumnLayout {
 
                     StyledText {
                         Layout.fillWidth: true
-                        text: ethRow.isConnected ? ethRow.modelData.iface : qsTr("Non connecté • %1").arg(ethRow.modelData.iface)
+                        text: ethRow.isConnected ? ethRow.modelData.iface : I18n.tr("Non connecté • %1").arg(ethRow.modelData.iface)
                         color: ethRow.isConnected ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
                         font: Tokens.font.label.small
                         elide: Text.ElideRight
@@ -192,13 +192,13 @@ ColumnLayout {
                         EthDetail {
                             id: ethIpAddr
 
-                            label: qsTr("Adresse IP locale")
+                            label: I18n.tr("Adresse IP locale")
                         }
 
                         EthDetail {
                             id: ethDns
 
-                            label: qsTr("DNS primaire")
+                            label: I18n.tr("DNS primaire")
                         }
                     }
                 }

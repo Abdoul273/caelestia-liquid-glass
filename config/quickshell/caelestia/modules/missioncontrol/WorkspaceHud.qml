@@ -114,7 +114,7 @@ Scope {
 
                     StyledText {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: qsTr("Bureau %1").arg(win.activeId)
+                        text: I18n.tr("Bureau %1").arg(win.activeId)
                         color: "white"
                         font.pointSize: 12
                         font.weight: Font.DemiBold

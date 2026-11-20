@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell.Io
 import Caelestia
 import Caelestia.Config
+import qs.services
 
 // TODO: handle this better later
 
@@ -110,7 +111,7 @@ Item {
             return;
 
         if (layoutsModel.count > 4) {
-            Toaster.toast(qsTr("Limite de dispositions"), qsTr("XKB ne supporte que 4 dispositions simultanées"), "warning");
+            Toaster.toast(I18n.tr("Limite de dispositions"), I18n.tr("XKB ne supporte que 4 dispositions simultanées"), "warning");
         }
     }
 

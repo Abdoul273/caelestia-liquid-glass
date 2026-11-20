@@ -33,7 +33,7 @@ Item {
         spacing: Tokens.spacing.medium
 
         StyledText {
-            text: qsTr("Périphérique de sortie")
+            text: I18n.tr("Périphérique de sortie")
             font: Tokens.font.body.builders.medium.weight(Font.Medium).build()
         }
 
@@ -54,7 +54,7 @@ Item {
 
         StyledText {
             Layout.topMargin: Tokens.spacing.medium
-            text: qsTr("Périphérique d'entrée")
+            text: I18n.tr("Périphérique d'entrée")
             font: Tokens.font.body.builders.medium.weight(Font.Medium).build()
         }
 
@@ -73,7 +73,7 @@ Item {
 
         StyledText {
             Layout.topMargin: Tokens.spacing.medium
-            text: qsTr("Volume (%1)").arg(Audio.muted ? qsTr("Muet") : `${Math.round(Audio.volume * 100)}%`)
+            text: I18n.tr("Volume (%1)").arg(Audio.muted ? I18n.tr("Muet") : `${Math.round(Audio.volume * 100)}%`)
             font: Tokens.font.body.builders.medium.weight(Font.Medium).build()
         }
 
@@ -104,7 +104,7 @@ Item {
             inactiveColour: Colours.palette.m3primaryContainer
             inactiveOnColour: Colours.palette.m3onPrimaryContainer
             verticalPadding: Tokens.padding.extraSmall
-            text: qsTr("Ouvrir les paramètres")
+            text: I18n.tr("Ouvrir les paramètres")
             icon: "settings"
 
             onClicked: root.popouts.detachRequested("audio")

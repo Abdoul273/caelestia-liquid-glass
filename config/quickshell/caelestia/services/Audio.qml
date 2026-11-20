@@ -101,9 +101,9 @@ Singleton {
 
     function getStreamName(stream: PwNode): string {
         if (!stream)
-            return qsTr("Inconnu");
+            return I18n.tr("Inconnu");
         // Try application name first, then description, then name
-        return stream.properties["application.name"] || stream.description || stream.name || qsTr("Application inconnue");
+        return stream.properties["application.name"] || stream.description || stream.name || I18n.tr("Application inconnue");
     }
 
     function refreshNodes(): void {
@@ -131,11 +131,11 @@ Singleton {
         if (!sink?.ready)
             return;
 
-        const newSinkName = sink.description || sink.name || qsTr("Périphérique inconnu");
+        const newSinkName = sink.description || sink.name || I18n.tr("Périphérique inconnu");
 
         if (previousSinkName && previousSinkName !== newSinkName && GlobalConfig.utilities.toasts.audioOutputChanged) {
             Sounds.playDeviceConnect();
-            Toaster.toast(qsTr("Sortie audio modifiée"), qsTr("Utilise désormais : %1").arg(newSinkName), "volume_up");
+            Toaster.toast(I18n.tr("Sortie audio modifiée"), I18n.tr("Utilise désormais : %1").arg(newSinkName), "volume_up");
         }
 
         previousSinkName = newSinkName;
@@ -145,11 +145,11 @@ Singleton {
         if (!source?.ready)
             return;
 
-        const newSourceName = source.description || source.name || qsTr("Périphérique inconnu");
+        const newSourceName = source.description || source.name || I18n.tr("Périphérique inconnu");
 
         if (previousSourceName && previousSourceName !== newSourceName && GlobalConfig.utilities.toasts.audioInputChanged) {
             Sounds.playDeviceConnect();
-            Toaster.toast(qsTr("Entrée audio modifiée"), qsTr("Utilise désormais : %1").arg(newSourceName), "mic");
+            Toaster.toast(I18n.tr("Entrée audio modifiée"), I18n.tr("Utilise désormais : %1").arg(newSourceName), "mic");
         }
 
         previousSourceName = newSourceName;
@@ -159,8 +159,8 @@ Singleton {
     // lazily-loaded singleton is created, so onValuesChanged would never fire.
     Component.onCompleted: {
         refreshNodes();
-        previousSinkName = sink?.description || sink?.name || qsTr("Périphérique inconnu");
-        previousSourceName = source?.description || source?.name || qsTr("Périphérique inconnu");
+        previousSinkName = sink?.description || sink?.name || I18n.tr("Périphérique inconnu");
+        previousSourceName = source?.description || source?.name || I18n.tr("Périphérique inconnu");
     }
 
     Connections {

@@ -4,11 +4,12 @@ import QtQuick
 import QtQuick.Layouts
 import Caelestia.Config
 import qs.modules.nexus.common
+import qs.services
 
 PageBase {
     id: root
 
-    title: qsTr("Volet latéral")
+    title: I18n.tr("Volet latéral")
     isSubPage: true
 
     ColumnLayout {
@@ -19,20 +20,20 @@ PageBase {
 
         SectionHeader {
             first: true
-            text: qsTr("Général")
+            text: I18n.tr("Général")
         }
 
         ToggleRow {
             first: true
-            text: qsTr("Activé")
+            text: I18n.tr("Activé")
             checked: Config.sidebar.enabled
             onToggled: GlobalConfig.sidebar.enabled = checked
         }
 
         StepperRow {
             last: true
-            label: qsTr("Seuil de glissement")
-            subtext: qsTr("Distance de glissement avant d'ouvrir le volet (px)")
+            label: I18n.tr("Seuil de glissement")
+            subtext: I18n.tr("Distance de glissement avant d'ouvrir le volet (px)")
             value: Config.sidebar.dragThreshold
             from: 0
             to: 200

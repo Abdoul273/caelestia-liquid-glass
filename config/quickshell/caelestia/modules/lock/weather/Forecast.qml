@@ -31,7 +31,7 @@ StyledRect {
         StyledText {
             id: title
 
-            text: qsTr("Prévisions heure par heure")
+            text: I18n.tr("Prévisions heure par heure")
             font: Tokens.font.title.medium
         }
     }
@@ -95,7 +95,7 @@ StyledRect {
                 StyledText {
                     Layout.topMargin: Tokens.spacing.extraSmall
                     Layout.alignment: Qt.AlignHCenter
-                    text: hour.index === 0 ? qsTr("Maintenant") : Qt.formatDateTime(new Date(hour.cond.timestamp.replace("T", " ")), GlobalConfig.services.useTwelveHourClock ? "ha" : "hh:00")
+                    text: hour.index === 0 ? I18n.tr("Maintenant") : Qt.formatDateTime(new Date(hour.cond.timestamp.replace("T", " ")), GlobalConfig.services.useTwelveHourClock ? "ha" : "hh:00")
                     color: Colours.palette.m3onSurfaceVariant
                     font: Tokens.font.body.medium
                 }

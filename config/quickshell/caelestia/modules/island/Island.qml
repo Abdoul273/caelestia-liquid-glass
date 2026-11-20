@@ -366,7 +366,7 @@ Item {
     }
     readonly property string callTitle: {
         const t = (callWindow?.title ?? "").replace(/\s*[-–—|]\s*(Google Chrome|Chromium|Mozilla Firefox|Brave|Microsoft Edge|Vivaldi)$/i, "").trim();
-        return t || callTitleKept || callAppName || qsTr("Appel en cours");
+        return t || callTitleKept || callAppName || I18n.tr("Appel en cours");
     }
     onCallWindowChanged: if (callWindow?.title) callTitleKept = callTitle
 
@@ -447,7 +447,7 @@ Item {
                 if (d <= now || (days.length > 0 && !days.includes(d.getDay())))
                     continue;
                 if (!best || d < best.at)
-                    best = { at: d, label: a.label || qsTr("Alarme") };
+                    best = { at: d, label: a.label || I18n.tr("Alarme") };
                 break;
             }
         }
@@ -458,7 +458,7 @@ Item {
         const today = new Date();
         const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
         const diff = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() - t0) / 86400000);
-        return diff === 0 ? "" : diff === 1 ? qsTr("demain ") : Qt.locale("fr_FR").toString(d, "ddd ");
+        return diff === 0 ? "" : diff === 1 ? I18n.tr("demain ") : I18n.locale.toString(d, "ddd ");
     }
 
     // Beaucoup d'écouteurs (clones AirPods…) n'envoient leur batterie qu'à la connexion :
@@ -478,7 +478,7 @@ Item {
         const min = Math.floor((t - seen.t) / 60000);
         if (min < 10)
             return ` · ${pct} %`;
-        return ` · ${pct} % ` + (min < 60 ? qsTr("il y a %1 min").arg(min) : qsTr("il y a %1 h").arg(Math.floor(min / 60)));
+        return ` · ${pct} % ` + (min < 60 ? I18n.tr("il y a %1 min").arg(min) : I18n.tr("il y a %1 h").arg(Math.floor(min / 60)));
     }
 
     readonly property list<var> infoChips: {
@@ -489,32 +489,32 @@ Item {
         if (al)
             out.push({ icon: "alarm", text: `${al.label} · ${dayWord(al.at)}${Qt.formatTime(al.at, "HH:mm")}`, tint: "#ff9f0a" });
         for (const d of btConnected)
-            out.push({ icon: /audio|head|ear|phone/i.test(d?.icon ?? "") ? "headphones" : "bluetooth", text: (d.name || qsTr("Bluetooth")) + btBatteryText(d), tint: root.green });
+            out.push({ icon: /audio|head|ear|phone/i.test(d?.icon ?? "") ? "headphones" : "bluetooth", text: (d.name || I18n.tr("Bluetooth")) + btBatteryText(d), tint: root.green });
         if (IdleInhibitor.enabled)
-            out.push({ icon: "coffee", text: IdleInhibitor.until > 0 ? qsTr("Écran allumé · %1").arg(IdleInhibitor.remainingText()) : qsTr("Écran toujours allumé"), tint: root.accent });
+            out.push({ icon: "coffee", text: IdleInhibitor.until > 0 ? I18n.tr("Écran allumé · %1").arg(IdleInhibitor.remainingText()) : I18n.tr("Écran toujours allumé"), tint: root.accent });
         if (NightLight.enabled)
-            out.push({ icon: "nightlight", text: qsTr("Nuit · %1 K").arg(NightLight.temperature), tint: "#ff9f0a" });
+            out.push({ icon: "nightlight", text: I18n.tr("Nuit · %1 K").arg(NightLight.temperature), tint: "#ff9f0a" });
         if (FocusMode.active)
             out.push({ icon: FocusMode.info.icon, text: `${FocusMode.info.name} · ${FocusMode.untilText()}`, tint: FocusMode.info.tint });
         else if (Notifs.dnd)
-            out.push({ icon: "do_not_disturb_on", text: qsTr("Ne pas déranger"), tint: "#bf5af2" });
+            out.push({ icon: "do_not_disturb_on", text: I18n.tr("Ne pas déranger"), tint: "#bf5af2" });
         const late = Tasks.overdueCount;
         if (late > 0)
-            out.push({ icon: "assignment_late", text: late > 1 ? qsTr("%1 tâches en retard").arg(late) : qsTr("1 tâche en retard"), tint: root.red });
+            out.push({ icon: "assignment_late", text: late > 1 ? I18n.tr("%1 tâches en retard").arg(late) : I18n.tr("1 tâche en retard"), tint: root.red });
         const next = Tasks.sorted.find(t => !t.done && t.due > Date.now() && Tasks.isToday(t));
         if (next)
             out.push({ icon: "task_alt", text: `${next.text} · ${Qt.formatTime(new Date(next.due), "HH:mm")}`, tint: "#0a84ff" });
         else if (Tasks.todayCount > 0)
-            out.push({ icon: "task_alt", text: Tasks.todayCount > 1 ? qsTr("%1 tâches aujourd'hui").arg(Tasks.todayCount) : qsTr("1 tâche aujourd'hui"), tint: "#0a84ff" });
+            out.push({ icon: "task_alt", text: Tasks.todayCount > 1 ? I18n.tr("%1 tâches aujourd'hui").arg(Tasks.todayCount) : I18n.tr("1 tâche aujourd'hui"), tint: "#0a84ff" });
         const unread = Notifs.notClosed.length;
         if (unread > 0)
-            out.push({ icon: "notifications", text: unread > 1 ? qsTr("%1 notifications").arg(unread) : qsTr("1 notification"), tint: root.fg });
+            out.push({ icon: "notifications", text: unread > 1 ? I18n.tr("%1 notifications").arg(unread) : I18n.tr("1 notification"), tint: root.fg });
         if (Audio.sourceMuted)
-            out.push({ icon: "mic_off", text: qsTr("Micro coupé"), tint: root.red });
+            out.push({ icon: "mic_off", text: I18n.tr("Micro coupé"), tint: root.red });
         if (Audio.muted)
-            out.push({ icon: "volume_off", text: qsTr("Son coupé"), tint: root.red });
+            out.push({ icon: "volume_off", text: I18n.tr("Son coupé"), tint: root.red });
         if (VPN.connected)
-            out.push({ icon: "vpn_key", text: qsTr("VPN"), tint: root.green });
+            out.push({ icon: "vpn_key", text: I18n.tr("VPN"), tint: root.green });
         return out;
     }
 
@@ -570,7 +570,7 @@ Item {
         if (!t || t.total <= 0 || t.speed <= 0)
             return "";
         const s = (t.total - t.done) / t.speed;
-        return s < 60 ? qsTr("%1 s").arg(Math.ceil(s)) : s < 3600 ? qsTr("%1 min").arg(Math.ceil(s / 60)) : qsTr("%1 h %2").arg(Math.floor(s / 3600)).arg(Math.round(s % 3600 / 60).toString().padStart(2, "0"));
+        return s < 60 ? I18n.tr("%1 s").arg(Math.ceil(s)) : s < 3600 ? I18n.tr("%1 min").arg(Math.ceil(s / 60)) : I18n.tr("%1 h %2").arg(Math.floor(s / 3600)).arg(Math.round(s % 3600 / 60).toString().padStart(2, "0"));
     }
 
     // ── Rappels AuraTask : 15 min avant l'échéance, à l'échéance, et rappels intelligents ──
@@ -612,16 +612,16 @@ Item {
                 continue;
             const moments = [];
             if (t.due > 0) {
-                moments.push({ key: `${t.id}:soon:${t.due}`, at: t.due - 15 * 60000, sub: qsTr("Dans 15 min · à %1").arg(Qt.formatTime(new Date(t.due), "HH:mm")), late: false });
-                moments.push({ key: `${t.id}:due:${t.due}`, at: t.due, sub: qsTr("C'est l'heure · %1").arg(Qt.formatTime(new Date(t.due), "HH:mm")), late: true });
+                moments.push({ key: `${t.id}:soon:${t.due}`, at: t.due - 15 * 60000, sub: I18n.tr("Dans 15 min · à %1").arg(Qt.formatTime(new Date(t.due), "HH:mm")), late: false });
+                moments.push({ key: `${t.id}:due:${t.due}`, at: t.due, sub: I18n.tr("C'est l'heure · %1").arg(Qt.formatTime(new Date(t.due), "HH:mm")), late: true });
             }
             for (const r of t.full?.smartReminders ?? []) {
                 const at = Date.parse(r.time) || 0;
                 if (at > 0 && !r.triggered)
-                    moments.push({ key: `${t.id}:smart:${r.id}`, at: at, sub: r.label || qsTr("Rappel"), late: false });
+                    moments.push({ key: `${t.id}:smart:${r.id}`, at: at, sub: r.label || I18n.tr("Rappel"), late: false });
             }
             if (snoozes[t.id])
-                moments.push({ key: `${t.id}:snooze:${snoozes[t.id]}`, at: snoozes[t.id], sub: qsTr("Rappel reporté"), late: true });
+                moments.push({ key: `${t.id}:snooze:${snoozes[t.id]}`, at: snoozes[t.id], sub: I18n.tr("Rappel reporté"), late: true });
             for (const m of moments) {
                 if (m.at > now || now - m.at > fresh || remindersSeen[m.key])
                     continue;
@@ -765,7 +765,7 @@ Item {
         onTriggered: capsFile.reload()
     }
 
-    onCapsLockChanged: if (capsKnown && ready) blip(capsLock ? "keyboard_capslock_badge" : "keyboard_capslock", capsLock ? qsTr("Verr. Maj activé") : qsTr("Verr. Maj désactivé"), "", capsLock)
+    onCapsLockChanged: if (capsKnown && ready) blip(capsLock ? "keyboard_capslock_badge" : "keyboard_capslock", capsLock ? I18n.tr("Verr. Maj activé") : I18n.tr("Verr. Maj désactivé"), "", capsLock)
 
     readonly property string wifiName: Nmcli.active?.ssid ?? ""
     readonly property bool wifiHwEnabled: Nmcli.wifiEnabled
@@ -776,8 +776,8 @@ Item {
     readonly property int wifiFreq: Nmcli.active?.frequency ?? 5180
     readonly property string wifiBand: wifiFreq >= 5900 ? "6 GHz" : wifiFreq >= 4900 ? "5 GHz" : wifiFreq > 0 ? "2,4 GHz" : "5 GHz"
     readonly property bool wifiSecure: Nmcli.active?.isSecure ?? true
-    readonly property string wifiSecLabel: (Nmcli.active?.security ?? "") !== "" ? Nmcli.active.security : (wifiSecure ? "WPA3" : qsTr("Ouvert"))
-    readonly property string wifiQualityText: wifiStrength >= 80 ? qsTr("Signal excellent") : wifiStrength >= 55 ? qsTr("Signal fort") : wifiStrength >= 35 ? qsTr("Signal moyen") : qsTr("Signal faible")
+    readonly property string wifiSecLabel: (Nmcli.active?.security ?? "") !== "" ? Nmcli.active.security : (wifiSecure ? "WPA3" : I18n.tr("Ouvert"))
+    readonly property string wifiQualityText: wifiStrength >= 80 ? I18n.tr("Signal excellent") : wifiStrength >= 55 ? I18n.tr("Signal fort") : wifiStrength >= 35 ? I18n.tr("Signal moyen") : I18n.tr("Signal faible")
 
     onWifiNameChanged: {
         if (!wifiKnown) {
@@ -805,7 +805,7 @@ Item {
     }
 
     readonly property bool vpnOn: VPN.connected
-    onVpnOnChanged: blip(vpnOn ? "vpn_lock" : "vpn_key_off", qsTr("VPN"), vpnOn ? qsTr("Connecté") : qsTr("Déconnecté"), vpnOn)
+    onVpnOnChanged: blip(vpnOn ? "vpn_lock" : "vpn_key_off", I18n.tr("VPN"), vpnOn ? I18n.tr("Connecté") : I18n.tr("Déconnecté"), vpnOn)
 
     // ── Minuteur et chronomètre (IPC : qs -c caelestia ipc call island timer 5m) ──
     property string clockKind: "" // "", "timer", "stopwatch"
@@ -821,7 +821,7 @@ Item {
         font.family: Tokens.font.body.medium.family
         font.pointSize: 9
         font.weight: Font.Medium
-        text: root.pomoOn ? qsTr("Pomodoro · %1 · session %2").arg(root.clockLabel).arg(root.pomoRound) : root.clockLabel ? qsTr("Minuteur · %1").arg(root.clockLabel) : ""
+        text: root.pomoOn ? I18n.tr("Pomodoro · %1 · session %2").arg(root.clockLabel).arg(root.pomoRound) : root.clockLabel ? I18n.tr("Minuteur · %1").arg(root.clockLabel) : ""
     }
     property list<real> laps: [] // chronomètre : temps écoulé à chaque tour (s)
     // Pomodoro : enchaîne travail / pause tout seul
@@ -830,7 +830,7 @@ Item {
     property real pomoRest: 5 * 60
     property string pomoPhase: "work"
     property int pomoRound: 1
-    property string doneTitle: qsTr("Minuteur terminé")
+    property string doneTitle: I18n.tr("Minuteur terminé")
     // Agent IA qui vient de finir (Claude Code, Codex) : {id, kind, project, title, reply, window}
     property var agentDone: null
     Connections {
@@ -913,7 +913,7 @@ Item {
         pomoRest = rest > 0 ? rest : 5 * 60;
         pomoPhase = "work";
         pomoRound = 1;
-        startTimer(pomoWork, qsTr("Focus"));
+        startTimer(pomoWork, I18n.tr("Focus"));
     }
 
     function addLap(): void {
@@ -938,13 +938,13 @@ Item {
         if (pomoOn) {
             // Pomodoro : ça sonne, puis on choisit d'enchaîner (Pause / Reprendre) depuis l'île
             if (pomoPhase === "work")
-                ring("pomoWork", qsTr("Focus terminé"), qsTr("Session %1 · place à %2 de pause").arg(pomoRound).arg(fmtHuman(pomoRest)), total);
+                ring("pomoWork", I18n.tr("Focus terminé"), I18n.tr("Session %1 · place à %2 de pause").arg(pomoRound).arg(fmtHuman(pomoRest)), total);
             else
-                ring("pomoRest", qsTr("Pause terminée"), qsTr("Prêt pour la session %1 ?").arg(pomoRound + 1), total);
+                ring("pomoRest", I18n.tr("Pause terminée"), I18n.tr("Prêt pour la session %1 ?").arg(pomoRound + 1), total);
             saveClock();
             return;
         }
-        ring("timer", label || qsTr("Minuteur"), qsTr("Minuteur de %1 terminé").arg(fmtHuman(total)), total);
+        ring("timer", label || I18n.tr("Minuteur"), I18n.tr("Minuteur de %1 terminé").arg(fmtHuman(total)), total);
         saveClock();
     }
 
@@ -1019,7 +1019,7 @@ Item {
                 if (days.length > 0 && !days.includes(d.getDay()))
                     continue;
                 root.lastAlarmKey = key;
-                root.ringAlarm(a.label || qsTr("Alarme"), hm);
+                root.ringAlarm(a.label || I18n.tr("Alarme"), hm);
                 // Alarme ponctuelle : elle se désactive après avoir sonné
                 if (days.length === 0) {
                     a.enabled = false;
@@ -1095,15 +1095,15 @@ Item {
         const kind = ringKind, label = alarmLabel, total = ringTotal;
         stopAlarm();
         if (kind === "timer")
-            startTimer(total, label === qsTr("Minuteur") ? "" : label);
+            startTimer(total, label === I18n.tr("Minuteur") ? "" : label);
         else
-            startTimer(9 * 60, qsTr("%1 (répétition)").arg(label));
+            startTimer(9 * 60, I18n.tr("%1 (répétition)").arg(label));
     }
 
     function ringPlusOne(): void {
         const label = alarmLabel;
         stopAlarm();
-        startTimer(60, label === qsTr("Minuteur") ? "" : label);
+        startTimer(60, label === I18n.tr("Minuteur") ? "" : label);
     }
 
     // Pomodoro : enchaîner sur la phase suivante
@@ -1112,11 +1112,11 @@ Item {
         stopAlarm();
         if (kind === "pomoWork") {
             pomoPhase = "rest";
-            startTimer(pomoRest, qsTr("Pause"));
+            startTimer(pomoRest, I18n.tr("Pause"));
         } else {
             pomoPhase = "work";
             pomoRound += 1;
-            startTimer(pomoWork, qsTr("Focus"));
+            startTimer(pomoWork, I18n.tr("Focus"));
         }
     }
 
@@ -1270,7 +1270,7 @@ Item {
 
         function onCopied(): void {
             if (root.ready)
-                root.blip("content_copy", qsTr("Copié"), qsTr("Presse-papiers"), true);
+                root.blip("content_copy", I18n.tr("Copié"), I18n.tr("Presse-papiers"), true);
         }
     }
 
@@ -1569,12 +1569,12 @@ Item {
 
     function notifCatLabel(cat: string): string {
         return ({
-            all: qsTr("Tout"),
-            messages: qsTr("Messages"),
-            system: qsTr("Système"),
-            media: qsTr("Média"),
-            apps: qsTr("Applis")
-        })[cat] ?? qsTr("Applis");
+            all: I18n.tr("Tout"),
+            messages: I18n.tr("Messages"),
+            system: I18n.tr("Système"),
+            media: I18n.tr("Média"),
+            apps: I18n.tr("Applis")
+        })[cat] ?? I18n.tr("Applis");
     }
 
     function notifCatIcon(cat: string): string {
@@ -2064,14 +2064,14 @@ Item {
         }
         function testRing(kind: string): void {
             if (kind === "timer")
-                root.ring("timer", qsTr("Pâtes"), qsTr("Minuteur de %1 terminé").arg(root.fmtHuman(600)), 600);
+                root.ring("timer", I18n.tr("Pâtes"), I18n.tr("Minuteur de %1 terminé").arg(root.fmtHuman(600)), 600);
             else if (kind === "pomo")
-                root.ring("pomoWork", qsTr("Focus terminé"), qsTr("Session 1 · place à 5 min de pause"), 1500);
+                root.ring("pomoWork", I18n.tr("Focus terminé"), I18n.tr("Session 1 · place à 5 min de pause"), 1500);
             else
-                root.ringAlarm(qsTr("Réveil"), Time.format("HH:mm"));
+                root.ringAlarm(I18n.tr("Réveil"), Time.format("HH:mm"));
         }
         function testAlarm(label: string): void {
-            root.ringAlarm(label || qsTr("Alarme"), Time.format("HH:mm"));
+            root.ringAlarm(label || I18n.tr("Alarme"), Time.format("HH:mm"));
         }
         function testWifi(ssid: string): void {
             root.wifiSsid = (ssid && ssid !== "off") ? ssid : (root.wifiName || "Fibre-5G");
@@ -2728,7 +2728,7 @@ Item {
                 StyledText {
                     anchors.verticalCenter: parent.verticalCenter
                     text: {
-                        const s = Qt.locale("fr_FR").toString(Time.date, "ddd").replace(".", "");
+                        const s = I18n.locale.toString(Time.date, "ddd").replace(".", "");
                         return s.toUpperCase();
                     }
                     color: root.fgDim
@@ -2754,7 +2754,7 @@ Item {
                         id: dayNumText
 
                         anchors.centerIn: parent
-                        text: Qt.locale("fr_FR").toString(Time.date, "d")
+                        text: I18n.locale.toString(Time.date, "d")
                         color: root.fg
                         font.pointSize: 9.2
                         font.weight: Font.Bold
@@ -3138,7 +3138,7 @@ Item {
                     visible: root.btOn
                     width: parent.width
                     elide: Text.ElideRight
-                    text: qsTr("Connecté")
+                    text: I18n.tr("Connecté")
                     color: root.fgDim
                     font.pointSize: 9
                 }
@@ -3159,7 +3159,7 @@ Item {
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
                     visible: !root.btOn
-                    text: qsTr("Déconnecté")
+                    text: I18n.tr("Déconnecté")
                     color: root.fgDim
                     font.pointSize: 9
                     font.weight: Font.Medium
@@ -3400,7 +3400,7 @@ Item {
                     StyledText {
                         width: Math.min(implicitWidth, parent.width - (wifiBandPill.visible ? wifiBandPill.width + 6 : 0) - (wifiSecPill.visible ? wifiSecPill.width + 6 : 0))
                         elide: Text.ElideRight
-                        text: root.wifiOn ? (root.wifiSsid || root.wifiName || qsTr("Wi-Fi")) : qsTr("Wi-Fi déconnecté")
+                        text: root.wifiOn ? (root.wifiSsid || root.wifiName || I18n.tr("Wi-Fi")) : I18n.tr("Wi-Fi déconnecté")
                         color: root.fg
                         font.pointSize: root.wifiOn ? 11.5 : 10
                         font.weight: Font.Bold
@@ -3463,7 +3463,7 @@ Item {
 
                             StyledText {
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: root.wifiSecure ? qsTr("Sécurisé") : qsTr("Ouvert")
+                                text: root.wifiSecure ? I18n.tr("Sécurisé") : I18n.tr("Ouvert")
                                 color: root.wifiSecure ? root.green : "#ff9f0a"
                                 font.pointSize: 7
                                 font.weight: Font.DemiBold
@@ -3536,7 +3536,7 @@ Item {
                 // Sous-titre quand le Wi-Fi est coupé
                 StyledText {
                     visible: !root.wifiOn
-                    text: qsTr("Aucune liaison sans fil active")
+                    text: I18n.tr("Aucune liaison sans fil active")
                     color: root.fgDim
                     font.pointSize: 8.5
                 }
@@ -3569,7 +3569,7 @@ Item {
                         id: wifiOffLbl
 
                         anchors.centerIn: parent
-                        text: qsTr("Hors ligne")
+                        text: I18n.tr("Hors ligne")
                         color: root.red
                         font.pointSize: 8.5
                         font.weight: Font.Bold
@@ -3941,7 +3941,7 @@ Item {
 
                     StyledText {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: root.transfer?.kind === "copy" ? qsTr("COPIE SYSTÈME") : root.transfer?.kind === "upload" ? qsTr("SYNCHRO DRIVE") : qsTr("TRANSFERT")
+                        text: root.transfer?.kind === "copy" ? I18n.tr("COPIE SYSTÈME") : root.transfer?.kind === "upload" ? I18n.tr("SYNCHRO DRIVE") : I18n.tr("TRANSFERT")
                         color: "#38bdf8"
                         font.pointSize: 7.2
                         font.weight: Font.Bold
@@ -3977,16 +3977,16 @@ Item {
                         if (!t)
                             return "";
                         if (t.paused)
-                            return t.total > 0 ? qsTr("En pause · %1 sur %2").arg(root.fmtBytes(t.done)).arg(root.fmtBytes(t.total)) : qsTr("Envoi sur Drive en pause");
-                        const parts = t.kind === "upload" ? [t.count ? qsTr("Fichier %1").arg(t.count) : qsTr("Drive")] : [];
-                        parts.push(t.total > 0 ? qsTr("%1 / %2").arg(root.fmtBytes(t.done)).arg(root.fmtBytes(t.total)) : root.fmtBytes(t.done));
+                            return t.total > 0 ? I18n.tr("En pause · %1 sur %2").arg(root.fmtBytes(t.done)).arg(root.fmtBytes(t.total)) : I18n.tr("Envoi sur Drive en pause");
+                        const parts = t.kind === "upload" ? [t.count ? I18n.tr("Fichier %1").arg(t.count) : I18n.tr("Drive")] : [];
+                        parts.push(t.total > 0 ? I18n.tr("%1 / %2").arg(root.fmtBytes(t.done)).arg(root.fmtBytes(t.total)) : root.fmtBytes(t.done));
                         if (t.speed > 0)
                             parts.push(`${root.fmtBytes(t.speed)}/s`);
                         const eta = root.transferEta(t);
                         if (eta)
-                            parts.push(qsTr("reste %1").arg(eta));
+                            parts.push(I18n.tr("reste %1").arg(eta));
                         if (root.transfers.length > 1)
-                            parts.push(qsTr("+%1").arg(root.transfers.length - 1));
+                            parts.push(I18n.tr("+%1").arg(root.transfers.length - 1));
                         return parts.join(" · ");
                     }
                     color: root.fgDim
@@ -4008,12 +4008,12 @@ Item {
                 ShotButton {
                     visible: root.transfer?.kind === "upload"
                     icon: root.transfer?.paused ? "play_arrow" : "pause"
-                    tip: root.transfer?.paused ? qsTr("Reprendre la sauvegarde") : qsTr("Mettre la sauvegarde en pause")
+                    tip: root.transfer?.paused ? I18n.tr("Reprendre la sauvegarde") : I18n.tr("Mettre la sauvegarde en pause")
                     onClicked: Quickshell.execDetached([`${Quickshell.env("HOME")}/.local/bin/drive-sync`, root.transfer?.paused ? "resume" : "pause"])
                 }
                 ShotButton {
                     icon: "folder_open"
-                    tip: qsTr("Ouvrir le dossier")
+                    tip: I18n.tr("Ouvrir le dossier")
                     onClicked: Quickshell.execDetached(["xdg-open", root.transfer?.dir ?? Quickshell.env("HOME")])
                 }
             }
@@ -4120,7 +4120,7 @@ Item {
                     font.weight: Font.DemiBold
                 }
                 StyledText {
-                    text: root.fileDone?.kind === "copy" ? qsTr("Copie terminée") : root.fileDone?.kind === "upload" ? qsTr("Sauvegardé sur Google Drive") : qsTr("Téléchargement terminé")
+                    text: root.fileDone?.kind === "copy" ? I18n.tr("Copie terminée") : root.fileDone?.kind === "upload" ? I18n.tr("Sauvegardé sur Google Drive") : I18n.tr("Téléchargement terminé")
                     color: root.fgDim
                     font.pointSize: 9
                 }
@@ -4136,7 +4136,7 @@ Item {
 
                 ShotButton {
                     icon: "folder_open"
-                    tip: qsTr("Afficher dans le dossier")
+                    tip: I18n.tr("Afficher dans le dossier")
                     onClicked: {
                         const p = root.fileDone?.path ?? "";
                         Quickshell.execDetached(["dbus-send", "--session", "--dest=org.freedesktop.FileManager1", "--type=method_call", "/org/freedesktop/FileManager1", "org.freedesktop.FileManager1.ShowItems", `array:string:file://${p}`, "string:"]);
@@ -4145,7 +4145,7 @@ Item {
                 }
                 ShotButton {
                     icon: root.fileDone?.kind === "upload" ? "cloud" : "open_in_new"
-                    tip: root.fileDone?.kind === "upload" ? qsTr("Ouvrir Google Drive") : qsTr("Ouvrir")
+                    tip: root.fileDone?.kind === "upload" ? I18n.tr("Ouvrir Google Drive") : I18n.tr("Ouvrir")
                     onClicked: {
                         Quickshell.execDetached(["xdg-open", root.fileDone?.kind === "upload" ? "https://drive.google.com/drive/search?q=Sauvegarde%20PC" : root.fileDone?.path ?? ""]);
                         root.pulse = "";
@@ -4237,7 +4237,7 @@ Item {
 
                 ShotButton {
                     icon: "snooze"
-                    tip: qsTr("Dans 10 min")
+                    tip: I18n.tr("Dans 10 min")
                     onClicked: root.taskAlertSnooze(10)
                 }
                 // « Fait » : pastille verte avec son libellé
@@ -4280,7 +4280,7 @@ Item {
                         }
                         StyledText {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: qsTr("Fait")
+                            text: I18n.tr("Fait")
                             color: "white"
                             font.pointSize: 10
                             font.weight: Font.Bold
@@ -4298,7 +4298,7 @@ Item {
                 }
                 ShotButton {
                     icon: "close"
-                    tip: qsTr("Ignorer")
+                    tip: I18n.tr("Ignorer")
                     onClicked: root.taskAlert = null
                 }
             }
@@ -4558,11 +4558,11 @@ Item {
                 const d = UPower.displayDevice;
                 const t = plugged ? d.timeToFull : d.timeToEmpty;
                 if (!t || t <= 0)
-                    return plugged ? (root.battery >= 0.99 ? qsTr("Charge complète") : qsTr("Alimentation secteur active")) : qsTr("Mode autonomie actif");
+                    return plugged ? (root.battery >= 0.99 ? I18n.tr("Charge complète") : I18n.tr("Alimentation secteur active")) : I18n.tr("Mode autonomie actif");
                 const h = Math.floor(t / 3600);
                 const m = Math.round((t % 3600) / 60);
                 const dur = h > 0 ? `${h} h ${m.toString().padStart(2, "0")}` : `${m} min`;
-                return plugged ? qsTr("Pleine dans %1").arg(dur) : qsTr("%1 d'autonomie").arg(dur);
+                return plugged ? I18n.tr("Pleine dans %1").arg(dur) : I18n.tr("%1 d'autonomie").arg(dur);
             }
 
             active: root.mode === "charge"
@@ -4751,7 +4751,7 @@ Item {
 
                     StyledText {
                         elide: Text.ElideRight
-                        text: chargeFace.plugged ? (root.battery >= 0.995 ? qsTr("Batterie chargée") : qsTr("Charge rapide")) : (chargeFace.lowBatt ? qsTr("Batterie faible") : qsTr("Sur batterie"))
+                        text: chargeFace.plugged ? (root.battery >= 0.995 ? I18n.tr("Batterie chargée") : I18n.tr("Charge rapide")) : (chargeFace.lowBatt ? I18n.tr("Batterie faible") : I18n.tr("Sur batterie"))
                         color: root.fg
                         font.pointSize: chargeFace.plugged ? 11.5 : 10.5
                         font.weight: Font.Bold
@@ -4785,7 +4785,7 @@ Item {
 
                             StyledText {
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: root.sysWatts >= 1 ? `${Math.round(root.sysWatts)} W` : (chargeFace.plugged ? "AC" : qsTr("Éco"))
+                                text: root.sysWatts >= 1 ? `${Math.round(root.sysWatts)} W` : (chargeFace.plugged ? "AC" : I18n.tr("Éco"))
                                 color: chargeFace.primaryTone
                                 font.pointSize: 7.5
                                 font.weight: Font.Bold
@@ -5030,7 +5030,7 @@ Item {
                 StyledText {
                     width: parent.width
                     elide: Text.ElideRight
-                    text: qsTr("Capture d'écran")
+                    text: I18n.tr("Capture d'écran")
                     color: root.fg
                     font.pointSize: 11
                     font.weight: Font.DemiBold
@@ -5038,7 +5038,7 @@ Item {
                 StyledText {
                     width: parent.width
                     elide: Text.ElideRight
-                    text: root.shotSaved ? qsTr("Enregistrée et copiée") : qsTr("Copiée dans le presse-papiers")
+                    text: root.shotSaved ? I18n.tr("Enregistrée et copiée") : I18n.tr("Copiée dans le presse-papiers")
                     color: root.fgDim
                     font.pointSize: 9
                 }
@@ -5054,7 +5054,7 @@ Item {
 
                 ShotButton {
                     icon: "edit"
-                    tip: qsTr("Annoter")
+                    tip: I18n.tr("Annoter")
                     onClicked: {
                         Quickshell.execDetached(["qs", "-c", "caelestia", "ipc", "call", "annotate", "open", root.shotPath]);
                         root.closeShot();
@@ -5062,7 +5062,7 @@ Item {
                 }
                 ShotButton {
                     icon: root.shotSaved ? "folder_open" : "download"
-                    tip: root.shotSaved ? qsTr("Dossier") : qsTr("Enregistrer")
+                    tip: root.shotSaved ? I18n.tr("Dossier") : I18n.tr("Enregistrer")
                     onClicked: {
                         if (root.shotSaved) {
                             Quickshell.execDetached(["xdg-open", root.shotsDir]);
@@ -5154,7 +5154,7 @@ Item {
                 anchors.left: parent.left
                 anchors.leftMargin: 22
                 anchors.verticalCenter: parent.verticalCenter
-                text: qsTr("Bureau %1").arg(root.wsId)
+                text: I18n.tr("Bureau %1").arg(root.wsId)
                 color: root.fg
                 font.pointSize: 10.5
                 font.weight: Font.DemiBold
@@ -5382,7 +5382,7 @@ Item {
                 spacing: 1
 
                 StyledText {
-                    text: IdleInhibitor.until > 0 ? qsTr("MAINTIEN TEMPORISÉ") : qsTr("ANTI-VEILLE CONTINU")
+                    text: IdleInhibitor.until > 0 ? I18n.tr("MAINTIEN TEMPORISÉ") : I18n.tr("ANTI-VEILLE CONTINU")
                     color: root.accent
                     font.pointSize: 7.2
                     font.weight: Font.Bold
@@ -5391,7 +5391,7 @@ Item {
                 StyledText {
                     width: parent.width
                     elide: Text.ElideRight
-                    text: qsTr("L'écran reste allumé")
+                    text: I18n.tr("L'écran reste allumé")
                     color: root.fg
                     font.pointSize: 11.5
                     font.weight: Font.Bold
@@ -5399,7 +5399,7 @@ Item {
                 StyledText {
                     width: parent.width
                     elide: Text.ElideRight
-                    text: IdleInhibitor.until > 0 ? qsTr("Encore %1 · jusqu'à %2").arg(IdleInhibitor.remainingText()).arg(Qt.formatTime(new Date(IdleInhibitor.until), "HH:mm")) : qsTr("Sans limite · actif depuis %1").arg(Qt.formatTime(IdleInhibitor.enabledSince, "HH:mm"))
+                    text: IdleInhibitor.until > 0 ? I18n.tr("Encore %1 · jusqu'à %2").arg(IdleInhibitor.remainingText()).arg(Qt.formatTime(new Date(IdleInhibitor.until), "HH:mm")) : I18n.tr("Sans limite · actif depuis %1").arg(Qt.formatTime(IdleInhibitor.enabledSince, "HH:mm"))
                     color: root.fgDim
                     font.pointSize: 8.8
                     font.features: {
@@ -5419,18 +5419,18 @@ Item {
                 ShotButton {
                     visible: IdleInhibitor.until > 0
                     icon: "more_time"
-                    tip: qsTr("+15 min")
+                    tip: I18n.tr("+15 min")
                     onClicked: IdleInhibitor.extend(15)
                 }
                 ShotButton {
                     visible: IdleInhibitor.until > 0
                     icon: "all_inclusive"
-                    tip: qsTr("Sans limite")
+                    tip: I18n.tr("Sans limite")
                     onClicked: IdleInhibitor.enableFor(0)
                 }
                 ShotButton {
                     icon: "stop"
-                    tip: qsTr("Arrêter")
+                    tip: I18n.tr("Arrêter")
                     onClicked: IdleInhibitor.enabled = false
                 }
             }
@@ -5554,7 +5554,7 @@ Item {
                 anchors.rightMargin: 10
                 anchors.verticalCenter: parent.verticalCenter
                 elide: Text.ElideRight
-                text: parent.lead?.tool || qsTr("réfléchit…")
+                text: parent.lead?.tool || I18n.tr("réfléchit…")
                 color: root.fgDim
                 font.pointSize: 9
             }
@@ -5609,7 +5609,7 @@ Item {
 
                 StyledText {
                     anchors.verticalCenter: parent.verticalCenter
-                    text: qsTr("AGENTS IA")
+                    text: I18n.tr("AGENTS IA")
                     color: root.fg
                     font.pointSize: 9.5
                     font.weight: Font.Bold
@@ -5629,7 +5629,7 @@ Item {
                         id: agStatusText
 
                         anchors.centerIn: parent
-                        text: Agents.working > 0 ? qsTr("%1 actif(s)").arg(Agents.working) : qsTr("en veille")
+                        text: Agents.working > 0 ? I18n.tr("%1 actif(s)").arg(Agents.working) : I18n.tr("en veille")
                         color: Agents.working > 0 ? root.accent : root.fgDim
                         font.pointSize: 8
                         font.weight: Font.DemiBold
@@ -5649,7 +5649,7 @@ Item {
                 StyledText {
                     anchors.verticalCenter: parent.verticalCenter
                     visible: Agents.shown.length > 3
-                    text: qsTr("+%1").arg(Agents.shown.length - 3)
+                    text: I18n.tr("+%1").arg(Agents.shown.length - 3)
                     color: root.fgDim
                     font.pointSize: 9
                     font.weight: Font.Bold
@@ -5698,7 +5698,7 @@ Item {
                         }
                         StyledText {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: Agents.doneShown > 1 ? qsTr("Nettoyer (%1)").arg(Agents.doneShown) : qsTr("Nettoyer")
+                            text: Agents.doneShown > 1 ? I18n.tr("Nettoyer (%1)").arg(Agents.doneShown) : I18n.tr("Nettoyer")
                             color: root.fg
                             font.pointSize: 8.5
                             font.weight: Font.DemiBold
@@ -5798,7 +5798,7 @@ Item {
                             StyledText {
                                 width: parent.width
                                 elide: Text.ElideRight
-                                text: agRow.waiting ? qsTr("Attend ta réponse") : agRow.working ? (agRow.modelData.tool || qsTr("Réfléchit…")) : (agRow.modelData.reply || qsTr("Prêt"))
+                                text: agRow.waiting ? I18n.tr("Attend ta réponse") : agRow.working ? (agRow.modelData.tool || I18n.tr("Réfléchit…")) : (agRow.modelData.reply || I18n.tr("Prêt"))
                                 color: agRow.waiting ? "#ff9f0a" : root.fgDim
                                 font.pointSize: 8.8
                             }
@@ -5841,7 +5841,7 @@ Item {
                             StyledText {
                                 anchors.right: parent.right
                                 visible: agRow.modelData.files > 0
-                                text: qsTr("%n fichier(s)", "", agRow.modelData.files)
+                                text: I18n.trn("%n fichier(s)", agRow.modelData.files)
                                 color: root.fgDim
                                 font.pointSize: 7.8
                             }
@@ -5924,7 +5924,7 @@ Item {
                 StyledText {
                     width: parent.width
                     elide: Text.ElideRight
-                    text: `${Agents.kindName(permFace.agent?.kind ?? "claude")} · ${permFace.perm?.project ?? ""}` + (Agents.perms.length > 1 ? qsTr(" · encore %1 en attente").arg(Agents.perms.length - 1) : "")
+                    text: `${Agents.kindName(permFace.agent?.kind ?? "claude")} · ${permFace.perm?.project ?? ""}` + (Agents.perms.length > 1 ? I18n.tr(" · encore %1 en attente").arg(Agents.perms.length - 1) : "")
                     color: root.fgDim
                     font.pointSize: 9
                 }
@@ -5940,7 +5940,7 @@ Item {
 
                 ShotButton {
                     icon: "terminal"
-                    tip: qsTr("Répondre dans le terminal")
+                    tip: I18n.tr("Répondre dans le terminal")
                     onClicked: {
                         const p = permFace.perm;
                         Agents.answer(p.id, "terminal");
@@ -5949,13 +5949,13 @@ Item {
                 }
                 PillButton {
                     icon: "block"
-                    label: qsTr("Refuser")
+                    label: I18n.tr("Refuser")
                     tint: root.red
                     onClicked: Agents.answer(permFace.perm.id, "deny")
                 }
                 PillButton {
                     icon: "check"
-                    label: qsTr("Autoriser")
+                    label: I18n.tr("Autoriser")
                     tint: root.green
                     onClicked: Agents.answer(permFace.perm.id, "allow")
                 }
@@ -6024,7 +6024,7 @@ Item {
                 StyledText {
                     width: parent.width
                     elide: Text.ElideRight
-                    text: qsTr("%1 a terminé · %2").arg(Agents.kindName(parent.parent.agent?.kind ?? "")).arg(parent.parent.agent?.project ?? "")
+                    text: I18n.tr("%1 a terminé · %2").arg(Agents.kindName(parent.parent.agent?.kind ?? "")).arg(parent.parent.agent?.project ?? "")
                     color: root.fg
                     font.pointSize: 11
                     font.weight: Font.Bold
@@ -6130,10 +6130,10 @@ Item {
                     elide: Text.ElideRight
                     text: {
                         if (root.pomoOn)
-                            return qsTr("POMODORO · %1 · SESSION %2").arg(root.clockLabel.toUpperCase()).arg(root.pomoRound);
+                            return I18n.tr("POMODORO · %1 · SESSION %2").arg(root.clockLabel.toUpperCase()).arg(root.pomoRound);
                         if (root.clockKind === "timer")
-                            return root.clockLabel ? qsTr("MINUTEUR · %1").arg(root.clockLabel.toUpperCase()) : qsTr("MINUTEUR");
-                        return root.laps.length > 0 ? qsTr("CHRONOMÈTRE · %1 TOURS").arg(root.laps.length) : qsTr("CHRONOMÈTRE");
+                            return root.clockLabel ? I18n.tr("MINUTEUR · %1").arg(root.clockLabel.toUpperCase()) : I18n.tr("MINUTEUR");
+                        return root.laps.length > 0 ? I18n.tr("CHRONOMÈTRE · %1 TOURS").arg(root.laps.length) : I18n.tr("CHRONOMÈTRE");
                     }
                     color: clockFace.clockTone
                     font.pointSize: 7.5
@@ -6435,7 +6435,7 @@ Item {
                 }
                 // Depuis combien de temps ça sonne (comme sur iPhone)
                 StyledText {
-                    text: qsTr("Sonne depuis %1").arg(root.fmtTime(root.ringElapsed))
+                    text: I18n.tr("Sonne depuis %1").arg(root.fmtTime(root.ringElapsed))
                     color: ringFace.tint
                     font.pointSize: 8.5
                     font.weight: Font.DemiBold
@@ -6511,7 +6511,7 @@ Item {
                         id: snoozeLbl
 
                         anchors.centerIn: parent
-                        text: ringFace.isPomo ? qsTr("Terminer") : ringFace.isTimer ? qsTr("Relancer") : qsTr("Répéter")
+                        text: ringFace.isPomo ? I18n.tr("Terminer") : ringFace.isTimer ? I18n.tr("Relancer") : I18n.tr("Répéter")
                         color: root.fg
                         font.pointSize: 10
                         font.weight: Font.DemiBold
@@ -6567,7 +6567,7 @@ Item {
                             id: stopLbl
 
                             anchors.verticalCenter: parent.verticalCenter
-                            text: root.ringKind === "pomoWork" ? qsTr("Pause") : root.ringKind === "pomoRest" ? qsTr("Reprendre") : qsTr("Arrêter")
+                            text: root.ringKind === "pomoWork" ? I18n.tr("Pause") : root.ringKind === "pomoRest" ? I18n.tr("Reprendre") : I18n.tr("Arrêter")
                             color: "white"
                             font.pointSize: 10.5
                             font.weight: Font.Bold
@@ -6605,7 +6605,7 @@ Item {
                         spacing: 6
 
                         StyledText {
-                            text: qsTr("Notifications")
+                            text: I18n.tr("Notifications")
                             color: root.fg
                             font.pointSize: 12.5
                             font.weight: Font.Bold
@@ -6625,7 +6625,7 @@ Item {
                                 id: grpModeTxt
 
                                 anchors.centerIn: parent
-                                text: root.centerGroupBy === "app" ? qsTr("Par appli") : qsTr("Par espèce")
+                                text: root.centerGroupBy === "app" ? I18n.tr("Par appli") : I18n.tr("Par espèce")
                                 color: root.accent
                                 font.pointSize: 7
                                 font.weight: Font.Bold
@@ -6637,8 +6637,8 @@ Item {
                         text: {
                             const n = Notifs.notClosed.length;
                             const h = root.hiddenNotifCount;
-                            const base = n === 0 ? qsTr("Tout est lu") : n === 1 ? qsTr("1 notification") : qsTr("%1 notifications").arg(n);
-                            return h > 0 ? `${base} · ${qsTr("%1 masquée(s)").arg(h)}` : base;
+                            const base = n === 0 ? I18n.tr("Tout est lu") : n === 1 ? I18n.tr("1 notification") : I18n.tr("%1 notifications").arg(n);
+                            return h > 0 ? `${base} · ${I18n.tr("%1 masquée(s)").arg(h)}` : base;
                         }
                         color: root.fgDim
                         font.pointSize: 8
@@ -6783,7 +6783,7 @@ Item {
                             id: clearLbl
 
                             anchors.centerIn: parent
-                            text: root.centerCat === "all" ? qsTr("Tout effacer") : qsTr("Effacer")
+                            text: root.centerCat === "all" ? I18n.tr("Tout effacer") : I18n.tr("Effacer")
                             color: root.fg
                             font.pointSize: 8.5
                             font.weight: Font.DemiBold
@@ -6919,7 +6919,7 @@ Item {
 
                         StyledText {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: root.showHiddenGroups ? qsTr("Masquées visibles") : `${Object.keys(root.hiddenGroups).length}`
+                            text: root.showHiddenGroups ? I18n.tr("Masquées visibles") : `${Object.keys(root.hiddenGroups).length}`
                             color: root.showHiddenGroups ? "#ff9f0a" : root.fgDim
                             font.pointSize: 7.5
                             font.weight: Font.Bold
@@ -7081,7 +7081,7 @@ Item {
 
                                     StyledText {
                                         anchors.verticalCenter: parent.verticalCenter
-                                        text: qsTr("Réduire")
+                                        text: I18n.tr("Réduire")
                                         color: root.fg
                                         font.pointSize: 7
                                         font.weight: Font.Bold
@@ -7398,7 +7398,7 @@ Item {
 
                                 StyledText {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: `×${card.repeats} · ${qsTr("Déplier")}`
+                                    text: `×${card.repeats} · ${I18n.tr("Déplier")}`
                                     color: root.fg
                                     font.pointSize: 7
                                     font.weight: Font.Bold
@@ -7456,7 +7456,7 @@ Item {
 
                                 StyledText {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: qsTr("Réduire")
+                                    text: I18n.tr("Réduire")
                                     color: root.fgDim
                                     font.pointSize: 6.5
                                     font.weight: Font.Bold
@@ -7584,7 +7584,7 @@ Item {
                     }
                     StyledText {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: root.hiddenNotifCount > 0 && !root.showHiddenGroups ? qsTr("%1 notification(s) masquée(s)").arg(root.hiddenNotifCount) : qsTr("Aucune notification")
+                        text: root.hiddenNotifCount > 0 && !root.showHiddenGroups ? I18n.tr("%1 notification(s) masquée(s)").arg(root.hiddenNotifCount) : I18n.tr("Aucune notification")
                         color: root.fgDim
                         font.pointSize: 9.5
                     }
@@ -7657,7 +7657,7 @@ Item {
                 spacing: 1
 
                 StyledText {
-                    text: (Recorder.paused ? qsTr("Capture en pause") : qsTr("Enregistrement studio")).toUpperCase()
+                    text: (Recorder.paused ? I18n.tr("Capture en pause") : I18n.tr("Enregistrement studio")).toUpperCase()
                     color: Recorder.paused ? root.fgDim : root.red
                     font.pointSize: 7.2
                     font.weight: Font.Bold
@@ -7804,7 +7804,7 @@ Item {
                 StyledText {
                     width: parent.width
                     elide: Text.ElideRight
-                    text: (root.callMuted ? qsTr("Micro coupé") : root.camInUse ? qsTr("Visioconférence") : qsTr("Liaison audio")).toUpperCase()
+                    text: (root.callMuted ? I18n.tr("Micro coupé") : root.camInUse ? I18n.tr("Visioconférence") : I18n.tr("Liaison audio")).toUpperCase()
                     color: root.callMuted ? root.red : root.green
                     font.pointSize: 7.2
                     font.weight: Font.Bold
@@ -7841,7 +7841,7 @@ Item {
                 ShotButton {
                     visible: root.callWindow !== null
                     icon: "open_in_new"
-                    tip: qsTr("Aller à l'appel")
+                    tip: I18n.tr("Aller à l'appel")
                     onClicked: root.focusCall()
                 }
                 // Micro : rouge quand il est coupé
@@ -7925,7 +7925,7 @@ Item {
                 anchors.right: parent.right
                 anchors.rightMargin: 22
                 anchors.verticalCenter: parent.verticalCenter
-                text: qsTr("clic : annuler")
+                text: I18n.tr("clic : annuler")
                 color: root.fgDim
                 font.pointSize: 7.5
             }
@@ -7957,7 +7957,7 @@ Item {
                     }
                     StyledText {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: qsTr("Déposer sur l'étagère")
+                        text: I18n.tr("Déposer sur l'étagère")
                         color: root.fg
                         font.pointSize: 10
                         font.weight: Font.DemiBold
@@ -8072,7 +8072,7 @@ Item {
                         id: moreLbl
 
                         anchors.right: parent.right
-                        text: root.queue.length > 0 ? `+${root.queue.length}` : qsTr("maintenant")
+                        text: root.queue.length > 0 ? `+${root.queue.length}` : I18n.tr("maintenant")
                         color: root.queue.length > 0 ? root.accent : root.fgDim
                         font.pointSize: 8
                         font.weight: Font.Medium
@@ -8142,7 +8142,7 @@ Item {
                             width: Math.min(implicitWidth, act.width - 24)
                             elide: Text.ElideRight
                             // kitty envoie une action « default » sans libellé
-                            text: act.modelData.text || qsTr("Voir")
+                            text: act.modelData.text || I18n.tr("Voir")
                             color: root.fg
                             font.pointSize: 9
                             font.weight: Font.Medium
@@ -8241,7 +8241,7 @@ Item {
                     }
                 }
                 StyledText {
-                    text: Qt.locale("fr_FR").toString(Time.date, "dddd d MMMM").toUpperCase()
+                    text: I18n.locale.toString(Time.date, I18n.isFr ? "dddd d MMMM" : "dddd, MMMM d").toUpperCase()
                     color: root.fgDim
                     font.pointSize: 7.5
                     font.weight: Font.Bold
@@ -8307,7 +8307,7 @@ Item {
                         StyledText {
                             anchors.verticalCenter: parent.verticalCenter
                             visible: !!Weather.cc
-                            text: qsTr("Ressenti %1 · %2 %").arg(Weather.feelsLike).arg(Weather.humidity)
+                            text: I18n.tr("Ressenti %1 · %2 %").arg(Weather.feelsLike).arg(Weather.humidity)
                             color: root.fgDim
                             font.pointSize: 7.8
                             font.features: {
@@ -8439,10 +8439,10 @@ Item {
                 // Température en direct : bleu au calme, orange vers 71 °C, rouge vers 86 °C
                 PerfRing {
                     icon: Cpu.temperature >= 86 ? "local_fire_department" : "device_thermostat"
-                    label: qsTr("Temp.")
+                    label: I18n.tr("Temp.")
                     value: Math.max(0, Math.min(1, (Cpu.temperature - 35) / 60))
                     centerText: Cpu.temperature > 0 ? `${Math.round(Cpu.temperature)}°` : "—"
-                    sub: root.fanRpm > 0 ? qsTr("Ventilo %1").arg(root.fanRpm) : root.fanRpm === 0 ? qsTr("Ventilo arrêté") : root.tempPeak > 0 ? qsTr("Max %1°").arg(Math.round(root.tempPeak)) : ""
+                    sub: root.fanRpm > 0 ? I18n.tr("Ventilo %1").arg(root.fanRpm) : root.fanRpm === 0 ? I18n.tr("Ventilo arrêté") : root.tempPeak > 0 ? I18n.tr("Max %1°").arg(Math.round(root.tempPeak)) : ""
                 }
                 PerfRing {
                     icon: "memory_alt"
@@ -8690,7 +8690,7 @@ Item {
                 StyledText {
                     width: parent.width
                     elide: Text.ElideRight
-                    text: (Players.getIdentity(root.player) || qsTr("Audio")).toUpperCase()
+                    text: (Players.getIdentity(root.player) || I18n.tr("Audio")).toUpperCase()
                     color: root.accent
                     font.pointSize: 7
                     font.weight: Font.Bold

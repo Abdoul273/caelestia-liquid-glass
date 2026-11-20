@@ -50,7 +50,7 @@ PageBase {
         });
     }
 
-    title: qsTr("Ajouter un réseau")
+    title: I18n.tr("Ajouter un réseau")
     isSubPage: true
 
     ColumnLayout {
@@ -75,7 +75,7 @@ PageBase {
         StyledText {
             Layout.fillWidth: true
             Layout.leftMargin: Tokens.padding.extraSmall
-            text: qsTr("Entrez les informations ci-dessous pour vous connecter manuellement.")
+            text: I18n.tr("Entrez les informations ci-dessous pour vous connecter manuellement.")
             color: Colours.palette.m3onSurfaceVariant
             font: Tokens.font.body.small
             wrapMode: Text.WordWrap
@@ -86,10 +86,10 @@ PageBase {
 
             Layout.fillWidth: true
             Layout.topMargin: Tokens.spacing.extraSmall
-            placeholderText: qsTr("Nom du réseau (SSID)")
-            supportingText: qsTr("ex. MonReseauMasque")
+            placeholderText: I18n.tr("Nom du réseau (SSID)")
+            supportingText: I18n.tr("ex. MonReseauMasque")
             leadingIcon: "wifi"
-            errorText: qsTr("Le nom du réseau est requis")
+            errorText: I18n.tr("Le nom du réseau est requis")
             inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
 
             onAccepted: root.secured ? passwordField.forceActiveFocus() : root.submit()
@@ -99,8 +99,8 @@ PageBase {
             id: hiddenToggle
 
             first: true
-            text: qsTr("Réseau masqué")
-            subtext: qsTr("Rechercher activement un réseau masqué")
+            text: I18n.tr("Réseau masqué")
+            subtext: I18n.tr("Rechercher activement un réseau masqué")
             checked: true
         }
 
@@ -109,20 +109,20 @@ PageBase {
 
             Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
             last: !root.secured
-            label: qsTr("Sécurité")
-            fallbackText: qsTr("WPA/WPA2/WPA3 Personnel")
+            label: I18n.tr("Sécurité")
+            fallbackText: I18n.tr("WPA/WPA2/WPA3 Personnel")
             fallbackIcon: "lock"
 
             menuItems: [
                 MenuItem {
                     icon: "lock"
-                    text: qsTr("WPA/WPA2/WPA3 Personnel")
+                    text: I18n.tr("WPA/WPA2/WPA3 Personnel")
                 },
                 MenuItem {
                     id: noneItem
 
                     icon: "lock_open"
-                    text: qsTr("Aucune (ouvert)")
+                    text: I18n.tr("Aucune (ouvert)")
                 }
             ]
 
@@ -170,11 +170,11 @@ PageBase {
                 anchors.right: parent.right
 
                 enabled: root.secured
-                placeholderText: qsTr("Mot de passe")
+                placeholderText: I18n.tr("Mot de passe")
                 leadingIcon: "key"
                 echoMode: TextInput.Password
-                supportingText: qsTr("Les mots de passe WPA comportent au moins 8 caractères")
-                errorText: root.failed ? qsTr("Échec de la connexion — vérifiez le mot de passe") : qsTr("Le mot de passe doit comporter au moins 8 caractères")
+                supportingText: I18n.tr("Les mots de passe WPA comportent au moins 8 caractères")
+                errorText: root.failed ? I18n.tr("Échec de la connexion — vérifiez le mot de passe") : I18n.tr("Le mot de passe doit comporter au moins 8 caractères")
 
                 onAccepted: root.submit()
             }
@@ -190,7 +190,7 @@ PageBase {
                 isRound: true
                 horizontalPadding: Tokens.padding.extraLarge
                 type: TextButton.Tonal
-                text: qsTr("Annuler")
+                text: I18n.tr("Annuler")
                 onClicked: root.nState.closeSubPage()
             }
 
@@ -216,7 +216,7 @@ PageBase {
                 TextMetrics {
                     id: connectMetrics
 
-                    text: qsTr("Se connecter")
+                    text: I18n.tr("Se connecter")
                     font: connectBtn.font
                 }
 

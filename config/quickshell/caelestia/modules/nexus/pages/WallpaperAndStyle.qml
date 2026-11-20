@@ -17,35 +17,35 @@ PageBase {
     readonly property list<string> shellModes: ["classic", "ios", "off"]
     readonly property list<MenuItem> shellItems: [
         MenuItem {
-            text: qsTr("Classique")
+            text: I18n.tr("Classique")
             icon: "blur_on"
         },
         MenuItem {
-            text: qsTr("Verre plein")
+            text: I18n.tr("Verre plein")
             icon: "water_drop"
         },
         MenuItem {
-            text: qsTr("Désactivé")
+            text: I18n.tr("Désactivé")
             icon: "block"
         }
     ]
     readonly property list<string> gtkModes: ["nautilus", "complet", "off"]
     readonly property list<MenuItem> gtkItems: [
         MenuItem {
-            text: qsTr("Nautilus")
+            text: I18n.tr("Nautilus")
             icon: "folder"
         },
         MenuItem {
-            text: qsTr("Toutes")
+            text: I18n.tr("Toutes")
             icon: "apps"
         },
         MenuItem {
-            text: qsTr("Aucune")
+            text: I18n.tr("Aucune")
             icon: "block"
         }
     ]
 
-    title: qsTr("Fond d'écran et style")
+    title: I18n.tr("Fond d'écran et style")
 
     ColumnLayout {
         anchors.horizontalCenter: parent.horizontalCenter
@@ -87,7 +87,7 @@ PageBase {
 
                     StyledText {
                         Layout.alignment: Qt.AlignHCenter
-                        text: qsTr("Fond d'écran désactivé")
+                        text: I18n.tr("Fond d'écran désactivé")
                         color: Colours.palette.m3onSurfaceVariant
                         font: Tokens.font.body.large
                     }
@@ -178,7 +178,7 @@ PageBase {
 
             IconTextButton {
                 icon: "wallpaper"
-                text: qsTr("Fonds d'écran")
+                text: I18n.tr("Fonds d'écran")
                 font: Tokens.font.body.large
                 isRound: true
                 shapeMorph: true
@@ -191,7 +191,7 @@ PageBase {
 
             IconTextButton {
                 icon: "palette"
-                text: qsTr("Couleurs")
+                text: I18n.tr("Couleurs")
                 font: Tokens.font.body.large
                 isRound: true
                 shapeMorph: true
@@ -204,7 +204,7 @@ PageBase {
 
         ToggleRow {
             first: true
-            text: qsTr("Afficher le fond d'écran")
+            text: I18n.tr("Afficher le fond d'écran")
             checked: Config.background.wallpaperEnabled
             onToggled: GlobalConfig.background.wallpaperEnabled = checked
         }
@@ -212,8 +212,8 @@ PageBase {
         ToggleRow {
             Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
 
-            text: qsTr("Transparence")
-            subtext: qsTr("Base %1, calques %2").arg(Colours.transparency.base).arg(Colours.transparency.layers)
+            text: I18n.tr("Transparence")
+            subtext: I18n.tr("Base %1, calques %2").arg(Colours.transparency.base).arg(Colours.transparency.layers)
             checked: Colours.transparency.enabled
             onToggled: GlobalConfig.appearance.transparency.enabled = checked
         }
@@ -222,24 +222,24 @@ PageBase {
             Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
 
             last: true
-            text: qsTr("Thème sombre")
+            text: I18n.tr("Thème sombre")
             checked: !Colours.light
             onToggled: Colours.setMode(checked ? "dark" : "light")
         }
 
         SectionHeader {
-            text: qsTr("Liquid glass")
+            text: I18n.tr("Liquid glass")
         }
 
         SelectRow {
             Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
 
             first: true
-            label: qsTr("Style du verre")
+            label: I18n.tr("Style du verre")
             subtext: ({
-                    classic: qsTr("Verre teinté et flouté : le bon compromis"),
-                    ios: qsTr("Verre clair façon iOS 26 : on voit le fond à travers"),
-                    off: qsTr("Panneaux opaques de Caelestia (les notifications restent en verre)")
+                    classic: I18n.tr("Verre teinté et flouté : le bon compromis"),
+                    ios: I18n.tr("Verre clair façon iOS 26 : on voit le fond à travers"),
+                    off: I18n.tr("Panneaux opaques de Caelestia (les notifications restent en verre)")
                 })[Glass.shellMode] ?? ""
             menuItems: root.shellItems
             active: root.shellItems[Math.max(0, root.shellModes.indexOf(Glass.shellMode))]
@@ -250,8 +250,8 @@ PageBase {
             Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
 
             icon: "opacity"
-            label: qsTr("Intensité du verre (shell et applis GTK)")
-            valueLabel: value < 0.34 ? qsTr("Très transparent") : value < 0.46 ? qsTr("Transparent") : value <= 0.54 ? qsTr("Équilibré") : value < 0.75 ? qsTr("Dense") : qsTr("Très dense")
+            label: I18n.tr("Intensité du verre (shell et applis GTK)")
+            valueLabel: value < 0.34 ? I18n.tr("Très transparent") : value < 0.46 ? I18n.tr("Transparent") : value <= 0.54 ? I18n.tr("Équilibré") : value < 0.75 ? I18n.tr("Dense") : I18n.tr("Très dense")
             value: Glass.density
             onMoved: v => Glass.set("density", Math.round(v * 100) / 100)
         }
@@ -260,11 +260,11 @@ PageBase {
             Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
 
             last: true
-            label: qsTr("Applis GTK en verre")
+            label: I18n.tr("Applis GTK en verre")
             subtext: ({
-                    nautilus: qsTr("Seulement Nautilus, les autres applis restent opaques"),
-                    complet: qsTr("Nautilus, Calculatrice, Éditeur de texte, Loupe, Thunar…"),
-                    off: qsTr("Aucune : style GTK normal")
+                    nautilus: I18n.tr("Seulement Nautilus, les autres applis restent opaques"),
+                    complet: I18n.tr("Nautilus, Calculatrice, Éditeur de texte, Loupe, Thunar…"),
+                    off: I18n.tr("Aucune : style GTK normal")
                 })[Glass.gtkMode] ?? ""
             menuItems: root.gtkItems
             active: root.gtkItems[Math.max(0, root.gtkModes.indexOf(Glass.gtkMode))]

@@ -13,7 +13,7 @@ import qs.modules.nexus.common
 PageBase {
     id: root
 
-    title: qsTr("Réseaux enregistrés")
+    title: I18n.tr("Réseaux enregistrés")
     isSubPage: true
 
     Component.onCompleted: Nmcli.loadSavedConnections(() => {})
@@ -31,7 +31,7 @@ PageBase {
             first: true
             last: true
             placeholderIcon: "wifi_find"
-            placeholderText: qsTr("Aucun réseau enregistré")
+            placeholderText: I18n.tr("Aucun réseau enregistré")
 
             model: ScriptModel {
                 values: [...Nmcli.savedConnectionSsids].sort((a, b) => a.localeCompare(b))
@@ -92,11 +92,11 @@ PageBase {
                             text: {
                                 let security;
                                 if (saved.ap)
-                                    security = saved.ap.security || qsTr("Ouvrir");
+                                    security = saved.ap.security || I18n.tr("Ouvrir");
                                 else
-                                    security = Nmcli.securityLabel(Nmcli.savedSecurityFor(saved.modelData)) || qsTr("Inconnu");
+                                    security = Nmcli.securityLabel(Nmcli.savedSecurityFor(saved.modelData)) || I18n.tr("Inconnu");
                                 if (saved.isActive)
-                                    return qsTr("Connecté • %1").arg(security);
+                                    return I18n.tr("Connecté • %1").arg(security);
                                 return security;
                             }
                             color: saved.isActive ? Colours.palette.m3primary : Colours.palette.m3outline

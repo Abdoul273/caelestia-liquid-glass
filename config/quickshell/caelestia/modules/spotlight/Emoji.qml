@@ -48,62 +48,62 @@ Item {
         {
             key: "recents",
             glyph: "󰥔",
-            title: qsTr("Récents")
+            title: I18n.tr("Récents")
         },
         {
             key: "smileys",
             glyph: "󰱱",
-            title: qsTr("Smileys")
+            title: I18n.tr("Smileys")
         },
         {
             key: "people",
             glyph: "󰀄",
-            title: qsTr("Personnes")
+            title: I18n.tr("Personnes")
         },
         {
             key: "nature",
             glyph: "󰌪",
-            title: qsTr("Nature")
+            title: I18n.tr("Nature")
         },
         {
             key: "food",
             glyph: "󰉛",
-            title: qsTr("Nourriture")
+            title: I18n.tr("Nourriture")
         },
         {
             key: "travel",
             glyph: "󰿄",
-            title: qsTr("Voyages")
+            title: I18n.tr("Voyages")
         },
         {
             key: "activities",
             glyph: "󰝚",
-            title: qsTr("Activités")
+            title: I18n.tr("Activités")
         },
         {
             key: "objects",
             glyph: "󰦬",
-            title: qsTr("Objets")
+            title: I18n.tr("Objets")
         },
         {
             key: "symbols",
             glyph: "󰘨",
-            title: qsTr("Symboles")
+            title: I18n.tr("Symboles")
         },
         {
             key: "flags",
             glyph: "󰈻",
-            title: qsTr("Drapeaux")
+            title: I18n.tr("Drapeaux")
         },
         {
             key: "kaomoji",
             glyph: "ツ",
-            title: qsTr("Kaomoji")
+            title: I18n.tr("Kaomoji")
         },
         {
             key: "glyphs",
             glyph: "󰣇",
-            title: qsTr("Glyphes")
+            title: I18n.tr("Glyphes")
         }
     ]
     property string category: "recents"
@@ -318,7 +318,7 @@ Item {
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
                         visible: !input.text
-                        text: qsTr("Rechercher un emoji")
+                        text: I18n.tr("Rechercher un emoji")
                         color: Qt.alpha(root.fg, 0.38)
                         font: input.font
                     }
@@ -332,7 +332,7 @@ Item {
                 x: 18
                 anchors.top: search.bottom
                 anchors.topMargin: 10
-                text: root.query ? qsTr("Résultats") + "  ·  " + root.total : (root.categories.find(c => c.key === root.category)?.title ?? "")
+                text: root.query ? I18n.tr("Résultats") + "  ·  " + root.total : (root.categories.find(c => c.key === root.category)?.title ?? "")
                 color: root.fgDim
                 font.pixelSize: 12
                 font.weight: Font.DemiBold
@@ -409,7 +409,7 @@ Item {
             Text {
                 anchors.centerIn: grid
                 visible: root.items.length === 0
-                text: root.query ? qsTr("Aucun emoji trouvé") : qsTr("Rien ici pour l'instant")
+                text: root.query ? I18n.tr("Aucun emoji trouvé") : I18n.tr("Rien ici pour l'instant")
                 color: root.fgDim
                 font.pixelSize: 13
             }

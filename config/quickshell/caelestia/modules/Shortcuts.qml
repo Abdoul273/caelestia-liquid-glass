@@ -47,7 +47,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "nexus"
-        description: qsTr("Ouvrir les paramètres Nexus")
+        description: I18n.tr("Ouvrir les paramètres Nexus")
         onPressed: root.toggleDrop("settings")
     }
 
@@ -55,7 +55,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "showall"
-        description: qsTr("Afficher/Masquer le lanceur, le tableau de bord et l'OSD")
+        description: I18n.tr("Afficher/Masquer le lanceur, le tableau de bord et l'OSD")
         onPressed: {
             if (root.hasFullscreen)
                 return;
@@ -68,7 +68,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "dashboard"
-        description: qsTr("Afficher/Masquer le tableau de bord")
+        description: I18n.tr("Afficher/Masquer le tableau de bord")
         onPressed: {
             if (root.hasFullscreen)
                 return;
@@ -90,7 +90,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "spotlight"
-        description: qsTr("Ouvrir/Fermer Spotlight")
+        description: I18n.tr("Ouvrir/Fermer Spotlight")
         onPressed: root.toggleDrop("spotlight")
     }
 
@@ -98,7 +98,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "clipboard"
-        description: qsTr("Presse-papiers (Super + V) : même goutte de verre")
+        description: I18n.tr("Presse-papiers (Super + V) : même goutte de verre")
         onPressed: root.toggleDrop("clipboard")
     }
 
@@ -106,7 +106,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "emoji"
-        description: qsTr("Emojis (Super + .) : même goutte de verre")
+        description: I18n.tr("Emojis (Super + .) : même goutte de verre")
         onPressed: root.toggleDrop("emoji")
     }
 
@@ -114,7 +114,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "keyhelp"
-        description: qsTr("Raccourcis (Super + H) : recherche façon Spotlight")
+        description: I18n.tr("Raccourcis (Super + H) : recherche façon Spotlight")
         onPressed: root.toggleDrop("keyhelp")
     }
 
@@ -122,7 +122,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "clock"
-        description: qsTr("Horloge (Super + Maj + O) : même goutte de verre")
+        description: I18n.tr("Horloge (Super + Maj + O) : même goutte de verre")
         onPressed: root.toggleDrop("clock")
     }
 
@@ -130,7 +130,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "settings"
-        description: qsTr("Paramètres (Super + I) : Nexus dans la goutte de verre")
+        description: I18n.tr("Paramètres (Super + I) : Nexus dans la goutte de verre")
         onPressed: root.toggleDrop("settings")
     }
 
@@ -138,7 +138,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "annotate"
-        description: qsTr("Annoter une capture : même goutte de verre")
+        description: I18n.tr("Annoter une capture : même goutte de verre")
         onPressed: root.toggleDrop("annotate")
     }
 
@@ -146,7 +146,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "earbuds"
-        description: qsTr("Écouteurs 3D (Super + Maj + B) : même goutte de verre façon AirPodsDesktop")
+        description: I18n.tr("Écouteurs 3D (Super + Maj + B) : même goutte de verre façon AirPodsDesktop")
         onPressed: root.toggleDrop("earbuds")
     }
 
@@ -154,7 +154,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "display"
-        description: qsTr("Ouvrir/Fermer la projection (choix de l'écran)")
+        description: I18n.tr("Ouvrir/Fermer la projection (choix de l'écran)")
         onPressed: root.toggleDrop("display")
     }
 
@@ -162,7 +162,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "calculator"
-        description: qsTr("Ouvrir/Fermer la calculatrice")
+        description: I18n.tr("Ouvrir/Fermer la calculatrice")
         onPressed: root.toggleDrop("calculator")
     }
 
@@ -170,7 +170,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "dictation"
-        description: qsTr("Dictée : parler, puis le texte est tapé dans le champ actif")
+        description: I18n.tr("Dictée : parler, puis le texte est tapé dans le champ actif")
         onPressed: root.toggleDrop("dictation")
     }
 
@@ -178,7 +178,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "writing"
-        description: qsTr("Outils d'écriture sur le texte sélectionné (corriger, reformuler…)")
+        description: I18n.tr("Outils d'écriture sur le texte sélectionné (corriger, reformuler…)")
         onPressed: root.toggleDrop("writing")
     }
 
@@ -186,7 +186,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "translate"
-        description: qsTr("Traduction rapide (reprend le texte sélectionné)")
+        description: I18n.tr("Traduction rapide (reprend le texte sélectionné)")
         onPressed: root.toggleDrop("translate")
     }
 
@@ -194,7 +194,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "siri"
-        description: qsTr("Assistant vocal (Gemini Live) dans le verre de l'île")
+        description: I18n.tr("Assistant vocal (Gemini Live) dans le verre de l'île")
         onPressed: root.toggleDrop("siri")
     }
 
@@ -202,7 +202,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "quicknotes"
-        description: qsTr("Ouvrir les notes rapides")
+        description: I18n.tr("Ouvrir les notes rapides")
         onPressed: root.toggleQuick("notes")
     }
 
@@ -210,7 +210,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "quicktasks"
-        description: qsTr("Ouvrir les tâches AuraTask")
+        description: I18n.tr("Ouvrir les tâches AuraTask")
         onPressed: root.toggleQuick("tasks")
     }
 
@@ -218,7 +218,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "session"
-        description: qsTr("Afficher/Masquer le menu de session")
+        description: I18n.tr("Afficher/Masquer le menu de session")
         onPressed: {
             if (root.hasFullscreen)
                 return;
@@ -231,7 +231,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "launcher"
-        description: qsTr("Afficher/Masquer le lanceur")
+        description: I18n.tr("Afficher/Masquer le lanceur")
         onPressed: root.launcherInterrupted = false
         onReleased: {
             if (!root.launcherInterrupted && !root.hasFullscreen) {
@@ -246,7 +246,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "launcherInterrupt"
-        description: qsTr("Interrompre le raccourci du lanceur")
+        description: I18n.tr("Interrompre le raccourci du lanceur")
         onPressed: root.launcherInterrupted = true
     }
 
@@ -254,7 +254,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "sidebar"
-        description: qsTr("Afficher/Masquer le volet latéral")
+        description: I18n.tr("Afficher/Masquer le volet latéral")
         onPressed: {
             if (root.hasFullscreen)
                 return;
@@ -271,7 +271,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "utilities"
-        description: qsTr("Afficher/Masquer les utilitaires")
+        description: I18n.tr("Afficher/Masquer les utilitaires")
         onPressed: {
             if (root.hasFullscreen)
                 return;

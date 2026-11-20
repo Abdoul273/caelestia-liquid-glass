@@ -38,7 +38,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "missionControl"
-        description: qsTr("Mission Control : voir toutes les fenêtres")
+        description: I18n.tr("Mission Control : voir toutes les fenêtres")
         onPressed: root.toggle()
     }
 
@@ -47,7 +47,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "missionControlOpen"
-        description: qsTr("Ouvrir Mission Control")
+        description: I18n.tr("Ouvrir Mission Control")
         onPressed: {
             if (!root.open)
                 root.toggle();
@@ -58,7 +58,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "missionControlClose"
-        description: qsTr("Fermer Mission Control")
+        description: I18n.tr("Fermer Mission Control")
         onPressed: root.close()
     }
 

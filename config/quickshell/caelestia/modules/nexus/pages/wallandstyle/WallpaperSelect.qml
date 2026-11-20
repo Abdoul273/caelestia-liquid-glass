@@ -16,7 +16,7 @@ import qs.modules.nexus.common
 PageBase {
     id: root
 
-    title: qsTr("Fonds d'écran")
+    title: I18n.tr("Fonds d'écran")
     isSubPage: true
 
     ColumnLayout {
@@ -32,7 +32,7 @@ PageBase {
 
             IconTextButton {
                 icon: "photo_library"
-                text: qsTr("Parcourir")
+                text: I18n.tr("Parcourir")
                 font: Tokens.font.body.large
                 isRound: true
                 shapeMorph: true
@@ -43,8 +43,8 @@ PageBase {
                 FileDialog {
                     id: browseDialog
 
-                    title: qsTr("Choisir une image")
-                    filterLabel: qsTr("Fichiers image")
+                    title: I18n.tr("Choisir une image")
+                    filterLabel: I18n.tr("Fichiers image")
                     filters: Images.validImageExtensions
                     onAccepted: path => {
                         Wallpapers.setWallpaper(path);
@@ -55,7 +55,7 @@ PageBase {
 
             IconTextButton {
                 icon: "shuffle"
-                text: qsTr("Aléatoire")
+                text: I18n.tr("Aléatoire")
                 font: Tokens.font.body.large
                 isRound: true
                 shapeMorph: true
@@ -73,7 +73,7 @@ PageBase {
             imgHeight: Math.round(width * 0.3)
             radius: Tokens.rounding.extraLarge
             source: Quickshell.shellPath("assets/wallpaper.webp")
-            text: qsTr("Fond d'écran à la une")
+            text: I18n.tr("Fond d'écran à la une")
             fillLabel: false
             onClicked: {
                 Wallpapers.setWallpaper(Quickshell.shellPath("assets/wallpaper.webp"));
@@ -83,7 +83,7 @@ PageBase {
 
         StyledText {
             Layout.topMargin: Tokens.spacing.large
-            text: qsTr("Fonds d'écran locaux")
+            text: I18n.tr("Fonds d'écran locaux")
             font: Tokens.font.title.small
         }
 
@@ -177,7 +177,7 @@ PageBase {
 
                     StyledText {
                         Layout.alignment: Qt.AlignHCenter
-                        text: qsTr("Aucun fond d'écran local trouvé")
+                        text: I18n.tr("Aucun fond d'écran local trouvé")
                         color: Colours.palette.m3outline
                         font: Tokens.font.title.small
                     }

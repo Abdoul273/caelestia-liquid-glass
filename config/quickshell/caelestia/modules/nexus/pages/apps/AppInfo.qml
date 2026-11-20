@@ -29,7 +29,7 @@ PageBase {
             nState.closeSubPage();
     }
 
-    title: qsTr("Infos de l'application")
+    title: I18n.tr("Infos de l'application")
     isSubPage: true
 
     ColumnLayout {
@@ -76,13 +76,13 @@ PageBase {
         // Launcher
         SectionHeader {
             first: true
-            text: qsTr("Lanceur")
+            text: I18n.tr("Lanceur")
         }
 
         ToggleRow {
             first: true
-            text: qsTr("Favori")
-            subtext: root.favouriteByRegex ? qsTr("Correspond à favouriteApps — modifiez la configuration") : qsTr("Épingler en haut du lanceur")
+            text: I18n.tr("Favori")
+            subtext: root.favouriteByRegex ? I18n.tr("Correspond à favouriteApps — modifiez la configuration") : I18n.tr("Épingler en haut du lanceur")
             enabled: !root.favouriteByRegex
             checked: root.app && Strings.testRegexList(GlobalConfig.launcher.favouriteApps, root.app.id)
             onToggled: {
@@ -93,8 +93,8 @@ PageBase {
 
         ToggleRow {
             last: true
-            text: qsTr("Masqué")
-            subtext: root.hiddenByRegex ? qsTr("Correspond à hiddenApps — modifiez la configuration") : qsTr("Masquer du lanceur")
+            text: I18n.tr("Masqué")
+            subtext: root.hiddenByRegex ? I18n.tr("Correspond à hiddenApps — modifiez la configuration") : I18n.tr("Masquer du lanceur")
             enabled: !root.hiddenByRegex
             checked: root.app && Strings.testRegexList(GlobalConfig.launcher.hiddenApps, root.app.id)
             onToggled: {
@@ -105,14 +105,14 @@ PageBase {
 
         // Details
         SectionHeader {
-            text: qsTr("Détails")
+            text: I18n.tr("Détails")
         }
 
         WrapInfoRow {
             id: appId
 
             first: true
-            label: qsTr("ID de l'application")
+            label: I18n.tr("ID de l'application")
             value: root.app?.id ?? ""
             labelComp.Layout.preferredWidth: Math.max(labelComp.implicitWidth, command.labelComp.implicitWidth)
         }
@@ -121,7 +121,7 @@ PageBase {
             id: command
 
             last: true
-            label: qsTr("Commande")
+            label: I18n.tr("Commande")
             value: (root.app?.command ?? []).join(" ")
             labelComp.Layout.preferredWidth: Math.max(labelComp.implicitWidth, appId.labelComp.implicitWidth)
         }

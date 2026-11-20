@@ -28,8 +28,8 @@ Searcher {
 
     component Action: QtObject {
         required property var modelData
-        readonly property string name: modelData.name ?? qsTr("Sans nom")
-        readonly property string desc: modelData.description ?? qsTr("Aucune description")
+        readonly property string name: modelData.name ?? I18n.tr("Sans nom")
+        readonly property string desc: modelData.description ?? I18n.tr("Aucune description")
         readonly property string icon: modelData.icon ?? "help_outline"
         readonly property list<string> command: modelData.command ?? []
         readonly property bool enabled: modelData.enabled ?? true

@@ -45,7 +45,7 @@ ColumnLayout {
 
     StyledText {
         Layout.fillWidth: true
-        text: Players.active?.trackArtist || qsTr("Artiste inconnu")
+        text: Players.active?.trackArtist || I18n.tr("Artiste inconnu")
         color: Colours.palette.m3onSurfaceVariant
         font: Tokens.font.title.medium
         elide: Text.ElideRight
@@ -54,7 +54,7 @@ ColumnLayout {
 
     StyledText {
         Layout.fillWidth: true
-        text: Players.active?.trackAlbum || qsTr("Album inconnu")
+        text: Players.active?.trackAlbum || I18n.tr("Album inconnu")
         color: Colours.palette.m3secondary
         font: Tokens.font.title.medium
         elide: Text.ElideRight

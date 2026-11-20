@@ -22,7 +22,7 @@ Singleton {
     property string pendingCoords
 
     readonly property string icon: cc ? Icons.getWeatherIcon(cc.weatherCode) : "cloud_alert"
-    readonly property string description: cc?.weatherDesc ?? qsTr("Pas de météo")
+    readonly property string description: cc?.weatherDesc ?? I18n.tr("Pas de météo")
     readonly property string temp: formatTemp(cc?.tempC)
     readonly property string feelsLike: formatTemp(cc?.feelsLikeC)
     readonly property int humidity: cc?.humidity ?? 0
@@ -186,7 +186,7 @@ Singleton {
                 geo = JSON.parse(text).features?.[0]?.properties.geocoding;
             } catch (error) {
                 console.warn(lc, `Unable to parse response from nominatim: ${error}`);
-                city = qsTr("Ville inconnue");
+                city = I18n.tr("Ville inconnue");
                 return;
             }
 
@@ -200,10 +200,10 @@ Singleton {
             }
 
             console.warn(lc, "No locality in nominatim response");
-            city = qsTr("Ville inconnue");
+            city = I18n.tr("Ville inconnue");
         }, error => {
             console.warn(lc, `Nominatim request failed: ${error}`);
-            city = qsTr("Ville inconnue");
+            city = I18n.tr("Ville inconnue");
         }, nominatimHeaders);
     }
 
@@ -324,7 +324,7 @@ Singleton {
             "96": "Orage avec grêle",
             "99": "Orage avec grêle"
         };
-        return conditions[code] || "Inconnu";
+        return I18n.tr(conditions[code] || "Inconnu");
     }
 
     onLocChanged: fetchWeatherData()

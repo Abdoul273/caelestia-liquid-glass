@@ -16,7 +16,7 @@ QtObject {
     property var locks: new Set()
 
     property date time: new Date()
-    property string timeStr: qsTr("maintenant")
+    property string timeStr: I18n.tr("maintenant")
 
     readonly property Timer timeStrTimer: Timer {
         running: !notif.closed
@@ -172,11 +172,11 @@ QtObject {
     function translateBody(text: string): string {
         let m;
         if (text === "Claude is waiting for your input")
-            return qsTr("Claude attend votre réponse");
+            return I18n.tr("Claude attend votre réponse");
         if ((m = text.match(/^Claude needs your permission to use (.+)$/)))
-            return qsTr("Claude demande l'autorisation d'utiliser %1").arg(m[1]);
+            return I18n.tr("Claude demande l'autorisation d'utiliser %1").arg(m[1]);
         if (text === "Claude Code needs your attention")
-            return qsTr("Claude Code a besoin de votre attention");
+            return I18n.tr("Claude Code a besoin de votre attention");
         return text;
     }
 
@@ -185,7 +185,7 @@ QtObject {
         const m = Math.floor(diff / 60000);
 
         if (m < 1) {
-            timeStr = qsTr("maintenant");
+            timeStr = I18n.tr("maintenant");
             timeStrTimer.interval = 5000;
         } else {
             const h = Math.floor(m / 60);

@@ -255,7 +255,7 @@ Item {
                 anchors.right: wave.left
                 anchors.rightMargin: 14
                 anchors.verticalCenter: parent.verticalCenter
-                text: root.phase === "erreur" ? qsTr("Dictée indisponible : %1").arg(root.detail || qsTr("erreur inconnue")) : root.transcript || (root.phase === "connexion" ? qsTr("Connexion…") : qsTr("Parlez, je vous écoute…"))
+                text: root.phase === "erreur" ? I18n.tr("Dictée indisponible : %1").arg(root.detail || I18n.tr("erreur inconnue")) : root.transcript || (root.phase === "connexion" ? I18n.tr("Connexion…") : I18n.tr("Parlez, je vous écoute…"))
                 color: root.phase === "erreur" ? root.red : root.transcript ? root.fg : Qt.alpha(root.fg, 0.4)
                 wrapMode: Text.Wrap
                 maximumLineCount: 5

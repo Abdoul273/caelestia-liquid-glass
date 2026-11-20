@@ -25,15 +25,15 @@ Scope {
                 if (p <= level.level && root.lastPercentage > level.level) {
                     Sounds.playBatteryLow();
                     // Pourcentage et autonomie restante ajoutés au message d'alerte
-                    const rest = BatteryInfo.timeToEmpty > 0 ? qsTr(" · %1 restantes").arg(BatteryInfo.fmtDuration(BatteryInfo.timeToEmpty)) : "";
-                    Toaster.toast(`${level.title ?? qsTr("Avertissement batterie")} · ${Math.round(p)} %`, `${level.message ?? qsTr("Batterie faible")}${rest}`, level.icon ?? "battery_android_alert", level.critical ? Toast.Error : Toast.Warning);
+                    const rest = BatteryInfo.timeToEmpty > 0 ? I18n.tr(" · %1 restantes").arg(BatteryInfo.fmtDuration(BatteryInfo.timeToEmpty)) : "";
+                    Toaster.toast(`${level.title ?? I18n.tr("Avertissement batterie")} · ${Math.round(p)} %`, `${level.message ?? I18n.tr("Batterie faible")}${rest}`, level.icon ?? "battery_android_alert", level.critical ? Toast.Error : Toast.Warning);
                     break;
                 }
             }
         }
 
         if (!hibernateTimer.running && p <= GlobalConfig.general.battery.criticalLevel) {
-            Toaster.toast(qsTr("Mise en veille prolongée dans 5 secondes"), qsTr("Mise en veille prolongée pour protéger vos données"), "battery_android_alert", Toast.Error);
+            Toaster.toast(I18n.tr("Mise en veille prolongée dans 5 secondes"), I18n.tr("Mise en veille prolongée pour protéger vos données"), "battery_android_alert", Toast.Error);
             hibernateTimer.start();
         }
 
@@ -48,12 +48,12 @@ Scope {
             if (UPower.onBattery) {
                 Sounds.playUnplug();
                 if (GlobalConfig.utilities.toasts.chargingChanged)
-                    Toaster.toast(qsTr("Chargeur débranché"), qsTr("Batterie en décharge"), "power_off");
+                    Toaster.toast(I18n.tr("Chargeur débranché"), I18n.tr("Batterie en décharge"), "power_off");
                 root.handleBatteryWarnings();
             } else {
                 Sounds.playPlug();
                 if (GlobalConfig.utilities.toasts.chargingChanged)
-                    Toaster.toast(qsTr("Chargeur branché"), qsTr("Batterie en charge"), "power");
+                    Toaster.toast(I18n.tr("Chargeur branché"), I18n.tr("Batterie en charge"), "power");
                 root.lastPercentage = 100;
             }
         }

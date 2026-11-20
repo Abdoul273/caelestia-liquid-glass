@@ -167,13 +167,13 @@ Loader {
                 spacing: Tokens.spacing.medium
 
                 StyledText {
-                    text: qsTr("Supprimer l'enregistrement ?")
+                    text: I18n.tr("Supprimer l'enregistrement ?")
                     font: Tokens.font.body.large
                 }
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: qsTr("L'enregistrement « %1 » sera définitivement supprimé.").arg(deleteConfirmation.path)
+                    text: I18n.tr("L'enregistrement « %1 » sera définitivement supprimé.").arg(deleteConfirmation.path)
                     color: Colours.palette.m3onSurfaceVariant
                     font: Tokens.font.body.small
                     wrapMode: Text.WrapAtWordBoundaryOrAnywhere
@@ -185,13 +185,13 @@ Loader {
                     spacing: Tokens.spacing.medium
 
                     TextButton {
-                        text: qsTr("Annuler")
+                        text: I18n.tr("Annuler")
                         type: TextButton.Text
                         onClicked: root.props.recordingConfirmDelete = ""
                     }
 
                     TextButton {
-                        text: qsTr("Supprimer")
+                        text: I18n.tr("Supprimer")
                         type: TextButton.Text
                         onClicked: {
                             CUtils.deleteFile(Qt.resolvedUrl(root.props.recordingConfirmDelete));

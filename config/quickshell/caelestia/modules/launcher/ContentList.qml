@@ -133,13 +133,13 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
 
             StyledText {
-                text: root.state === "wallpapers" ? qsTr("Aucun fond d'écran trouvé") : qsTr("Aucun résultat")
+                text: root.state === "wallpapers" ? I18n.tr("Aucun fond d'écran trouvé") : I18n.tr("Aucun résultat")
                 color: Colours.palette.m3onSurfaceVariant
                 font: Tokens.font.body.builders.large.weight(Font.Medium).build()
             }
 
             StyledText {
-                text: root.state === "wallpapers" && Wallpapers.list.length === 0 ? qsTr("Placez des fonds d'écran dans %1").arg(Paths.shortenHome(Paths.wallsdir)) : qsTr("Essayez une autre recherche")
+                text: root.state === "wallpapers" && Wallpapers.list.length === 0 ? I18n.tr("Placez des fonds d'écran dans %1").arg(Paths.shortenHome(Paths.wallsdir)) : I18n.tr("Essayez une autre recherche")
                 color: Colours.palette.m3onSurfaceVariant
                 font: Tokens.font.body.medium
             }

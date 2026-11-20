@@ -15,7 +15,7 @@ import qs.modules.nexus.common
 PageBase {
     id: root
 
-    title: qsTr("Applications")
+    title: I18n.tr("Applications")
 
     ColumnLayout {
         anchors.horizontalCenter: parent.horizontalCenter
@@ -26,27 +26,27 @@ PageBase {
         // Default applications
         SectionHeader {
             first: true
-            text: qsTr("Applications par défaut")
+            text: I18n.tr("Applications par défaut")
         }
 
         DefaultRow {
             first: true
             icon: "terminal"
-            label: qsTr("Terminal")
+            label: I18n.tr("Terminal")
             status: GlobalConfig.general.apps.terminal.join(" ")
             onSelected: app => GlobalConfig.general.apps.terminal = app.command
         }
 
         DefaultRow {
             icon: "volume_up"
-            label: qsTr("Audio")
+            label: I18n.tr("Audio")
             status: GlobalConfig.general.apps.audio.join(" ")
             onSelected: app => GlobalConfig.general.apps.audio = app.command
         }
 
         DefaultRow {
             icon: "play_circle"
-            label: qsTr("Lecture média")
+            label: I18n.tr("Lecture média")
             status: GlobalConfig.general.apps.playback.join(" ")
             onSelected: app => GlobalConfig.general.apps.playback = app.command
         }
@@ -54,22 +54,22 @@ PageBase {
         DefaultRow {
             last: true
             icon: "folder"
-            label: qsTr("Gestionnaire de fichiers")
+            label: I18n.tr("Gestionnaire de fichiers")
             status: GlobalConfig.general.apps.explorer.join(" ")
             onSelected: app => GlobalConfig.general.apps.explorer = app.command
         }
 
         // Library
         SectionHeader {
-            text: qsTr("Bibliothèque")
+            text: I18n.tr("Bibliothèque")
         }
 
         NavRow {
             first: true
             last: true
             icon: "apps"
-            text: qsTr("Toutes les applications")
-            subtext: qsTr("Parcourir les applications, gérer les favoris et masquées")
+            text: I18n.tr("Toutes les applications")
+            subtext: I18n.tr("Parcourir les applications, gérer les favoris et masquées")
             onClicked: root.nState.openSubPage(1)
         }
     }

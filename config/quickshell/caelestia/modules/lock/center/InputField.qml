@@ -47,12 +47,12 @@ Item {
 
         text: {
             if (root.pam.passwd.active)
-                return qsTr("Chargement...");
+                return I18n.tr("Chargement...");
             if (root.pam.howdy.active)
-                return qsTr("Reconnaissance faciale...");
+                return I18n.tr("Reconnaissance faciale...");
             if (root.pam.state === Pam.MaxTries)
-                return qsTr("Limite de tentatives atteinte");
-            return qsTr("Entrez votre mot de passe");
+                return I18n.tr("Limite de tentatives atteinte");
+            return I18n.tr("Entrez votre mot de passe");
         }
         font: placeholder.font
     }

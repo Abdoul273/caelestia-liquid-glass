@@ -20,7 +20,7 @@ PageBase {
     readonly property string statusText: {
         if (!device)
             return "";
-        let s = connected ? qsTr("Connecté") : ((device.bonded || device.trusted || device.paired) ? qsTr("Appairé") : qsTr("Non appairé"));
+        let s = connected ? I18n.tr("Connecté") : ((device.bonded || device.trusted || device.paired) ? I18n.tr("Appairé") : I18n.tr("Non appairé"));
         if (connected && device.batteryAvailable)
             s += " • " + Math.round(device.battery * 100) + "%";
         return s;
@@ -32,7 +32,7 @@ PageBase {
             nState.closeSubPage();
     }
 
-    title: device?.name ?? qsTr("Appareil")
+    title: device?.name ?? I18n.tr("Appareil")
     isSubPage: true
 
     ColumnLayout {
@@ -81,7 +81,7 @@ PageBase {
 
                     StyledText {
                         Layout.alignment: Qt.AlignHCenter
-                        text: qsTr("Oublier")
+                        text: I18n.tr("Oublier")
                         color: forgetBtn.onColour
                     }
                 }
@@ -136,7 +136,7 @@ PageBase {
 
                         StyledText {
                             Layout.alignment: Qt.AlignHCenter
-                            text: root.connected ? qsTr("Se déconnecter") : qsTr("Se connecter")
+                            text: root.connected ? I18n.tr("Se déconnecter") : I18n.tr("Se connecter")
                             color: connectBtn.inactiveOnColour
                             animate: true
                         }
@@ -149,8 +149,8 @@ PageBase {
         ToggleRow {
             verticalPadding: Tokens.padding.large
             first: true
-            text: qsTr("Approuvé")
-            subtext: qsTr("Autoriser cet appareil à se connecter automatiquement")
+            text: I18n.tr("Approuvé")
+            subtext: I18n.tr("Autoriser cet appareil à se connecter automatiquement")
             checked: root.device?.trusted ?? false
             onToggled: {
                 if (root.device)
@@ -160,8 +160,8 @@ PageBase {
 
         ToggleRow {
             verticalPadding: Tokens.padding.large
-            text: qsTr("Bloqué")
-            subtext: qsTr("Empêcher cet appareil de se connecter")
+            text: I18n.tr("Bloqué")
+            subtext: I18n.tr("Empêcher cet appareil de se connecter")
             checked: root.device?.blocked ?? false
             onToggled: {
                 if (root.device)
@@ -172,8 +172,8 @@ PageBase {
         ToggleRow {
             verticalPadding: Tokens.padding.large
             last: true
-            text: qsTr("Réveil autorisé")
-            subtext: qsTr("Autoriser cet appareil à réveiller le système")
+            text: I18n.tr("Réveil autorisé")
+            subtext: I18n.tr("Autoriser cet appareil à réveiller le système")
             checked: root.device?.wakeAllowed ?? false
             onToggled: {
                 if (root.device)
@@ -203,11 +203,11 @@ PageBase {
 
                     StyledText {
                         Layout.fillWidth: true
-                        text: qsTr("Batterie")
+                        text: I18n.tr("Batterie")
                     }
 
                     StyledText {
-                        text: root.device?.batteryAvailable ? Math.round(root.device.battery * 100) + "%" : qsTr("Indisponible")
+                        text: root.device?.batteryAvailable ? Math.round(root.device.battery * 100) + "%" : I18n.tr("Indisponible")
                         color: Colours.palette.m3outline
                         font: Tokens.font.body.small
                     }
@@ -243,7 +243,7 @@ PageBase {
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: qsTr("Adresse")
+                    text: I18n.tr("Adresse")
                 }
 
                 StyledText {

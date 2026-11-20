@@ -28,7 +28,7 @@ Item {
                 spacing: Tokens.spacing.extraSmall
 
                 StyledText {
-                    text: Weather.city || qsTr("Chargement...")
+                    text: Weather.city || I18n.tr("Chargement...")
                     font: Tokens.font.body.builders.large.size(28).weight(Font.DemiBold).build()
                     color: Colours.palette.m3onSurface
                 }
@@ -49,14 +49,14 @@ Item {
 
                 WeatherStat {
                     icon: "wb_twilight"
-                    label: qsTr("Lever du soleil")
+                    label: I18n.tr("Lever du soleil")
                     value: Weather.sunrise
                     colour: Colours.palette.m3tertiary
                 }
 
                 WeatherStat {
                     icon: "bedtime"
-                    label: qsTr("Coucher du soleil")
+                    label: I18n.tr("Coucher du soleil")
                     value: Weather.sunset
                     colour: Colours.palette.m3tertiary
                 }
@@ -110,19 +110,19 @@ Item {
 
             DetailCard {
                 icon: "water_drop"
-                label: qsTr("Humidité")
+                label: I18n.tr("Humidité")
                 value: Weather.humidity + "%"
                 colour: Colours.palette.m3secondary
             }
             DetailCard {
                 icon: "thermostat"
-                label: qsTr("Ressenti")
+                label: I18n.tr("Ressenti")
                 value: Weather.feelsLike
                 colour: Colours.palette.m3primary
             }
             DetailCard {
                 icon: "air"
-                label: qsTr("Vent")
+                label: I18n.tr("Vent")
                 value: Weather.windSpeed ? Weather.windSpeed + " km/h" : "--"
                 colour: Colours.palette.m3tertiary
             }
@@ -132,7 +132,7 @@ Item {
             Layout.topMargin: Tokens.spacing.medium
             Layout.leftMargin: Tokens.padding.medium
             visible: forecastRepeater.count > 0
-            text: qsTr("Prévisions sur 7 jours")
+            text: I18n.tr("Prévisions sur 7 jours")
             font: Tokens.font.body.builders.medium.weight(Font.DemiBold).build()
             color: Colours.palette.m3onSurface
         }
@@ -166,7 +166,7 @@ Item {
 
                         StyledText {
                             Layout.alignment: Qt.AlignHCenter
-                            text: forecastItem.index === 0 ? qsTr("Aujourd'hui") : new Date(forecastItem.modelData.date).toLocaleDateString(Qt.locale(), "ddd")
+                            text: forecastItem.index === 0 ? I18n.tr("Aujourd'hui") : new Date(forecastItem.modelData.date).toLocaleDateString(Qt.locale(), "ddd")
                             font: Tokens.font.body.builders.medium.weight(Font.DemiBold).build()
                             color: Colours.palette.m3primary
                         }

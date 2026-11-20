@@ -10,9 +10,9 @@ LazyLoader {
     id: loader
 
     property list<string> cwd: ["Home"]
-    property string filterLabel: qsTr("Tous les fichiers")
+    property string filterLabel: I18n.tr("Tous les fichiers")
     property list<string> filters: ["*"]
-    property string title: qsTr("Sélectionner un fichier")
+    property string title: I18n.tr("Sélectionner un fichier")
 
     signal accepted(path: string)
     signal rejected

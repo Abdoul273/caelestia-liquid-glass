@@ -88,7 +88,7 @@ PageBase {
             nState.closeSubPage();
     }
 
-    title: root.ssid || qsTr("Réseau")
+    title: root.ssid || I18n.tr("Réseau")
     isSubPage: true
 
     Component.onCompleted: {
@@ -141,7 +141,7 @@ PageBase {
 
                     StyledText {
                         Layout.alignment: Qt.AlignHCenter
-                        text: qsTr("Oublier")
+                        text: I18n.tr("Oublier")
                         color: forgetBtn.onColour
                     }
                 }
@@ -184,7 +184,7 @@ PageBase {
 
                     StyledText {
                         Layout.alignment: Qt.AlignHCenter
-                        text: qsTr("Se connecter")
+                        text: I18n.tr("Se connecter")
                         color: connectBtn.onColour
                     }
                 }
@@ -223,7 +223,7 @@ PageBase {
 
                     StyledText {
                         Layout.alignment: Qt.AlignHCenter
-                        text: qsTr("Se déconnecter")
+                        text: I18n.tr("Se déconnecter")
                         color: disconnectBtn.onColour
                     }
                 }
@@ -233,66 +233,66 @@ PageBase {
         // ---- Connection info (only shows when active) ---------------------------------
         SectionHeader {
             first: true
-            text: qsTr("Connexion")
+            text: I18n.tr("Connexion")
             visible: root.isActive
         }
 
         InfoRow {
             first: true
             icon: "signal_wifi_4_bar"
-            label: qsTr("Signal")
-            value: root.ap ? qsTr("%1 %").arg(root.ap.strength) : qsTr("—")
+            label: I18n.tr("Signal")
+            value: root.ap ? I18n.tr("%1 %").arg(root.ap.strength) : I18n.tr("—")
             visible: root.isActive
         }
 
         InfoRow {
             icon: "lock"
-            label: qsTr("Sécurité")
-            value: root.ap?.security || qsTr("Ouvrir")
+            label: I18n.tr("Sécurité")
+            value: root.ap?.security || I18n.tr("Ouvrir")
             visible: root.isActive
         }
 
         InfoRow {
             icon: "graphic_eq"
-            label: qsTr("Fréquence")
-            value: root.ap && root.ap.frequency > 0 ? qsTr("%1 MHz").arg(root.ap.frequency) : qsTr("—")
+            label: I18n.tr("Fréquence")
+            value: root.ap && root.ap.frequency > 0 ? I18n.tr("%1 MHz").arg(root.ap.frequency) : I18n.tr("—")
             visible: root.isActive
         }
 
         InfoRow {
             icon: "lan"
-            label: qsTr("Adresse IP")
-            value: root.details?.ipAddress || qsTr("—")
+            label: I18n.tr("Adresse IP")
+            value: root.details?.ipAddress || I18n.tr("—")
             visible: root.isActive
         }
 
         InfoRow {
             icon: "router"
-            label: qsTr("Passerelle")
-            value: root.details?.gateway || qsTr("—")
+            label: I18n.tr("Passerelle")
+            value: root.details?.gateway || I18n.tr("—")
             visible: root.isActive
         }
 
         InfoRow {
             last: true
             icon: "memory"
-            label: qsTr("Adresse MAC")
-            value: root.details?.macAddress || qsTr("—")
+            label: I18n.tr("Adresse MAC")
+            value: root.details?.macAddress || I18n.tr("—")
             visible: root.isActive
         }
 
         // ---- Behaviour -------------------------------------------------------
         SectionHeader {
             first: !root.isActive
-            text: qsTr("Comportement")
+            text: I18n.tr("Comportement")
         }
 
         ToggleRow {
             Layout.fillWidth: true
             first: true
             last: true
-            text: qsTr("Connexion automatique")
-            subtext: qsTr("Rejoindre ce réseau dès qu'il est à portée")
+            text: I18n.tr("Connexion automatique")
+            subtext: I18n.tr("Rejoindre ce réseau dès qu'il est à portée")
             checked: root.autoconnect
             enabled: root.ipLoaded
             onToggled: {
@@ -303,7 +303,7 @@ PageBase {
 
         // ---- IPv4 ------------------------------------------------------------
         SectionHeader {
-            text: qsTr("IPv4")
+            text: I18n.tr("IPv4")
         }
 
         SelectRow {
@@ -311,8 +311,8 @@ PageBase {
 
             first: true
             last: root.ipMethod === "auto"
-            label: qsTr("Attribution IP")
-            fallbackText: qsTr("Automatique (DHCP)")
+            label: I18n.tr("Attribution IP")
+            fallbackText: I18n.tr("Automatique (DHCP)")
             fallbackIcon: "lan"
 
             onSelected: item => root.ipMethod = item === manualItem ? "manual" : (item === autoDnsItem ? "auto-dns" : "auto")
@@ -322,19 +322,19 @@ PageBase {
                     id: autoItem
 
                     icon: "lan"
-                    text: qsTr("Automatique (DHCP)")
+                    text: I18n.tr("Automatique (DHCP)")
                 },
                 MenuItem {
                     id: autoDnsItem
 
                     icon: "dns"
-                    text: qsTr("Automatique, DNS uniquement")
+                    text: I18n.tr("Automatique, DNS uniquement")
                 },
                 MenuItem {
                     id: manualItem
 
                     icon: "edit"
-                    text: qsTr("Manuel")
+                    text: I18n.tr("Manuel")
                 }
             ]
 
@@ -417,10 +417,10 @@ PageBase {
                             id: addressField
 
                             Layout.fillWidth: true
-                            placeholderText: qsTr("Adresse (CIDR)")
+                            placeholderText: I18n.tr("Adresse (CIDR)")
                             leadingIcon: "router"
-                            supportingText: qsTr("IP et masque, ex. 192.168.1.50/24")
-                            errorText: qsTr("Entrez une adresse valide en notation CIDR")
+                            supportingText: I18n.tr("IP et masque, ex. 192.168.1.50/24")
+                            errorText: I18n.tr("Entrez une adresse valide en notation CIDR")
                             inputMethodHints: Qt.ImhNoPredictiveText
                             validate: /^(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\/(?:3[0-2]|[12]?\d)$/
                         }
@@ -429,9 +429,9 @@ PageBase {
                             id: gatewayField
 
                             Layout.fillWidth: true
-                            placeholderText: qsTr("Passerelle")
+                            placeholderText: I18n.tr("Passerelle")
                             leadingIcon: "exit_to_app"
-                            errorText: qsTr("Entrez une adresse de passerelle valide")
+                            errorText: I18n.tr("Entrez une adresse de passerelle valide")
                             inputMethodHints: Qt.ImhNoPredictiveText
                             validate: /^$|^(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)$/
                         }
@@ -442,10 +442,10 @@ PageBase {
                     id: dnsField
 
                     Layout.fillWidth: true
-                    placeholderText: qsTr("Serveurs DNS")
+                    placeholderText: I18n.tr("Serveurs DNS")
                     leadingIcon: "dns"
-                    supportingText: qsTr("Séparés par des virgules")
-                    errorText: qsTr("Entrez des adresses DNS valides")
+                    supportingText: I18n.tr("Séparés par des virgules")
+                    errorText: I18n.tr("Entrez des adresses DNS valides")
                     inputMethodHints: Qt.ImhNoPredictiveText
                     validate: /^$|^\s*(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\s*,\s*(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d))*\s*$/
                 }
@@ -493,7 +493,7 @@ PageBase {
                 TextMetrics {
                     id: applyMetrics
 
-                    text: qsTr("Appliquer")
+                    text: I18n.tr("Appliquer")
                     font: applyBtn.font
                 }
 

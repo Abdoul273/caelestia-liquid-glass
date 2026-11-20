@@ -9,6 +9,19 @@ import qs.modules.nexus.common
 PageBase {
     id: root
 
+    // Interface language (index 0 = Auto, 1 = French, 2 = English — matches I18n.mode)
+    readonly property list<MenuItem> langItems: [
+        MenuItem {
+            text: I18n.tr("Automatique (système)")
+        },
+        MenuItem {
+            text: "Français"
+        },
+        MenuItem {
+            text: "English"
+        }
+    ]
+
     // Temperature units (index 0 = Celsius, 1 = Fahrenheit — matches Weather.formatTemp)
     readonly property list<MenuItem> tempItems: [
         MenuItem {
@@ -22,14 +35,14 @@ PageBase {
     // Clock format (index 0 = 24-hour, 1 = 12-hour — matches Time.useTwelveHourClock)
     readonly property list<MenuItem> clockItems: [
         MenuItem {
-            text: qsTr("24 heures")
+            text: I18n.tr("24 heures")
         },
         MenuItem {
-            text: qsTr("12 heures")
+            text: I18n.tr("12 heures")
         }
     ]
 
-    title: qsTr("Langue et région")
+    title: I18n.tr("Langue et région")
 
     ColumnLayout {
         anchors.horizontalCenter: parent.horizontalCenter
@@ -40,56 +53,26 @@ PageBase {
         // Language
         SectionHeader {
             first: true
-            text: qsTr("Langue")
+            text: I18n.tr("Langue")
         }
 
-        // Read-only: the shell follows the system locale (no in-shell translations yet)
-        ConnectedRect {
-            Layout.fillWidth: true
+        // Language selector (stored in ~/.config/caelestia/lang.json, live switch)
+        SelectRow {
             first: true
             last: true
-            implicitHeight: localeLayout.implicitHeight + localeLayout.anchors.margins * 2
-
-            RowLayout {
-                id: localeLayout
-
-                anchors.fill: parent
-                anchors.margins: Tokens.padding.medium
-                anchors.leftMargin: Tokens.padding.largeIncreased
-                anchors.rightMargin: Tokens.padding.largeIncreased
-                spacing: Tokens.spacing.medium
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 0
-
-                    StyledText {
-                        Layout.fillWidth: true
-                        text: qsTr("Langue du système")
-                        font: Tokens.font.body.small
-                        elide: Text.ElideRight
-                    }
-
-                    StyledText {
-                        Layout.fillWidth: true
-                        text: qsTr("Suit la langue du système (%1)").arg(Qt.locale().name)
-                        color: Colours.palette.m3outline
-                        font: Tokens.font.label.small
-                        elide: Text.ElideRight
-                    }
-                }
-
-                StyledText {
-                    text: Qt.locale().nativeLanguageName || Qt.locale().name
-                    color: Colours.palette.m3onSurfaceVariant
-                    font: Tokens.font.body.small
-                }
+            label: I18n.tr("Langue de l'interface")
+            subtext: I18n.tr("Appliqué immédiatement · système : %1").arg(Qt.locale().name)
+            menuItems: root.langItems
+            active: root.langItems[I18n.mode === "fr" ? 1 : I18n.mode === "en" ? 2 : 0]
+            onSelected: item => {
+                const idx = root.langItems.indexOf(item);
+                I18n.setLang(idx === 1 ? "fr" : idx === 2 ? "en" : "auto");
             }
         }
 
         // Weather
         SectionHeader {
-            text: qsTr("Météo")
+            text: I18n.tr("Météo")
         }
 
         // Placeholder until the map-based location picker lands
@@ -115,7 +98,7 @@ PageBase {
 
                 StyledText {
                     Layout.alignment: Qt.AlignHCenter
-                    text: qsTr("Sélection de la ville disponible bientôt")
+                    text: I18n.tr("Sélection de la ville disponible bientôt")
                     color: Colours.palette.m3outlineVariant
                     font: Tokens.font.title.small
                 }
@@ -124,7 +107,7 @@ PageBase {
                     Layout.fillWidth: true
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.WordWrap
-                    text: qsTr("Choisissez votre ville météo sur une carte dans une prochaine mise à jour")
+                    text: I18n.tr("Choisissez votre ville météo sur une carte dans une prochaine mise à jour")
                     color: Colours.palette.m3outlineVariant
                     font: Tokens.font.body.small
                 }
@@ -133,13 +116,13 @@ PageBase {
 
         // Units
         SectionHeader {
-            text: qsTr("Unités")
+            text: I18n.tr("Unités")
         }
 
         SelectRow {
             first: true
-            label: qsTr("Température")
-            subtext: qsTr("Unités de température météo")
+            label: I18n.tr("Température")
+            subtext: I18n.tr("Unités de température météo")
             menuItems: root.tempItems
             active: root.tempItems[GlobalConfig.services.useFahrenheit ? 1 : 0]
             onSelected: item => GlobalConfig.services.useFahrenheit = root.tempItems.indexOf(item) === 1
@@ -147,8 +130,8 @@ PageBase {
 
         SelectRow {
             last: true
-            label: qsTr("Températures du système")
-            subtext: qsTr("Unités de température CPU et GPU")
+            label: I18n.tr("Températures du système")
+            subtext: I18n.tr("Unités de température CPU et GPU")
             menuItems: root.tempItems
             active: root.tempItems[GlobalConfig.services.useFahrenheitPerformance ? 1 : 0]
             onSelected: item => GlobalConfig.services.useFahrenheitPerformance = root.tempItems.indexOf(item) === 1
@@ -156,14 +139,14 @@ PageBase {
 
         // Time & date
         SectionHeader {
-            text: qsTr("Date et heure")
+            text: I18n.tr("Date et heure")
         }
 
         SelectRow {
             first: true
             last: true
-            label: qsTr("Format de l'horloge")
-            subtext: qsTr("Format de l'heure dans l'interface")
+            label: I18n.tr("Format de l'horloge")
+            subtext: I18n.tr("Format de l'heure dans l'interface")
             menuItems: root.clockItems
             active: root.clockItems[GlobalConfig.services.useTwelveHourClock ? 1 : 0]
             onSelected: item => GlobalConfig.services.useTwelveHourClock = root.clockItems.indexOf(item) === 1

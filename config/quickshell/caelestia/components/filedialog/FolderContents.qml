@@ -60,7 +60,7 @@ Item {
             }
 
             StyledText {
-                text: qsTr("Ce dossier est vide")
+                text: I18n.tr("Ce dossier est vide")
                 color: Colours.palette.m3outline
                 font: Tokens.font.body.builders.large.weight(Font.Medium).build()
             }

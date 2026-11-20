@@ -48,27 +48,27 @@ Item {
     readonly property var categories: [
         {
             key: "all",
-            title: qsTr("Tout")
+            title: I18n.tr("Tout")
         },
         {
             key: "text",
-            title: qsTr("Texte")
+            title: I18n.tr("Texte")
         },
         {
             key: "image",
-            title: qsTr("Images")
+            title: I18n.tr("Images")
         },
         {
             key: "link",
-            title: qsTr("Liens")
+            title: I18n.tr("Liens")
         },
         {
             key: "file",
-            title: qsTr("Fichiers")
+            title: I18n.tr("Fichiers")
         },
         {
             key: "favorite",
-            title: qsTr("Favoris")
+            title: I18n.tr("Favoris")
         }
     ]
     readonly property var kindGlyph: ({
@@ -135,7 +135,7 @@ Item {
             if (msg.ok)
                 close();
             else
-                showHint(qsTr("Impossible de copier cet élément"));
+                showHint(I18n.tr("Impossible de copier cet élément"));
         }
     }
 
@@ -378,7 +378,7 @@ Item {
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
                         visible: !input.text
-                        text: qsTr("Rechercher dans le presse-papiers")
+                        text: I18n.tr("Rechercher dans le presse-papiers")
                         color: Qt.alpha(root.fg, 0.38)
                         font: input.font
                     }
@@ -566,7 +566,7 @@ Item {
             Text {
                 anchors.centerIn: list
                 visible: root.items.length === 0
-                text: root.loading ? qsTr("Chargement…") : root.query ? qsTr("Aucun résultat") : qsTr("Rien ici pour l'instant")
+                text: root.loading ? I18n.tr("Chargement…") : root.query ? I18n.tr("Aucun résultat") : I18n.tr("Rien ici pour l'instant")
                 color: root.fgDim
                 font.pixelSize: 13
             }
@@ -652,17 +652,17 @@ Item {
                         model: [
                             {
                                 glyph: root.current?.fav ? "󰓎" : "󰓒",
-                                title: root.current?.fav ? qsTr("Épinglé") : qsTr("Épingler"),
+                                title: root.current?.fav ? I18n.tr("Épinglé") : I18n.tr("Épingler"),
                                 act: "fav"
                             },
                             {
                                 glyph: "󰆴",
-                                title: qsTr("Supprimer"),
+                                title: I18n.tr("Supprimer"),
                                 act: "delete"
                             },
                             {
                                 glyph: "󰆏",
-                                title: qsTr("Copier"),
+                                title: I18n.tr("Copier"),
                                 act: "copy"
                             }
                         ]
@@ -711,7 +711,7 @@ Item {
                     anchors.left: parent.left
                     anchors.leftMargin: 22
                     anchors.verticalCenter: parent.verticalCenter
-                    text: root.hint || qsTr("↑↓ parcourir  ·  Entrée copier  ·  Ctrl+P épingler  ·  Suppr effacer  ·  Tab filtre")
+                    text: root.hint || I18n.tr("↑↓ parcourir  ·  Entrée copier  ·  Ctrl+P épingler  ·  Suppr effacer  ·  Tab filtre")
                     color: root.hint ? root.accent : Qt.alpha(root.fg, 0.42)
                     font.pixelSize: 11
                 }
@@ -720,7 +720,7 @@ Item {
                     anchors.right: parent.right
                     anchors.rightMargin: 22
                     anchors.verticalCenter: parent.verticalCenter
-                    text: root.wipeArmed ? qsTr("Cliquer encore pour tout vider") : qsTr("Vider l'historique")
+                    text: root.wipeArmed ? I18n.tr("Cliquer encore pour tout vider") : I18n.tr("Vider l'historique")
                     color: root.wipeArmed || wipeArea.containsMouse ? "#ff453a" : root.fgDim
                     font.pixelSize: 11
                     font.weight: root.wipeArmed ? Font.DemiBold : Font.Normal

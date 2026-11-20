@@ -29,11 +29,11 @@ Singleton {
         if (enabled) {
             setDynamicConfs();
             if (GlobalConfig.utilities.toasts.gameModeChanged)
-                Toaster.toast(qsTr("Mode jeu activé"), qsTr("Animations, flou, marges et ombres Hyprland désactivés"), "gamepad");
+                Toaster.toast(I18n.tr("Mode jeu activé"), I18n.tr("Animations, flou, marges et ombres Hyprland désactivés"), "gamepad");
         } else {
             Hypr.extras.message("reload");
             if (GlobalConfig.utilities.toasts.gameModeChanged)
-                Toaster.toast(qsTr("Mode jeu désactivé"), qsTr("Paramètres Hyprland rétablis"), "gamepad");
+                Toaster.toast(I18n.tr("Mode jeu désactivé"), I18n.tr("Paramètres Hyprland rétablis"), "gamepad");
         }
     }
 

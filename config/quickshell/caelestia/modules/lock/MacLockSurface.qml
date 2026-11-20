@@ -362,7 +362,7 @@ WlSessionLockSurface {
                 StyledText {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: {
-                        const d = Qt.locale("fr_FR").toString(Time.date, "dddd d MMMM");
+                        const d = I18n.locale.toString(Time.date, I18n.isFr ? "dddd d MMMM" : "dddd, MMMM d");
                         return d.charAt(0).toUpperCase() + d.slice(1);
                     }
                     color: root.fg
@@ -551,7 +551,7 @@ WlSessionLockSurface {
                                         anchors.right: nTime.left
                                         anchors.rightMargin: 8
                                         elide: Text.ElideRight
-                                        text: card.modelData.appName || qsTr("Notification")
+                                        text: card.modelData.appName || I18n.tr("Notification")
                                         color: root.fgDim
                                         font.pointSize: 8.5
                                         font.weight: Font.DemiBold
@@ -561,7 +561,7 @@ WlSessionLockSurface {
                                         id: nTime
 
                                         anchors.right: parent.right
-                                        text: (group.modelData.count > 1 ? qsTr("%1 notifications · ").arg(group.modelData.count) : "") + Qt.formatTime(card.modelData.time, "HH:mm")
+                                        text: (group.modelData.count > 1 ? I18n.tr("%1 notifications · ").arg(group.modelData.count) : "") + Qt.formatTime(card.modelData.time, "HH:mm")
                                         color: root.fgDim
                                         font.pointSize: 8.5
                                     }
@@ -582,7 +582,7 @@ WlSessionLockSurface {
                 StyledText {
                     anchors.horizontalCenter: parent.horizontalCenter
                     visible: root.notifGroups.length > 3
-                    text: qsTr("+ %1 autres apps").arg(root.notifGroups.length - 3)
+                    text: I18n.tr("+ %1 autres apps").arg(root.notifGroups.length - 3)
                     color: root.fgDim
                     font.pointSize: 9
                     font.weight: Font.Medium
@@ -667,7 +667,7 @@ WlSessionLockSurface {
                         anchors.centerIn: parent
                         anchors.horizontalCenterOffset: -10
                         visible: !root.typing
-                        text: root.pam.state === Pam.MaxTries ? qsTr("Trop de tentatives") : root.pam.fprint.active ? qsTr("Empreinte ou mot de passe") : root.pam.howdy.canAttempt ? qsTr("Visage ou mot de passe") : qsTr("Saisir le mot de passe")
+                        text: root.pam.state === Pam.MaxTries ? I18n.tr("Trop de tentatives") : root.pam.fprint.active ? I18n.tr("Empreinte ou mot de passe") : root.pam.howdy.canAttempt ? I18n.tr("Visage ou mot de passe") : I18n.tr("Saisir le mot de passe")
                         color: root.fgDim
                         font.pointSize: 9.5
                     }
@@ -842,13 +842,13 @@ WlSessionLockSurface {
                         if (p.lockMessage)
                             return p.lockMessage;
                         if (p.state === Pam.Failed)
-                            return qsTr("Mot de passe incorrect");
+                            return I18n.tr("Mot de passe incorrect");
                         if (p.state === Pam.MaxTries)
-                            return qsTr("Trop de tentatives, patientez un instant");
+                            return I18n.tr("Trop de tentatives, patientez un instant");
                         if (p.state === Pam.Error)
-                            return qsTr("Erreur : %1").arg(p.passwd.message);
+                            return I18n.tr("Erreur : %1").arg(p.passwd.message);
                         if (Hypr.capsLock)
-                            return qsTr("⇪ Verrouillage majuscule activé");
+                            return I18n.tr("⇪ Verrouillage majuscule activé");
                         return "";
                     }
                     color: root.pam.state === Pam.Failed || root.pam.state === Pam.MaxTries || root.pam.state === Pam.Error ? "#ff8a80" : root.fgDim

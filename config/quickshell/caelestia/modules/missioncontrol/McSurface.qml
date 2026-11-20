@@ -327,7 +327,7 @@ StyledWindow {
                 StyledText {
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.bottom: parent.bottom
-                    text: qsTr("Bureau %1").arg(space.modelData.id)
+                    text: I18n.tr("Bureau %1").arg(space.modelData.id)
                     color: space.current ? "white" : Qt.alpha("white", 0.7)
                     font.pointSize: 10
                     font.weight: space.current ? Font.DemiBold : Font.Normal
@@ -444,7 +444,7 @@ StyledWindow {
         anchors.centerIn: parent
         visible: win.windows.length === 0
         opacity: win.progress * 0.8
-        text: qsTr("Aucune fenêtre sur ce bureau")
+        text: I18n.tr("Aucune fenêtre sur ce bureau")
         color: "white"
         font.pointSize: 16
     }
@@ -564,7 +564,7 @@ StyledWindow {
 
                 StyledText {
                     anchors.verticalCenter: parent.verticalCenter
-                    text: previewLayer.t?.workspace ? qsTr("Bureau %1").arg(previewLayer.t.workspace.id) : ""
+                    text: previewLayer.t?.workspace ? I18n.tr("Bureau %1").arg(previewLayer.t.workspace.id) : ""
                     color: Qt.alpha("white", 0.6)
                     font.pointSize: 11
                 }
@@ -572,7 +572,7 @@ StyledWindow {
 
             StyledText {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: qsTr("Clic ou Entrée : y aller  •  Espace ou Échap : revenir")
+                text: I18n.tr("Clic ou Entrée : y aller  •  Espace ou Échap : revenir")
                 color: Qt.alpha("white", 0.5)
                 font.pointSize: 9.5
             }

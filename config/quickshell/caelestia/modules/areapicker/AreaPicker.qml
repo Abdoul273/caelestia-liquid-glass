@@ -83,7 +83,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "screenshot"
-        description: qsTr("Ouvrir l'outil de capture d'écran")
+        description: I18n.tr("Ouvrir l'outil de capture d'écran")
         onPressed: {
             root.freeze = false;
             root.closing = false;
@@ -96,7 +96,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "screenshotFreeze"
-        description: qsTr("Ouvrir l'outil de capture d'écran (mode gel)")
+        description: I18n.tr("Ouvrir l'outil de capture d'écran (mode gel)")
         onPressed: {
             root.freeze = true;
             root.closing = false;
@@ -109,7 +109,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "screenshotClip"
-        description: qsTr("Ouvrir l'outil de capture d'écran (presse-papiers)")
+        description: I18n.tr("Ouvrir l'outil de capture d'écran (presse-papiers)")
         onPressed: {
             root.freeze = false;
             root.closing = false;
@@ -122,7 +122,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "screenshotFreezeClip"
-        description: qsTr("Ouvrir l'outil de capture d'écran (mode gel, presse-papiers)")
+        description: I18n.tr("Ouvrir l'outil de capture d'écran (mode gel, presse-papiers)")
         onPressed: {
             root.freeze = true;
             root.closing = false;

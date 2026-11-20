@@ -52,7 +52,7 @@ StyledRect {
         spacing: Tokens.spacing.medium
 
         StyledText {
-            text: qsTr("Raccourcis rapides")
+            text: I18n.tr("Raccourcis rapides")
             font: Tokens.font.body.medium
         }
 

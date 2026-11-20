@@ -17,7 +17,7 @@ PageBase {
     readonly property BluetoothAdapter adapter: Bluetooth.defaultAdapter // qmllint disable unresolved-type
     readonly property bool btEnabled: adapter?.enabled ?? false
 
-    title: qsTr("Appareils connectés")
+    title: I18n.tr("Appareils connectés")
 
     ColumnLayout {
         anchors.horizontalCenter: parent.horizontalCenter
@@ -27,7 +27,7 @@ PageBase {
 
         ToggleRow {
             first: true
-            text: qsTr("Bluetooth")
+            text: I18n.tr("Bluetooth")
             font: Tokens.font.body.medium
             horizontalPadding: Tokens.padding.largeIncreased
             checked: root.btEnabled
@@ -42,7 +42,7 @@ PageBase {
 
             showList: root.btEnabled
             placeholderIcon: root.btEnabled ? "devices_other" : "bluetooth_disabled"
-            placeholderText: root.btEnabled ? qsTr("Aucun appareil enregistré") : qsTr("Bluetooth désactivé")
+            placeholderText: root.btEnabled ? I18n.tr("Aucun appareil enregistré") : I18n.tr("Bluetooth désactivé")
 
             model: ScriptModel {
                 values: Bluetooth.devices.values.filter(d => d.bonded || d.trusted || d.paired || d.connected).sort((a, b) => (b.connected - a.connected) || a.name.localeCompare(b.name)) // qmllint disable unresolved-type
@@ -115,14 +115,14 @@ PageBase {
 
                         StyledText {
                             Layout.fillWidth: true
-                            text: device.modelData?.name ?? qsTr("Inconnu")
+                            text: device.modelData?.name ?? I18n.tr("Inconnu")
                             font: Tokens.font.body.small
                             elide: Text.ElideRight
                         }
 
                         StyledText {
                             Layout.fillWidth: true
-                            text: device.connected ? qsTr("Connecté%1").arg(device.modelData?.batteryAvailable ? " • " + Math.round(device.modelData.battery * 100) + "%" : "") : qsTr("Enregistré")
+                            text: device.connected ? I18n.tr("Connecté%1").arg(device.modelData?.batteryAvailable ? " • " + Math.round(device.modelData.battery * 100) + "%" : "") : I18n.tr("Enregistré")
                             color: Colours.palette.m3outline
                             font: Tokens.font.label.small
                             elide: Text.ElideRight
@@ -187,7 +187,7 @@ PageBase {
         RowButton {
             last: true
             icon: "add"
-            text: qsTr("Appairer un nouvel appareil")
+            text: I18n.tr("Appairer un nouvel appareil")
             disabled: !root.btEnabled
             onClicked: root.nState.openSubPage(2)
         }
@@ -196,8 +196,8 @@ PageBase {
             Layout.topMargin: Tokens.spacing.large - parent.spacing
 
             first: true
-            text: qsTr("Visible par les autres")
-            subtext: qsTr("Autoriser les appareils proches à détecter celui-ci")
+            text: I18n.tr("Visible par les autres")
+            subtext: I18n.tr("Autoriser les appareils proches à détecter celui-ci")
             disabled: !root.btEnabled
             checked: root.adapter?.discoverable ?? false
             onToggled: {
@@ -212,8 +212,8 @@ PageBase {
 
         ToggleRow {
             last: true
-            text: qsTr("Visible pour appairage")
-            subtext: qsTr("Autoriser les appareils proches à s'associer")
+            text: I18n.tr("Visible pour appairage")
+            subtext: I18n.tr("Autoriser les appareils proches à s'associer")
             disabled: !root.btEnabled
             checked: root.adapter?.pairable ?? false
             onToggled: {

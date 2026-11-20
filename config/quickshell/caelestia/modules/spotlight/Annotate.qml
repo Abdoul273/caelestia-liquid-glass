@@ -52,37 +52,37 @@ Item {
             key: "brush",
             glyph: "󰏫",
             letter: "B",
-            title: qsTr("Pinceau")
+            title: I18n.tr("Pinceau")
         },
         {
             key: "text",
             glyph: "󰊄",
             letter: "T",
-            title: qsTr("Texte")
+            title: I18n.tr("Texte")
         },
         {
             key: "rect",
             glyph: "󰝤",
             letter: "R",
-            title: qsTr("Rectangle")
+            title: I18n.tr("Rectangle")
         },
         {
             key: "ellipse",
             glyph: "󰺡",
             letter: "O",
-            title: qsTr("Ellipse")
+            title: I18n.tr("Ellipse")
         },
         {
             key: "arrow",
             glyph: "󰁜",
             letter: "A",
-            title: qsTr("Flèche")
+            title: I18n.tr("Flèche")
         },
         {
             key: "blur",
             glyph: "󰂵",
             letter: "D",
-            title: qsTr("Flou")
+            title: I18n.tr("Flou")
         }
     ]
     readonly property var palette: ["#ff3b30", "#ff9500", "#ffcc00", "#34c759", "#0a84ff", "#bf5af2", "#ffffff", "#1c1c1e"]
@@ -165,15 +165,15 @@ Item {
             if (save)
                 Quickshell.execDetached(["mkdir", "-p", `${Quickshell.env("HOME")}/Images/Captures`]);
             if (!result.saveToFile(out)) {
-                showHint(qsTr("Impossible d'écrire l'image"));
+                showHint(I18n.tr("Impossible d'écrire l'image"));
                 return;
             }
             if (save) {
                 Quickshell.execDetached(["sh", "-c", `wl-copy --type image/png < '${out}'`]);
-                Quickshell.execDetached(["notify-send", "-a", "Caelestia", "-i", out, qsTr("Capture enregistrée"), out.replace(Quickshell.env("HOME"), "~")]);
+                Quickshell.execDetached(["notify-send", "-a", "Caelestia", "-i", out, I18n.tr("Capture enregistrée"), out.replace(Quickshell.env("HOME"), "~")]);
             } else {
                 Quickshell.execDetached(["sh", "-c", `wl-copy --type image/png < '${out}'`]);
-                Quickshell.execDetached(["notify-send", "-a", "Caelestia", "-i", out, qsTr("Capture copiée"), qsTr("L'image annotée est dans le presse-papiers")]);
+                Quickshell.execDetached(["notify-send", "-a", "Caelestia", "-i", out, I18n.tr("Capture copiée"), I18n.tr("L'image annotée est dans le presse-papiers")]);
             }
             root.close();
         }, Qt.size(imgW, imgH));
@@ -452,7 +452,7 @@ Item {
                         id: saveLbl
 
                         anchors.centerIn: parent
-                        text: "󰆓  " + qsTr("Enregistrer")
+                        text: "󰆓  " + I18n.tr("Enregistrer")
                         font.family: root.glyphFont
                         font.pixelSize: 13
                         font.weight: Font.DemiBold
@@ -615,7 +615,7 @@ Item {
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: 13
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: root.hint || (root.tools.find(t => t.key === root.tool)?.title ?? "") + qsTr("  ·  B T R O A D : outils  ·  Ctrl+Z annuler  ·  Ctrl+C copier  ·  Ctrl+S enregistrer  ·  Échap fermer")
+                text: root.hint || (root.tools.find(t => t.key === root.tool)?.title ?? "") + I18n.tr("  ·  B T R O A D : outils  ·  Ctrl+Z annuler  ·  Ctrl+C copier  ·  Ctrl+S enregistrer  ·  Échap fermer")
                 color: root.hint ? "#ff453a" : Qt.alpha(root.fg, 0.45)
                 font.pixelSize: 11
             }

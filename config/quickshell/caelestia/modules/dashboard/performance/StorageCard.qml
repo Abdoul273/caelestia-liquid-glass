@@ -71,7 +71,7 @@ StyledRect {
 
                     StyledText {
                         Layout.alignment: Qt.AlignHCenter
-                        text: qsTr("Utilisé")
+                        text: I18n.tr("Utilisé")
                         font: Tokens.font.body.small
                         color: Colours.palette.m3onSurfaceVariant
                     }
@@ -83,14 +83,14 @@ StyledRect {
                 spacing: Tokens.spacing.extraSmall
 
                 StyledText {
-                    text: qsTr("Stockage")
+                    text: I18n.tr("Stockage")
                     font: Tokens.font.title.medium
                 }
 
                 StyledText {
                     text: {
                         if (!Storage.primaryDisk)
-                            return qsTr("Aucun disque détecté");
+                            return I18n.tr("Aucun disque détecté");
 
                         const fmt = UsageFmt.formatKib(Storage.primaryDisk.used, Storage.primaryDisk.total);
                         return `${+fmt.value.toFixed(1)} / ${+fmt.total.toFixed(1)} ${fmt.unit}`;
@@ -107,7 +107,7 @@ StyledRect {
             type: SplitButton.Tonal
             disabled: !Storage.disks.length
             fallbackIcon: "storage"
-            fallbackText: qsTr("Aucun disque")
+            fallbackText: I18n.tr("Aucun disque")
             menuOnTop: true
             minLeftWidth: row.implicitWidth * 0.6
 

@@ -13,7 +13,7 @@ import qs.modules.nexus.common
 PageBase {
     id: root
 
-    title: qsTr("Volumes des applications")
+    title: I18n.tr("Volumes des applications")
     isSubPage: true
 
     ColumnLayout {
@@ -26,7 +26,7 @@ PageBase {
             Layout.fillWidth: true
             Layout.leftMargin: Tokens.padding.small
             Layout.bottomMargin: Tokens.spacing.medium
-            text: qsTr("Régler le volume de chaque application en cours de lecture.")
+            text: I18n.tr("Régler le volume de chaque application en cours de lecture.")
             color: Colours.palette.m3outline
             font: Tokens.font.body.small
             wrapMode: Text.WordWrap
@@ -39,7 +39,7 @@ PageBase {
             last: true
             showList: true
             placeholderIcon: "music_off"
-            placeholderText: qsTr("Aucune application en lecture audio")
+            placeholderText: I18n.tr("Aucune application en lecture audio")
             color: list.count === 0 ? Glass.tile(Colours.tPalette.m3surfaceContainer) : "transparent"
             list.spacing: Tokens.spacing.extraSmall / 2
 

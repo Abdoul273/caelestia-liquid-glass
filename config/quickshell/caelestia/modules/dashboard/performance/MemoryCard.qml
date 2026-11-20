@@ -39,7 +39,7 @@ StyledRect {
             }
 
             StyledText {
-                text: qsTr("Mémoire")
+                text: I18n.tr("Mémoire")
                 font: Tokens.font.title.medium
             }
         }
@@ -74,7 +74,7 @@ StyledRect {
 
                 StyledText {
                     Layout.alignment: Qt.AlignHCenter
-                    text: qsTr("Utilisé")
+                    text: I18n.tr("Utilisé")
                     font: Tokens.font.body.small
                     color: Colours.palette.m3onSurfaceVariant
                 }

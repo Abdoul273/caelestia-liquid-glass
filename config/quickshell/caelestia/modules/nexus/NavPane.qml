@@ -19,7 +19,7 @@ ColumnLayout {
 
         Layout.fillWidth: true
 
-        placeholderText: qsTr("Rechercher dans les paramètres")
+        placeholderText: I18n.tr("Rechercher dans les paramètres")
         font: Tokens.font.body.large
 
         bg.color: Glass.tile(Colours.tPalette.m3surfaceContainerLowest)

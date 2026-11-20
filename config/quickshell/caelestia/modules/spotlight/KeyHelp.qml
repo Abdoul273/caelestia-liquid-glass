@@ -86,7 +86,7 @@ Item {
         if (scored.length === 0)
             return [];
         const best = Object.assign({}, scored[0][1], {
-            section: qsTr("Meilleur résultat"),
+            section: I18n.tr("Meilleur résultat"),
             top: true
         });
         const rest = scored.slice(1).map(s => s[1]).sort((a, b) => a.order - b.order).map(it => Object.assign({}, it, {
@@ -109,7 +109,7 @@ Item {
         if (!it)
             return;
         if (!it.run) {
-            showHint(qsTr("Celui-là se fait à la souris, au pavé tactile ou dans une app : ") + it.keys);
+            showHint(I18n.tr("Celui-là se fait à la souris, au pavé tactile ou dans une app : ") + it.keys);
             return;
         }
         close();
@@ -284,7 +284,7 @@ Item {
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
                         visible: !input.text
-                        text: qsTr("Rechercher un raccourci  (ex. capture, volume, « tout »)")
+                        text: I18n.tr("Rechercher un raccourci  (ex. capture, volume, « tout »)")
                         color: Qt.alpha(root.fg, 0.38)
                         font: input.font
                     }
@@ -306,7 +306,7 @@ Item {
                         id: allLbl
 
                         anchors.centerIn: parent
-                        text: "󰒺  " + (root.showAll ? qsTr("Masquer") : qsTr("Tout voir"))
+                        text: "󰒺  " + (root.showAll ? I18n.tr("Masquer") : I18n.tr("Tout voir"))
                         color: root.showAll ? root.accent : root.fgDim
                         font.family: root.glyphFont
                         font.pixelSize: 12
@@ -464,7 +464,7 @@ Item {
                         }
                         Text {
                             width: parent.width
-                            text: row.it.top ? row.it.cat + (row.it.run ? qsTr("  ·  Entrée pour le déclencher") : "") : row.selected && row.it.run ? qsTr("Entrée pour le déclencher") : row.it.cat
+                            text: row.it.top ? row.it.cat + (row.it.run ? I18n.tr("  ·  Entrée pour le déclencher") : "") : row.selected && row.it.run ? I18n.tr("Entrée pour le déclencher") : row.it.cat
                             color: root.fgDim
                             elide: Text.ElideRight
                             font.pixelSize: 11
@@ -488,7 +488,7 @@ Item {
                                     if (gi > 0)
                                         out.push({
                                             or: true,
-                                            t: qsTr("ou")
+                                            t: I18n.tr("ou")
                                         });
                                     g.split(" + ").forEach(k => out.push({
                                             or: false,

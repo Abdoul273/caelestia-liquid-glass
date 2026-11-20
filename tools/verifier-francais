@@ -25,7 +25,7 @@ copy paste cut undo redo new file folder name copied""".split())
 TOLERES = {"Enhanced Open", "Wi-Fi", "Bluetooth", "Hyprland", "Caelestia", "Spotlight", "Pomodoro"}
 
 motif = re.compile(
-    r'(?:qsTr\(\s*"((?:[^"\\]|\\.)*)"|\b(?:text|title|message|placeholderText|summary|label)\s*:\s*"((?:[^"\\]|\\.)*)")')
+    r'(?:(?:qsTr|I18n\.tr)\(\s*"((?:[^"\\]|\\.)*)"|\b(?:text|title|message|placeholderText|summary|label)\s*:\s*"((?:[^"\\]|\\.)*)")')
 
 trouve = 0
 for f in sorted(cible.rglob("*.qml")):

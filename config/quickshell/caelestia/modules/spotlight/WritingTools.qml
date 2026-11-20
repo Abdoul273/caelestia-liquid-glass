@@ -46,42 +46,42 @@ Item {
     readonly property var actions: [
         {
             id: "corriger",
-            label: qsTr("Corriger"),
+            label: I18n.tr("Corriger"),
             icon: "󰓆"
         },
         {
             id: "reformuler",
-            label: qsTr("Reformuler"),
+            label: I18n.tr("Reformuler"),
             icon: "󰑐"
         },
         {
             id: "pro",
-            label: qsTr("Professionnel"),
+            label: I18n.tr("Professionnel"),
             icon: "󰃖"
         },
         {
             id: "amical",
-            label: qsTr("Amical"),
+            label: I18n.tr("Amical"),
             icon: "󰱱"
         },
         {
             id: "concis",
-            label: qsTr("Concis"),
+            label: I18n.tr("Concis"),
             icon: "󰘕"
         },
         {
             id: "resumer",
-            label: qsTr("Résumer"),
+            label: I18n.tr("Résumer"),
             icon: "󰦨"
         },
         {
             id: "points",
-            label: qsTr("Points clés"),
+            label: I18n.tr("Points clés"),
             icon: "󰉹"
         },
         {
             id: "traduire",
-            label: qsTr("En anglais"),
+            label: I18n.tr("En anglais"),
             icon: "󰗊"
         }
     ]
@@ -106,7 +106,7 @@ Item {
 
     function run(action: string, instruction: string): void {
         if (!text.trim()) {
-            showHint(qsTr("Sélectionne d'abord du texte (ou tape-le ici)"));
+            showHint(I18n.tr("Sélectionne d'abord du texte (ou tape-le ici)"));
             return;
         }
         seq += 1;
@@ -144,7 +144,7 @@ Item {
         backend.send({
             copy: result
         });
-        showHint(qsTr("Copié dans le presse-papiers ✓"));
+        showHint(I18n.tr("Copié dans le presse-papiers ✓"));
     }
 
     function showHint(t: string): void {
@@ -423,7 +423,7 @@ Item {
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             visible: !input.text
-                            text: qsTr("Décris la modification, ou choisis une action…")
+                            text: I18n.tr("Décris la modification, ou choisis une action…")
                             color: Qt.alpha(root.fg, 0.38)
                             font: input.font
                         }
@@ -444,7 +444,7 @@ Item {
                         x: 14
                         y: 10
                         width: parent.width - 28
-                        text: root.source || qsTr("Lecture de la sélection…")
+                        text: root.source || I18n.tr("Lecture de la sélection…")
                         color: root.fgDim
                         font.pixelSize: 14
                         wrapMode: Text.Wrap
@@ -486,7 +486,7 @@ Item {
 
                             Text {
                                 visible: !editor.text
-                                text: qsTr("Aucune sélection : colle ou tape le texte ici (Maj + Entrée = nouvelle ligne)")
+                                text: I18n.tr("Aucune sélection : colle ou tape le texte ici (Maj + Entrée = nouvelle ligne)")
                                 color: Qt.alpha(root.fg, 0.38)
                                 font: editor.font
                             }
@@ -548,7 +548,7 @@ Item {
                             width: resultFlick.width
                             readOnly: true
                             selectByMouse: true
-                            text: root.error ? qsTr("Erreur : %1").arg(root.error) : root.result || qsTr("Écriture…")
+                            text: root.error ? I18n.tr("Erreur : %1").arg(root.error) : root.result || I18n.tr("Écriture…")
                             color: root.error ? "#ff453a" : root.result ? root.fg : root.fgDim
                             wrapMode: TextEdit.Wrap
                             font.pixelSize: 16
@@ -562,7 +562,7 @@ Item {
                 Text {
                     width: parent.width
                     horizontalAlignment: Text.AlignHCenter
-                    text: root.hint || (root.hasResult ? qsTr("Entrée remplacer  ·  Ctrl + C copier  ·  Ctrl + R réessayer  ·  Échap fermer") : qsTr("Entrée lancer  ·  ← → ou Tab choisir  ·  Ctrl + 1…8 action directe  ·  Échap fermer"))
+                    text: root.hint || (root.hasResult ? I18n.tr("Entrée remplacer  ·  Ctrl + C copier  ·  Ctrl + R réessayer  ·  Échap fermer") : I18n.tr("Entrée lancer  ·  ← → ou Tab choisir  ·  Ctrl + 1…8 action directe  ·  Échap fermer"))
                     color: root.hint ? root.accent : Qt.alpha(root.fg, 0.4)
                     font.pixelSize: 12
                 }

@@ -90,25 +90,25 @@ Item {
         if (leftConnected && rightConnected)
             return "BX012 · CETW572";
         if (rightConnected)
-            return (rightDevice?.name || "CETW572") + " · " + qsTr("Droite");
+            return (rightDevice?.name || "CETW572") + " · " + I18n.tr("Droite");
         if (leftConnected)
-            return (leftDevice?.name || "BX012") + " · " + qsTr("Gauche");
+            return (leftDevice?.name || "BX012") + " · " + I18n.tr("Gauche");
         return "BX012 · CETW572";
     }
 
     readonly property string statusText: {
         if (isBusy)
-            return qsTr("Connexion…");
+            return I18n.tr("Connexion…");
         if (leftConnected && rightConnected)
-            return qsTr("Gauche & Droite connectés");
+            return I18n.tr("Gauche & Droite connectés");
         if (rightConnected)
-            return qsTr("Écouteur droit connecté");
+            return I18n.tr("Écouteur droit connecté");
         if (leftConnected)
-            return qsTr("Écouteur gauche connecté");
-        return qsTr("Boîtier fermé");
+            return I18n.tr("Écouteur gauche connecté");
+        return I18n.tr("Boîtier fermé");
     }
 
-    property string activeProfile: "A2DP · Hi-Fi Stéréo"
+    property string activeProfile: I18n.tr("A2DP · Hi-Fi Stéréo")
     property bool autoPopup: true
     property bool openedByAuto: false
 
@@ -260,9 +260,9 @@ Item {
                 if (!s)
                     return;
                 if (/a2dp/i.test(s))
-                    root.activeProfile = "A2DP · Hi-Fi Stéréo";
+                    root.activeProfile = I18n.tr("A2DP · Hi-Fi Stéréo");
                 else if (/headset|hfp|HSP/i.test(s))
-                    root.activeProfile = "Mains libres · Micro";
+                    root.activeProfile = I18n.tr("Mains libres · Micro");
                 else
                     root.activeProfile = s;
             }
@@ -391,7 +391,7 @@ Item {
                 }
 
                 Text {
-                    text: card.busy ? qsTr("Connexion…") : card.showPct ? `${card.pct} %` : card.sublabel
+                    text: card.busy ? I18n.tr("Connexion…") : card.showPct ? `${card.pct} %` : card.sublabel
                     color: card.connected ? root.green : card.busy ? root.orange : Qt.alpha(root.fg, 0.42)
                     font.pixelSize: 10
                     font.weight: Font.DemiBold
@@ -503,7 +503,7 @@ Item {
                     }
 
                     Text {
-                        text: root.isConnected ? root.activeProfile : qsTr("Glisser pour tourner · Double-clic : couvercle")
+                        text: root.isConnected ? root.activeProfile : I18n.tr("Glisser pour tourner · Double-clic : couvercle")
                         color: root.fgDim
                         font.pixelSize: 11
                     }
@@ -603,7 +603,7 @@ Item {
                 PodCard {
                     label: "BX012"
                     sideBadge: "L"
-                    sublabel: root.leftConnected ? qsTr("Connecté") : qsTr("Non connecté")
+                    sublabel: root.leftConnected ? I18n.tr("Connecté") : I18n.tr("Non connecté")
                     glyph: "󰋋"
                     pct: root.leftPct
                     connected: root.leftConnected
@@ -618,9 +618,9 @@ Item {
 
                 // Boîtier de charge
                 PodCard {
-                    label: qsTr("Boîtier")
+                    label: I18n.tr("Boîtier")
                     sideBadge: ""
-                    sublabel: scene.lidOpen > 0.5 ? qsTr("Ouvert") : qsTr("Fermé")
+                    sublabel: scene.lidOpen > 0.5 ? I18n.tr("Ouvert") : I18n.tr("Fermé")
                     glyph: "󰂄"
                     pct: root.casePct
                     connected: root.isConnected
@@ -643,7 +643,7 @@ Item {
                 PodCard {
                     label: "CETW572"
                     sideBadge: "R"
-                    sublabel: root.rightConnected ? qsTr("Connecté") : qsTr("Non connecté")
+                    sublabel: root.rightConnected ? I18n.tr("Connecté") : I18n.tr("Non connecté")
                     glyph: "󰋋"
                     pct: root.rightPct
                     connected: root.rightConnected
@@ -785,7 +785,7 @@ Item {
 
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: root.leftBusy ? qsTr("Gauche…") : root.leftConnected ? qsTr("G · BX012 ✓") : qsTr("Connecter G")
+                            text: root.leftBusy ? I18n.tr("Gauche…") : root.leftConnected ? I18n.tr("G · BX012 ✓") : I18n.tr("Connecter G")
                             color: root.leftConnected ? root.green : root.fg
                             font.pixelSize: 12
                             font.weight: Font.DemiBold
@@ -820,7 +820,7 @@ Item {
 
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: root.rightBusy ? qsTr("Droite…") : root.rightConnected ? qsTr("D · CETW572 ✓") : qsTr("Connecter D")
+                            text: root.rightBusy ? I18n.tr("Droite…") : root.rightConnected ? I18n.tr("D · CETW572 ✓") : I18n.tr("Connecter D")
                             color: root.rightConnected ? root.green : root.fg
                             font.pixelSize: 12
                             font.weight: Font.DemiBold

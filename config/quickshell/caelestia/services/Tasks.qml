@@ -53,7 +53,7 @@ Singleton {
     }
 
     function priorityLabel(p: string): string {
-        return { urgent: qsTr("Urgente"), high: qsTr("Haute"), medium: qsTr("Moyenne"), low: qsTr("Basse") }[p] ?? "";
+        return { urgent: I18n.tr("Urgente"), high: I18n.tr("Haute"), medium: I18n.tr("Moyenne"), low: I18n.tr("Basse") }[p] ?? "";
     }
 
     function dueLabel(t: var): string {
@@ -61,13 +61,13 @@ Singleton {
             return "";
         const days = Math.round((endOfDay(0) - t.due) / 86400000);
         if (days === 0)
-            return qsTr("Aujourd'hui");
+            return I18n.tr("Aujourd'hui");
         if (days === -1)
-            return qsTr("Demain");
+            return I18n.tr("Demain");
         if (days === 1)
-            return qsTr("Hier");
+            return I18n.tr("Hier");
         if (days > 1)
-            return qsTr("Il y a %1 j").arg(days);
+            return I18n.tr("Il y a %1 j").arg(days);
         const d = new Date(t.due);
         return d.toLocaleDateString(Qt.locale(), days > -7 ? "dddd" : "d MMM");
     }
@@ -154,7 +154,7 @@ Singleton {
         if (!title)
             return;
         every = Math.max(15, every);
-        const task = newTask(title, "medium", 0, "Surveillance", qsTr("Surveillance web automatique : vérifiée %1.").arg(everyLabel(every)), ["surveillance", `chaque:${every}`]);
+        const task = newTask(title, "medium", 0, "Surveillance", I18n.tr("Surveillance web automatique : vérifiée %1.").arg(everyLabel(every)), ["surveillance", `chaque:${every}`]);
         upsertNew(task);
         // Première vérification tout de suite (le temps que la tâche soit écrite)
         Qt.callLater(() => Quickshell.execDetached(["sh", "-c", `sleep 2; exec "${watcher}" now ${task.id}`]));
@@ -166,23 +166,23 @@ Singleton {
 
     function everyLabel(min: int): string {
         if (min >= 10080)
-            return qsTr("chaque semaine");
+            return I18n.tr("chaque semaine");
         if (min >= 1440)
-            return min === 1440 ? qsTr("chaque jour") : qsTr("tous les %1 jours").arg(Math.round(min / 1440));
+            return min === 1440 ? I18n.tr("chaque jour") : I18n.tr("tous les %1 jours").arg(Math.round(min / 1440));
         if (min >= 60)
-            return min === 60 ? qsTr("chaque heure") : qsTr("toutes les %1 h").arg(Math.round(min / 60));
-        return qsTr("toutes les %1 min").arg(min);
+            return min === 60 ? I18n.tr("chaque heure") : I18n.tr("toutes les %1 h").arg(Math.round(min / 60));
+        return I18n.tr("toutes les %1 min").arg(min);
     }
 
     function ago(ms: real): string {
         const m = Math.round((Date.now() - ms) / 60000);
         if (m < 1)
-            return qsTr("à l'instant");
+            return I18n.tr("à l'instant");
         if (m < 60)
-            return qsTr("il y a %1 min").arg(m);
+            return I18n.tr("il y a %1 min").arg(m);
         if (m < 1440)
-            return qsTr("il y a %1 h").arg(Math.round(m / 60));
-        return qsTr("il y a %1 j").arg(Math.round(m / 1440));
+            return I18n.tr("il y a %1 h").arg(Math.round(m / 60));
+        return I18n.tr("il y a %1 j").arg(Math.round(m / 1440));
     }
 
     // Ligne d'état d'une surveillance : dernière vérification et résultat
@@ -190,14 +190,14 @@ Singleton {
         void minuteTick; // « il y a N min » se met à jour chaque minute
         const st = watchState[t.id] ?? {};
         if (t.found || st.status === "found")
-            return qsTr("Trouvé ! %1").arg(st.summary ?? "");
+            return I18n.tr("Trouvé ! %1").arg(st.summary ?? "");
         if (st.checking)
-            return qsTr("Vérification en cours…");
+            return I18n.tr("Vérification en cours…");
         if (!st.last)
-            return qsTr("Surveillance %1 · en attente").arg(everyLabel(t.every));
+            return I18n.tr("Surveillance %1 · en attente").arg(everyLabel(t.every));
         if (st.status === "error")
-            return qsTr("Erreur %1 · nouvel essai %2").arg(ago(st.last)).arg(everyLabel(t.every));
-        return qsTr("Pas encore · vérifié %1 · %2").arg(ago(st.last)).arg(everyLabel(t.every)) + (st.summary ? ` — ${st.summary}` : "");
+            return I18n.tr("Erreur %1 · nouvel essai %2").arg(ago(st.last)).arg(everyLabel(t.every));
+        return I18n.tr("Pas encore · vérifié %1 · %2").arg(ago(st.last)).arg(everyLabel(t.every)) + (st.summary ? ` — ${st.summary}` : "");
     }
 
     FileView {

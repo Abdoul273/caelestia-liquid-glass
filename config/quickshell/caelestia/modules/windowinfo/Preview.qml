@@ -49,14 +49,14 @@ Item {
 
                 StyledText {
                     Layout.alignment: Qt.AlignHCenter
-                    text: qsTr("Aucune fenêtre active")
+                    text: I18n.tr("Aucune fenêtre active")
                     color: Colours.palette.m3outline
                     font: Tokens.font.body.builders.large.size(28).weight(Font.Medium).build()
                 }
 
                 StyledText {
                     Layout.alignment: Qt.AlignHCenter
-                    text: qsTr("Sélectionnez une fenêtre active")
+                    text: I18n.tr("Sélectionnez une fenêtre active")
                     color: Colours.palette.m3outline
                     font: Tokens.font.body.large
                 }
@@ -87,10 +87,10 @@ Item {
         text: {
             const client = root.client;
             if (!client)
-                return qsTr("Aucune fenêtre active");
+                return I18n.tr("Aucune fenêtre active");
 
             const mon = client.monitor;
-            return qsTr("%1 sur l'écran %2 à %3, %4").arg(client.title).arg(mon.name).arg(client.lastIpcObject.at[0]).arg(client.lastIpcObject.at[1]);
+            return I18n.tr("%1 sur l'écran %2 à %3, %4").arg(client.title).arg(mon.name).arg(client.lastIpcObject.at[0]).arg(client.lastIpcObject.at[1]);
         }
     }
 }

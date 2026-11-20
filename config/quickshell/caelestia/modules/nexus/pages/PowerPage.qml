@@ -7,18 +7,18 @@ import qs.modules.nexus.common
 PageBase {
     id: root
 
-    title: qsTr("Alimentation")
+    title: I18n.tr("Alimentation")
 
     function actionName(action: var): string {
         const a = Array.isArray(action) ? action.join(" ") : String(action ?? "");
         if (a === "lock")
-            return qsTr("Verrouiller l'écran");
+            return I18n.tr("Verrouiller l'écran");
         if (a.includes("dpms"))
-            return qsTr("Éteindre l'écran");
+            return I18n.tr("Éteindre l'écran");
         if (a.includes("hibernate") && !a.includes("suspend"))
-            return qsTr("Hiberner");
+            return I18n.tr("Hiberner");
         if (a.includes("suspend") || a.includes("sleep"))
-            return qsTr("Mettre en veille");
+            return I18n.tr("Mettre en veille");
         return a;
     }
 
@@ -36,32 +36,32 @@ PageBase {
 
         SectionHeader {
             first: true
-            text: qsTr("Capot")
+            text: I18n.tr("Capot")
         }
 
         ToggleRow {
             first: true
-            text: qsTr("Rester allumé capot fermé")
-            subtext: qsTr("Empêche l'extinction et la mise en veille à la fermeture du capot")
+            text: I18n.tr("Rester allumé capot fermé")
+            subtext: I18n.tr("Empêche l'extinction et la mise en veille à la fermeture du capot")
             checked: LidSwitch.ignoreClosed
             onToggled: LidSwitch.ignoreClosed = checked
         }
 
         InfoRow {
             last: true
-            label: qsTr("État du capot")
-            value: !LidSwitch.hasLid ? qsTr("Non détecté") : LidSwitch.lidClosed ? qsTr("Fermé") : qsTr("Ouvert")
+            label: I18n.tr("État du capot")
+            value: !LidSwitch.hasLid ? I18n.tr("Non détecté") : LidSwitch.lidClosed ? I18n.tr("Fermé") : I18n.tr("Ouvert")
             icon: !LidSwitch.hasLid ? "laptop" : LidSwitch.lidClosed ? "laptop_windows" : "laptop_mac"
         }
 
         SectionHeader {
-            text: qsTr("Veille automatique")
+            text: I18n.tr("Veille automatique")
         }
 
         ToggleRow {
             first: true
-            text: qsTr("Caféine")
-            subtext: IdleInhibitor.enabled ? qsTr("L'écran reste allumé, aucune action ci-dessous ne s'applique") : qsTr("Garder l'écran allumé")
+            text: I18n.tr("Caféine")
+            subtext: IdleInhibitor.enabled ? I18n.tr("L'écran reste allumé, aucune action ci-dessous ne s'applique") : I18n.tr("Garder l'écran allumé")
             checked: IdleInhibitor.enabled
             onToggled: IdleInhibitor.enabled = checked
         }
@@ -80,14 +80,14 @@ PageBase {
 
                 ToggleRow {
                     text: root.actionName(timeoutRow.modelData.idleAction)
-                    subtext: qsTr("Après %1 min d'inactivité").arg(Math.round(timeoutRow.modelData.timeout / 60))
+                    subtext: I18n.tr("Après %1 min d'inactivité").arg(Math.round(timeoutRow.modelData.timeout / 60))
                     checked: timeoutRow.modelData.enabled ?? true
                     onToggled: root.setTimeoutAt(timeoutRow.index, "enabled", checked)
                 }
 
                 StepperRow {
                     visible: timeoutRow.modelData.enabled ?? true
-                    label: qsTr("Délai (minutes)")
+                    label: I18n.tr("Délai (minutes)")
                     value: Math.round(timeoutRow.modelData.timeout / 60)
                     from: 1
                     to: 240
@@ -97,23 +97,23 @@ PageBase {
         }
 
         ToggleRow {
-            text: qsTr("Verrouiller avant la mise en veille")
-            subtext: qsTr("Verrouiller la session juste avant la veille")
+            text: I18n.tr("Verrouiller avant la mise en veille")
+            subtext: I18n.tr("Verrouiller la session juste avant la veille")
             checked: GlobalConfig.general.idle.lockBeforeSleep
             onToggled: GlobalConfig.general.idle.lockBeforeSleep = checked
         }
 
         ToggleRow {
-            text: qsTr("Rester éveillé pendant la lecture")
-            subtext: qsTr("Empêche la veille si un média est en cours")
+            text: I18n.tr("Rester éveillé pendant la lecture")
+            subtext: I18n.tr("Empêche la veille si un média est en cours")
             checked: GlobalConfig.general.idle.inhibitWhenAudio
             onToggled: GlobalConfig.general.idle.inhibitWhenAudio = checked
         }
 
         ToggleRow {
             last: true
-            text: qsTr("Rester éveillé pendant la charge")
-            subtext: qsTr("Empêche la veille automatique sur secteur")
+            text: I18n.tr("Rester éveillé pendant la charge")
+            subtext: I18n.tr("Empêche la veille automatique sur secteur")
             checked: GlobalConfig.general.idle.inhibitWhenCharging
             onToggled: GlobalConfig.general.idle.inhibitWhenCharging = checked
         }

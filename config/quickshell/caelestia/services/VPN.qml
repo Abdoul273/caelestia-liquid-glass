@@ -269,14 +269,14 @@ Singleton {
         connected = false;
         connectedChanged(); // Force bindings to reeval (mainly for switches)
         if (GlobalConfig.utilities.toasts.vpnChanged)
-            Toaster.toast(qsTr("Échec de la connexion VPN"), reason, "vpn_key_alert");
+            Toaster.toast(I18n.tr("Échec de la connexion VPN"), reason, "vpn_key_alert");
     }
 
     function reportDisconnectFailure(reason: string): void {
         disconnectPending = false;
         connectedChanged(); // Force bindings to reeval (mainly for switches)
         if (GlobalConfig.utilities.toasts.vpnChanged)
-            Toaster.toast(qsTr("Échec de la déconnexion VPN"), reason, "vpn_key_alert");
+            Toaster.toast(I18n.tr("Échec de la déconnexion VPN"), reason, "vpn_key_alert");
     }
 
     function checkStatus(): void {
@@ -526,19 +526,19 @@ Singleton {
 
         switch (statusObj.state) {
         case "connected":
-            Toaster.toast(qsTr("VPN connecté"), qsTr("Connecté à %1").arg(displayName), "vpn_key");
+            Toaster.toast(I18n.tr("VPN connecté"), I18n.tr("Connecté à %1").arg(displayName), "vpn_key");
             break;
         case "disconnected":
-            Toaster.toast(qsTr("VPN déconnecté"), qsTr("Déconnecté de %1").arg(displayName), "vpn_key_off");
+            Toaster.toast(I18n.tr("VPN déconnecté"), I18n.tr("Déconnecté de %1").arg(displayName), "vpn_key_off");
             break;
         case "needs-auth":
             const authMsg = statusObj.reason || "Authentication required";
-            Toaster.toast(qsTr("Authentification VPN requise"), qsTr("%1 : %2").arg(displayName).arg(authMsg), "vpn_lock");
+            Toaster.toast(I18n.tr("Authentification VPN requise"), I18n.tr("%1 : %2").arg(displayName).arg(authMsg), "vpn_lock");
             break;
         case "error":
             if (status.state === "connected" || status.state === "connecting" || status.state === "needs-auth") {
                 const errMsg = statusObj.reason || "Unknown error";
-                Toaster.toast(qsTr("Erreur VPN"), qsTr("%1 : %2").arg(displayName).arg(errMsg), "error");
+                Toaster.toast(I18n.tr("Erreur VPN"), I18n.tr("%1 : %2").arg(displayName).arg(errMsg), "error");
             }
             break;
         }
@@ -763,7 +763,7 @@ Singleton {
 
             if (!root.connectExited) {
                 console.warn(lc, `Failed to start connect command '${command.join(" ")}'`);
-                root.reportConnectFailure(qsTr("Impossible de lancer %1. Est-il installé ?").arg(root.active.displayName));
+                root.reportConnectFailure(I18n.tr("Impossible de lancer %1. Est-il installé ?").arg(root.active.displayName));
             }
         }
 
@@ -777,7 +777,7 @@ Singleton {
 
                 if (exitCode !== 0) {
                     console.warn(lc, `Connect command '${command.join(" ")}' failed with exit code`, exitCode);
-                    root.reportConnectFailure(qsTr("Impossible de se connecter à %1").arg(root.active.displayName));
+                    root.reportConnectFailure(I18n.tr("Impossible de se connecter à %1").arg(root.active.displayName));
                     return;
                 }
 
@@ -832,7 +832,7 @@ Singleton {
 
             if (!root.disconnectExited) {
                 console.warn(lc, `Failed to start disconnect command '${command.join(" ")}'`);
-                root.reportDisconnectFailure(qsTr("Impossible de lancer %1. Est-il installé ?").arg(root.active.displayName));
+                root.reportDisconnectFailure(I18n.tr("Impossible de lancer %1. Est-il installé ?").arg(root.active.displayName));
             }
         }
 

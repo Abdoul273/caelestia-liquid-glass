@@ -16,7 +16,7 @@ Item {
     readonly property string windowTitle: {
         const title = Hypr.activeToplevel?.title;
         if (!title)
-            return qsTr("Bureau");
+            return I18n.tr("Bureau");
         if (Config.bar.activeWindow.compact) {
             // " - " (standard hyphen), " — " (em dash), " – " (en dash)
             const parts = title.split(/\s+[\-\u2013\u2014]\s+/);

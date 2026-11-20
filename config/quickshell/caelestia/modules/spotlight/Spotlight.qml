@@ -60,9 +60,9 @@ Item {
         const list = [...(s.local ?? []), ...(s.files ?? []), ...(s.suggest ?? []), ...(s.web ?? [])];
         list.push({
             kind: "google",
-            section: "Sur le Web",
-            title: `Rechercher « ${query} » sur Google`,
-            sub: "Ouvre le navigateur  ·  Ctrl + Entrée",
+            section: I18n.tr("Sur le Web"),
+            title: I18n.tr("Rechercher « %1 » sur Google").arg(query),
+            sub: I18n.tr("Ouvre le navigateur  ·  Ctrl + Entrée"),
             glyph: "󰊭",
             action: "https://www.google.com/search?q=" + encodeURIComponent(query)
         });
@@ -288,7 +288,7 @@ Item {
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
                         visible: !input.text
-                        text: qsTr("Recherche Spotlight")
+                        text: I18n.tr("Recherche Spotlight")
                         color: Qt.alpha(root.fg, 0.38)
                         font: input.font
                     }

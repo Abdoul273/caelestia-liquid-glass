@@ -28,7 +28,7 @@ Item {
 
             StyledText {
                 Layout.fillWidth: true
-                text: qsTr("Paroles")
+                text: I18n.tr("Paroles")
                 font: Tokens.font.title.medium
             }
 
@@ -50,7 +50,7 @@ Item {
 
             menuItems: playerList.instances
             fallbackIcon: "music_off"
-            fallbackText: qsTr("Aucun lecteur")
+            fallbackText: I18n.tr("Aucun lecteur")
 
             minLeftWidth: layout.width - expandBtn.implicitWidth - spacing
             label.Layout.maximumWidth: minLeftWidth - iconLabel.implicitWidth - textRow.spacing - textRow.anchors.horizontalCenterOffset / 2 - horizontalPadding * 2

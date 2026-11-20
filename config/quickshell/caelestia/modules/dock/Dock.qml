@@ -415,7 +415,7 @@ Item {
             DockIcon {
                 dock: root
                 appId: "__launcher"
-                label: qsTr("Applications")
+                label: I18n.tr("Applications")
                 symbol: "apps"
                 onPrimary: root.screenState.launcher = true
             }
@@ -498,14 +498,14 @@ Item {
             y: 6
 
             CtxEntry {
-                text: ctxMenu.item?.pinned ? qsTr("Retirer du Dock") : qsTr("Garder dans le Dock")
+                text: ctxMenu.item?.pinned ? I18n.tr("Retirer du Dock") : I18n.tr("Garder dans le Dock")
                 onClicked: {
                     root.togglePin(root.contextFor);
                     root.contextFor = "";
                 }
             }
             CtxEntry {
-                text: qsTr("Nouvelle fenêtre")
+                text: I18n.tr("Nouvelle fenêtre")
                 onClicked: {
                     if (ctxMenu.item)
                         root.launch(ctxMenu.item);
@@ -514,7 +514,7 @@ Item {
             }
             CtxEntry {
                 visible: (root.windowsByApp[root.contextFor]?.length ?? 0) > 0
-                text: (root.windowsByApp[root.contextFor]?.length ?? 0) > 1 ? qsTr("Tout fermer") : qsTr("Fermer")
+                text: (root.windowsByApp[root.contextFor]?.length ?? 0) > 1 ? I18n.tr("Tout fermer") : I18n.tr("Fermer")
                 danger: true
                 onClicked: {
                     if (ctxMenu.item)
@@ -524,7 +524,7 @@ Item {
             }
             CtxEntry {
                 visible: (root.windowsByApp[root.contextFor]?.length ?? 0) > 0 || root.bgUnits[root.contextFor] !== undefined
-                text: qsTr("Quitter")
+                text: I18n.tr("Quitter")
                 danger: true
                 onClicked: {
                     if (ctxMenu.item)
@@ -736,7 +736,7 @@ Item {
                 id: rmTip
 
                 anchors.centerIn: parent
-                text: qsTr("Retirer")
+                text: I18n.tr("Retirer")
                 color: Colours.palette.m3onError
                 font.pointSize: 9
                 font.weight: Font.DemiBold

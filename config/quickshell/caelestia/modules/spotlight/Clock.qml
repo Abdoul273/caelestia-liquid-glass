@@ -53,22 +53,22 @@ Item {
         {
             key: "timer",
             glyph: "󰔛",
-            title: qsTr("Minuteur")
+            title: I18n.tr("Minuteur")
         },
         {
             key: "stopwatch",
             glyph: "󱎫",
-            title: qsTr("Chrono")
+            title: I18n.tr("Chrono")
         },
         {
             key: "pomodoro",
             glyph: "󰄉",
-            title: qsTr("Pomodoro")
+            title: I18n.tr("Pomodoro")
         },
         {
             key: "alarms",
             glyph: "󰀠",
-            title: qsTr("Alarmes")
+            title: I18n.tr("Alarmes")
         }
     ]
     property int tab: 0
@@ -191,14 +191,14 @@ Item {
 
     function daysText(days: var): string {
         if (!days || days.length === 0)
-            return qsTr("Une fois");
+            return I18n.tr("Une fois");
         const s = [...days].sort().join(",");
         if (s === "0,1,2,3,4,5,6")
-            return qsTr("Tous les jours");
+            return I18n.tr("Tous les jours");
         if (s === "1,2,3,4,5")
-            return qsTr("En semaine");
+            return I18n.tr("En semaine");
         if (s === "0,6")
-            return qsTr("Le week-end");
+            return I18n.tr("Le week-end");
         const names = ["dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."];
         return [1, 2, 3, 4, 5, 6, 0].filter(d => days.includes(d)).map(d => names[d]).join(" ");
     }
@@ -220,10 +220,10 @@ Item {
             }
         }
         if (!best)
-            return qsTr("Aucune alarme prévue");
+            return I18n.tr("Aucune alarme prévue");
         const mins = Math.floor((best - n) / 60000);
         const h = Math.floor(mins / 60);
-        return h ? qsTr("Prochaine alarme dans %1 h %2").arg(h).arg((mins % 60).toString().padStart(2, "0")) : qsTr("Prochaine alarme dans %1 min").arg(mins % 60);
+        return h ? I18n.tr("Prochaine alarme dans %1 h %2").arg(h).arg((mins % 60).toString().padStart(2, "0")) : I18n.tr("Prochaine alarme dans %1 min").arg(mins % 60);
     }
 
     visible: morph > 0.001
@@ -681,7 +681,7 @@ Item {
                     Text {
                         readonly property int since: Math.max(0, Math.floor((root.now - (root.ring?.since ?? root.now)) / 1000))
 
-                        text: qsTr("Sonne depuis %1").arg(`${Math.floor(since / 60)}:${(since % 60).toString().padStart(2, "0")}`)
+                        text: I18n.tr("Sonne depuis %1").arg(`${Math.floor(since / 60)}:${(since % 60).toString().padStart(2, "0")}`)
                         color: root.fgDim
                         font.pixelSize: 11
                     }
@@ -698,7 +698,7 @@ Item {
                     Pill {
                         height: 36
                         readonly property bool pomoRing: (root.ring?.kind ?? "").startsWith("pomo")
-                        text: pomoRing ? qsTr("Terminer") : root.ring?.kind === "timer" ? qsTr("Relancer") : qsTr("Répéter")
+                        text: pomoRing ? I18n.tr("Terminer") : root.ring?.kind === "timer" ? I18n.tr("Relancer") : I18n.tr("Répéter")
                         onClicked: root.cmd([pomoRing ? "stopAll" : "snooze"])
                     }
                     Pill {
@@ -706,9 +706,9 @@ Item {
                         tint: Qt.alpha(root.orange, 0.82)
                         textColour: "white"
                         text: ({
-                                pomoWork: qsTr("Pause"),
-                                pomoRest: qsTr("Reprendre")
-                            })[root.ring?.kind] ?? qsTr("Arrêter")
+                                pomoWork: I18n.tr("Pause"),
+                                pomoRest: I18n.tr("Reprendre")
+                            })[root.ring?.kind] ?? I18n.tr("Arrêter")
                         onClicked: root.cmd([(root.ring?.kind ?? "").startsWith("pomo") ? "ringNext" : "stopAlarm"])
                     }
                 }
@@ -838,7 +838,7 @@ Item {
 
                                 Text {
                                     anchors.horizontalCenter: parent.horizontalCenter
-                                    text: root.st.label || qsTr("Minuteur")
+                                    text: root.st.label || I18n.tr("Minuteur")
                                     color: root.fgDim
                                     font.pixelSize: 13
                                 }
@@ -854,7 +854,7 @@ Item {
                                 }
                                 Text {
                                     anchors.horizontalCenter: parent.horizontalCenter
-                                    text: root.paused ? qsTr("En pause") : qsTr("Fin à %1").arg(Qt.formatTime(new Date(root.st.end ?? 0), "HH:mm"))
+                                    text: root.paused ? I18n.tr("En pause") : I18n.tr("Fin à %1").arg(Qt.formatTime(new Date(root.st.end ?? 0), "HH:mm"))
                                     color: root.paused ? root.orange : root.fgDim
                                     font.pixelSize: 12
                                 }
@@ -945,7 +945,7 @@ Item {
                             anchors.horizontalCenter: parent.horizontalCenter
                             width: presets.width
                             visible: !root.timerOn
-                            placeholder: qsTr("Nom du minuteur (optionnel) — ex. Pâtes")
+                            placeholder: I18n.tr("Nom du minuteur (optionnel) — ex. Pâtes")
                             onAccepted: root.timerMain()
                         }
 
@@ -955,19 +955,19 @@ Item {
                             spacing: 12
 
                             Pill {
-                                text: qsTr("Annuler")
+                                text: I18n.tr("Annuler")
                                 enabledPill: root.timerOn
                                 onClicked: root.cmd(["stop"])
                             }
                             Pill {
                                 visible: root.timerOn
-                                text: qsTr("+1 min")
+                                text: I18n.tr("+1 min")
                                 onClicked: root.cmd(["addMinute"])
                             }
                             Pill {
                                 tint: root.timerOn && !root.paused ? Qt.alpha(root.orange, 0.25) : Qt.alpha(root.orange, 0.82)
                                 textColour: root.timerOn && !root.paused ? root.orange : "white"
-                                text: root.timerOn ? (root.paused ? qsTr("Reprendre") : qsTr("Pause")) : qsTr("Démarrer")
+                                text: root.timerOn ? (root.paused ? I18n.tr("Reprendre") : I18n.tr("Pause")) : I18n.tr("Démarrer")
                                 onClicked: root.timerMain()
                             }
                         }
@@ -1087,7 +1087,7 @@ Item {
                                 }
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: qsTr("Tour %1").arg(lap.modelData.n)
+                                    text: I18n.tr("Tour %1").arg(lap.modelData.n)
                                     color: lap.modelData.best ? root.green : lap.modelData.worst ? root.red : root.fg
                                     font.pixelSize: 13
                                 }
@@ -1112,7 +1112,7 @@ Item {
                             spacing: 12
 
                             Pill {
-                                text: root.swOn && root.paused ? qsTr("Réinitialiser") : qsTr("Tour")
+                                text: root.swOn && root.paused ? I18n.tr("Réinitialiser") : I18n.tr("Tour")
                                 enabledPill: root.swOn
                                 onClicked: root.cmd([root.paused ? "stop" : "lap"])
                             }
@@ -1121,7 +1121,7 @@ Item {
 
                                 tint: running ? Qt.alpha(root.red, 0.25) : Qt.alpha(root.green, 0.25)
                                 textColour: running ? root.red : root.green
-                                text: root.swOn ? (root.paused ? qsTr("Reprendre") : qsTr("Arrêter")) : qsTr("Démarrer")
+                                text: root.swOn ? (root.paused ? I18n.tr("Reprendre") : I18n.tr("Arrêter")) : I18n.tr("Démarrer")
                                 onClicked: root.stopwatchMain()
                             }
                         }
@@ -1150,7 +1150,7 @@ Item {
 
                                 Text {
                                     anchors.horizontalCenter: parent.horizontalCenter
-                                    text: root.pomoOn ? (pRing.parent.resting ? qsTr("Pause") : qsTr("Focus")) : qsTr("Pomodoro")
+                                    text: root.pomoOn ? (pRing.parent.resting ? I18n.tr("Pause") : I18n.tr("Focus")) : I18n.tr("Pomodoro")
                                     color: root.pomoOn ? pRing.colour : root.fgDim
                                     font.pixelSize: 14
                                     font.weight: Font.DemiBold
@@ -1167,7 +1167,7 @@ Item {
                                 }
                                 Text {
                                     anchors.horizontalCenter: parent.horizontalCenter
-                                    text: root.pomoOn ? qsTr("Session %1").arg(root.pomo.round ?? 1) : qsTr("%1 min de focus · %2 min de pause").arg(root.work).arg(root.rest)
+                                    text: root.pomoOn ? I18n.tr("Session %1").arg(root.pomo.round ?? 1) : I18n.tr("%1 min de focus · %2 min de pause").arg(root.work).arg(root.rest)
                                     color: root.fgDim
                                     font.pixelSize: 12
                                 }
@@ -1187,14 +1187,14 @@ Item {
                                 model: [
                                     {
                                         key: "work",
-                                        title: qsTr("Focus"),
+                                        title: I18n.tr("Focus"),
                                         lo: 5,
                                         hi: 90,
                                         stepBy: 5
                                     },
                                     {
                                         key: "rest",
-                                        title: qsTr("Pause"),
+                                        title: I18n.tr("Pause"),
                                         lo: 1,
                                         hi: 30,
                                         stepBy: 1
@@ -1272,14 +1272,14 @@ Item {
                             spacing: 12
 
                             Pill {
-                                text: qsTr("Arrêter")
+                                text: I18n.tr("Arrêter")
                                 enabledPill: root.pomoOn
                                 onClicked: root.cmd(["stop"])
                             }
                             Pill {
                                 tint: root.pomoOn && !root.paused ? Qt.alpha(root.orange, 0.25) : Qt.alpha(root.orange, 0.82)
                                 textColour: root.pomoOn && !root.paused ? root.orange : "white"
-                                text: root.pomoOn ? (root.paused ? qsTr("Reprendre") : qsTr("Pause")) : qsTr("Commencer")
+                                text: root.pomoOn ? (root.paused ? I18n.tr("Reprendre") : I18n.tr("Pause")) : I18n.tr("Commencer")
                                 onClicked: root.pomoMain()
                             }
                         }
@@ -1393,7 +1393,7 @@ Item {
                                     id: alarmName
 
                                     width: editor.width - 32
-                                    placeholder: qsTr("Nom de l'alarme — ex. Réveil")
+                                    placeholder: I18n.tr("Nom de l'alarme — ex. Réveil")
                                     onAccepted: root.addAlarm()
                                 }
 
@@ -1433,7 +1433,7 @@ Item {
                                     height: 38
                                     tint: Qt.alpha(root.orange, 0.82)
                                     textColour: "white"
-                                    text: root.aDays.length ? qsTr("Enregistrer") : qsTr("Enregistrer (une seule fois)")
+                                    text: root.aDays.length ? I18n.tr("Enregistrer") : I18n.tr("Enregistrer (une seule fois)")
                                     onClicked: root.addAlarm()
                                 }
                             }
@@ -1476,7 +1476,7 @@ Item {
                                         }
                                     }
                                     Text {
-                                        text: `${al.modelData.label || qsTr("Alarme")}  ·  ${root.daysText(al.modelData.days)}`
+                                        text: `${al.modelData.label || I18n.tr("Alarme")}  ·  ${root.daysText(al.modelData.days)}`
                                         color: root.fgDim
                                         font.pixelSize: 11
                                     }
@@ -1561,7 +1561,7 @@ Item {
                             anchors.verticalCenterOffset: 30
                             visible: root.alarms.length === 0 && !root.editing
                             horizontalAlignment: Text.AlignHCenter
-                            text: qsTr("Aucune alarme.\nAppuie sur + pour en créer une.")
+                            text: I18n.tr("Aucune alarme.\nAppuie sur + pour en créer une.")
                             color: root.fgDim
                             font.pixelSize: 13
                         }
@@ -1575,7 +1575,7 @@ Item {
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: 12
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: qsTr("Tout continue dans l'île, même fermé  ·  Espace : démarrer  ·  Tab : onglet")
+                text: I18n.tr("Tout continue dans l'île, même fermé  ·  Espace : démarrer  ·  Tab : onglet")
                 color: Qt.alpha(root.fg, 0.4)
                 font.pixelSize: 11
             }

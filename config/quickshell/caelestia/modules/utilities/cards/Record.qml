@@ -59,14 +59,14 @@ StyledRect {
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: qsTr("Enregistreur d'écran")
+                    text: I18n.tr("Enregistreur d'écran")
                     font: Tokens.font.body.medium
                     elide: Text.ElideRight
                 }
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: Recorder.paused ? qsTr("En pause") : Recorder.running ? qsTr("En cours...") : qsTr("Prêt")
+                    text: Recorder.paused ? I18n.tr("En pause") : Recorder.running ? I18n.tr("En cours...") : I18n.tr("Prêt")
                     color: Colours.palette.m3onSurfaceVariant
                     font: Tokens.font.body.small
                     elide: Text.ElideRight
@@ -83,50 +83,50 @@ StyledRect {
                 menuItems: [
                     MenuItem {
                         icon: "fullscreen"
-                        text: qsTr("Tout l'écran")
-                        activeText: qsTr("Plein écran")
+                        text: I18n.tr("Tout l'écran")
+                        activeText: I18n.tr("Plein écran")
                         onClicked: Recorder.start()
                     },
                     MenuItem {
                         icon: "select_to_speak"
-                        text: qsTr("Tout l'écran avec le son")
-                        activeText: qsTr("Plein écran (son)")
+                        text: I18n.tr("Tout l'écran avec le son")
+                        activeText: I18n.tr("Plein écran (son)")
                         onClicked: Recorder.start(["-s"])
                     },
                     MenuItem {
                         icon: "mic"
-                        text: qsTr("Tout l'écran avec le micro")
-                        activeText: qsTr("Plein écran (micro)")
+                        text: I18n.tr("Tout l'écran avec le micro")
+                        activeText: I18n.tr("Plein écran (micro)")
                         onClicked: Recorder.start(["-m"])
                     },
                     MenuItem {
                         icon: "hearing"
-                        text: qsTr("Tout l'écran avec son + micro")
-                        activeText: qsTr("Plein écran (son+micro)")
+                        text: I18n.tr("Tout l'écran avec son + micro")
+                        activeText: I18n.tr("Plein écran (son+micro)")
                         onClicked: Recorder.start(["-s", "-m"])
                     },
                     MenuItem {
                         icon: "screenshot_region"
-                        text: qsTr("Sélectionner une zone")
-                        activeText: qsTr("Zone")
+                        text: I18n.tr("Sélectionner une zone")
+                        activeText: I18n.tr("Zone")
                         onClicked: Recorder.start(["-r"])
                     },
                     MenuItem {
                         icon: "volume_up"
-                        text: qsTr("Zone avec le son")
-                        activeText: qsTr("Zone (son)")
+                        text: I18n.tr("Zone avec le son")
+                        activeText: I18n.tr("Zone (son)")
                         onClicked: Recorder.start(["-s", "-r"])
                     },
                     MenuItem {
                         icon: "mic"
-                        text: qsTr("Zone avec le micro")
-                        activeText: qsTr("Zone (micro)")
+                        text: I18n.tr("Zone avec le micro")
+                        activeText: I18n.tr("Zone (micro)")
                         onClicked: Recorder.start(["-m", "-r"])
                     },
                     MenuItem {
                         icon: "hearing"
-                        text: qsTr("Zone avec son + micro")
-                        activeText: qsTr("Zone (son+micro)")
+                        text: I18n.tr("Zone avec son + micro")
+                        activeText: I18n.tr("Zone (son+micro)")
                         onClicked: Recorder.start(["-s", "-m", "-r"])
                     }
                 ]
@@ -260,7 +260,7 @@ StyledRect {
                     else
                         time = `${mins}:${secs}`;
 
-                    return qsTr("Enregistrement en cours (%1)").arg(time);
+                    return I18n.tr("Enregistrement en cours (%1)").arg(time);
                 }
                 font: Tokens.font.body.medium
                 elide: Text.ElideMiddle

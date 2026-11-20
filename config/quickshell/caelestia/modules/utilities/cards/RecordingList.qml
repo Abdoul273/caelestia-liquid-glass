@@ -38,7 +38,7 @@ ColumnLayout {
             StyledText {
                 Layout.alignment: Qt.AlignVCenter
                 Layout.fillWidth: true
-                text: qsTr("Enregistrements")
+                text: I18n.tr("Enregistrements")
                 font: Tokens.font.body.medium
             }
 
@@ -92,7 +92,7 @@ ColumnLayout {
                         return time;
                     const date = new Date(...matches.slice(1));
                     date.setMonth(date.getMonth() - 1); // Woe (months start from 0)
-                    return qsTr("Enregistrement à %1").arg(Qt.formatDateTime(date, Qt.locale()));
+                    return I18n.tr("Enregistrement à %1").arg(Qt.formatDateTime(date, Qt.locale()));
                 }
                 color: Colours.palette.m3onSurfaceVariant
                 elide: Text.ElideRight
@@ -218,7 +218,7 @@ ColumnLayout {
                     }
 
                     StyledText {
-                        text: qsTr("Aucun enregistrement trouvé")
+                        text: I18n.tr("Aucun enregistrement trouvé")
                         color: Colours.palette.m3outline
                     }
                 }

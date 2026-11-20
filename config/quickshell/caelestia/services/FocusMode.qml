@@ -13,9 +13,9 @@ Singleton {
 
     // Modes proposés (réglages par défaut, modifiables avant d'activer)
     readonly property var modes: ({
-            dnd: { name: qsTr("Ne pas déranger"), icon: "do_not_disturb_on", tint: "#bf5af2", hideDock: false, muteApps: false, pomodoro: false, night: false },
-            work: { name: qsTr("Travail"), icon: "work", tint: "#0a84ff", hideDock: true, muteApps: true, pomodoro: true, night: false },
-            sleep: { name: qsTr("Sommeil"), icon: "bedtime", tint: "#5e5ce6", hideDock: true, muteApps: true, pomodoro: false, night: true }
+            dnd: { name: I18n.tr("Ne pas déranger"), icon: "do_not_disturb_on", tint: "#bf5af2", hideDock: false, muteApps: false, pomodoro: false, night: false },
+            work: { name: I18n.tr("Travail"), icon: "work", tint: "#0a84ff", hideDock: true, muteApps: true, pomodoro: true, night: false },
+            sleep: { name: I18n.tr("Sommeil"), icon: "bedtime", tint: "#5e5ce6", hideDock: true, muteApps: true, pomodoro: false, night: true }
         })
     readonly property list<string> order: ["dnd", "work", "sleep"]
     // Apps mises en sourdine (flux audio) pendant la concentration
@@ -49,8 +49,8 @@ Singleton {
         if (!active)
             return "";
         if (until <= 0)
-            return qsTr("jusqu'à l'arrêt");
-        return qsTr("jusqu'à %1").arg(Qt.formatTime(new Date(until), "HH:mm"));
+            return I18n.tr("jusqu'à l'arrêt");
+        return I18n.tr("jusqu'à %1").arg(Qt.formatTime(new Date(until), "HH:mm"));
     }
 
     // minutes : 0 = sans limite, -1 = jusqu'à la fin de la journée

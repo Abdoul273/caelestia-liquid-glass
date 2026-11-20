@@ -5,7 +5,7 @@ Thank you for your interest in contributing! Both **English** and **French** are
 ## How You Can Help
 
 - **Report bugs** with your Arch derivative, Hyprland version, `caelestia-shell` version, and relevant logs (`journalctl --user`, `qs -c caelestia`).
-- **Localization (i18n)**: the UI is currently written in French. Help migrating QML strings to English defaults + `qsTr()` translation catalogs is very welcome.
+- **Localization (i18n)**: the QML shell supports automatic **English & French** via `config/quickshell/caelestia/services/I18n.qml` and `I18nEn.js` (validated by `tests/test_i18n.py`). PRs adding new languages or translating companion tools in `bin/` are very welcome.
 - **Hardware & multi-monitor testing**: NVIDIA GPUs, HiDPI/fractional scaling, multiple displays, and different Bluetooth devices.
 - **Companion scripts & tests**: improvements to `bin/*` utilities, installer portability, and unit tests in `tests/`.
 

@@ -52,9 +52,9 @@ Singleton {
         save();
 
         if (ignoreClosed)
-            Toaster.toast(qsTr("Capot ignoré"), qsTr("Le PC reste allumé si vous fermez le capot"), "laptop");
+            Toaster.toast(I18n.tr("Capot ignoré"), I18n.tr("Le PC reste allumé si vous fermez le capot"), "laptop");
         else
-            Toaster.toast(qsTr("Veille au capot rétablie"), qsTr("Fermer le capot peut mettre le PC en veille"), "bedtime");
+            Toaster.toast(I18n.tr("Veille au capot rétablie"), I18n.tr("Fermer le capot peut mettre le PC en veille"), "bedtime");
     }
 
     FileView {

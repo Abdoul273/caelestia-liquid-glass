@@ -16,14 +16,14 @@ ColumnLayout {
     Label {
         Layout.topMargin: Tokens.padding.extraLargeIncreased
 
-        text: root.client?.title ?? qsTr("Aucune fenêtre active")
+        text: root.client?.title ?? I18n.tr("Aucune fenêtre active")
         wrapMode: Text.WrapAtWordBoundaryOrAnywhere
 
         font: Tokens.font.body.builders.large.weight(Font.Medium).build()
     }
 
     Label {
-        text: root.client?.lastIpcObject.class ?? qsTr("Aucune fenêtre active")
+        text: root.client?.lastIpcObject.class ?? I18n.tr("Aucune fenêtre active")
         color: Colours.palette.m3tertiary
 
         font: Tokens.font.body.large
@@ -42,24 +42,24 @@ ColumnLayout {
 
     Detail {
         icon: "location_on"
-        text: qsTr("Adresse : %1").arg(`0x${root.client?.address}` ?? "unknown")
+        text: I18n.tr("Adresse : %1").arg(`0x${root.client?.address}` ?? "unknown")
         color: Colours.palette.m3primary
     }
 
     Detail {
         icon: "location_searching"
-        text: qsTr("Position : %1, %2").arg(root.client?.lastIpcObject.at[0] ?? -1).arg(root.client?.lastIpcObject.at[1] ?? -1)
+        text: I18n.tr("Position : %1, %2").arg(root.client?.lastIpcObject.at[0] ?? -1).arg(root.client?.lastIpcObject.at[1] ?? -1)
     }
 
     Detail {
         icon: "resize"
-        text: qsTr("Taille : %1 x %2").arg(root.client?.lastIpcObject.size[0] ?? -1).arg(root.client?.lastIpcObject.size[1] ?? -1)
+        text: I18n.tr("Taille : %1 x %2").arg(root.client?.lastIpcObject.size[0] ?? -1).arg(root.client?.lastIpcObject.size[1] ?? -1)
         color: Colours.palette.m3tertiary
     }
 
     Detail {
         icon: "workspaces"
-        text: qsTr("Espace de travail : %1 (%2)").arg(root.client?.workspace.name ?? -1).arg(root.client?.workspace.id ?? -1)
+        text: I18n.tr("Espace de travail : %1 (%2)").arg(root.client?.workspace.name ?? -1).arg(root.client?.workspace.id ?? -1)
         color: Colours.palette.m3secondary
     }
 
@@ -68,42 +68,42 @@ ColumnLayout {
         text: {
             const mon = root.client?.monitor;
             if (mon)
-                return qsTr("Écran : %1 (%2) à %3, %4").arg(mon.name).arg(mon.id).arg(mon.x).arg(mon.y);
-            return qsTr("Écran : inconnu");
+                return I18n.tr("Écran : %1 (%2) à %3, %4").arg(mon.name).arg(mon.id).arg(mon.x).arg(mon.y);
+            return I18n.tr("Écran : inconnu");
         }
     }
 
     Detail {
         icon: "page_header"
-        text: qsTr("Titre initial : %1").arg(root.client?.lastIpcObject.initialTitle ?? "unknown")
+        text: I18n.tr("Titre initial : %1").arg(root.client?.lastIpcObject.initialTitle ?? "unknown")
         color: Colours.palette.m3tertiary
     }
 
     Detail {
         icon: "category"
-        text: qsTr("Classe initiale : %1").arg(root.client?.lastIpcObject.initialClass ?? "unknown")
+        text: I18n.tr("Classe initiale : %1").arg(root.client?.lastIpcObject.initialClass ?? "unknown")
     }
 
     Detail {
         icon: "account_tree"
-        text: qsTr("ID du processus : %1").arg(String(root.client?.lastIpcObject.pid ?? -1))
+        text: I18n.tr("ID du processus : %1").arg(String(root.client?.lastIpcObject.pid ?? -1))
         color: Colours.palette.m3primary
     }
 
     Detail {
         icon: "picture_in_picture_center"
-        text: qsTr("Flottante : %1").arg(root.client?.lastIpcObject.floating ? "yes" : "no")
+        text: I18n.tr("Flottante : %1").arg(root.client?.lastIpcObject.floating ? "yes" : "no")
         color: Colours.palette.m3secondary
     }
 
     Detail {
         icon: "gradient"
-        text: qsTr("Xwayland : %1").arg(root.client?.lastIpcObject.xwayland ? "yes" : "no")
+        text: I18n.tr("Xwayland : %1").arg(root.client?.lastIpcObject.xwayland ? "yes" : "no")
     }
 
     Detail {
         icon: "keep"
-        text: qsTr("Épinglée : %1").arg(root.client?.lastIpcObject.pinned ? "yes" : "no")
+        text: I18n.tr("Épinglée : %1").arg(root.client?.lastIpcObject.pinned ? "yes" : "no")
         color: Colours.palette.m3secondary
     }
 
@@ -112,8 +112,8 @@ ColumnLayout {
         text: {
             const fs = root.client?.lastIpcObject.fullscreen;
             if (fs)
-                return qsTr("Plein écran : %1").arg(fs == 0 ? "off" : fs == 1 ? "maximised" : "on");
-            return qsTr("Plein écran : inconnu");
+                return I18n.tr("Plein écran : %1").arg(fs == 0 ? "off" : fs == 1 ? "maximised" : "on");
+            return I18n.tr("Plein écran : inconnu");
         }
         color: Colours.palette.m3tertiary
     }

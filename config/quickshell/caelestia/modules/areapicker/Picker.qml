@@ -77,7 +77,7 @@ MouseArea {
         CUtils.saveItem(screencopy, tmpfile, Qt.rect(Math.ceil(rsx), Math.ceil(rsy), Math.floor(sw), Math.floor(sh)), path => {
             if (root.loader.clipboardOnly) {
                 Quickshell.execDetached(["sh", "-c", "wl-copy --type image/png < " + path]);
-                Quickshell.execDetached(["notify-send", "-a", "caelestia-cli", "-i", path, qsTr("Capture d'écran effectuée"), qsTr("Capture d'écran copiée dans le presse-papiers")]);
+                Quickshell.execDetached(["notify-send", "-a", "caelestia-cli", "-i", path, I18n.tr("Capture d'écran effectuée"), I18n.tr("Capture d'écran copiée dans le presse-papiers")]);
             } else {
                 Quickshell.execDetached(["qs", "-c", "caelestia", "ipc", "call", "annotate", "open", path]);
             }

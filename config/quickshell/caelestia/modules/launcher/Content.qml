@@ -58,7 +58,7 @@ Item {
         topPadding: Math.round((Tokens.padding.medium + Tokens.padding.large) / 2)
         bottomPadding: Math.round((Tokens.padding.medium + Tokens.padding.large) / 2)
 
-        placeholderText: qsTr("Tapez « %1 » pour les commandes").arg(GlobalConfig.launcher.actionPrefix)
+        placeholderText: I18n.tr("Tapez « %1 » pour les commandes").arg(GlobalConfig.launcher.actionPrefix)
 
         onAccepted: {
             const currentItem = list.currentList?.currentItem;

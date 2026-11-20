@@ -188,7 +188,7 @@ Item {
             }
 
             StyledText {
-                text: qsTr("Chargement des paroles...")
+                text: I18n.tr("Chargement des paroles...")
                 color: Colours.palette.m3onSurfaceVariant
                 font: Tokens.font.title.medium
             }
@@ -220,7 +220,7 @@ Item {
             }
 
             StyledText {
-                text: qsTr("Aucune parole trouvée")
+                text: I18n.tr("Aucune parole trouvée")
                 color: Colours.palette.m3outline
                 font: Tokens.font.title.medium
             }

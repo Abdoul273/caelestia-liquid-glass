@@ -57,7 +57,7 @@ Item {
                 return Colours.palette.m3onSurface;
             }
 
-            text: root.math.length > 0 ? (Qalculator.result || qsTr("Calcul en cours...")) : qsTr("Entrez un calcul à effectuer")
+            text: root.math.length > 0 ? (Qalculator.result || I18n.tr("Calcul en cours...")) : I18n.tr("Entrez un calcul à effectuer")
             elide: Text.ElideLeft
 
             Layout.fillWidth: true
@@ -92,7 +92,7 @@ Item {
                 anchors.right: icon.left
                 anchors.rightMargin: Tokens.spacing.small
 
-                text: qsTr("Ouvrir dans la calculatrice")
+                text: I18n.tr("Ouvrir dans la calculatrice")
                 color: Colours.palette.m3onTertiary
                 font: Tokens.font.label.medium
 

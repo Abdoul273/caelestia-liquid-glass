@@ -2,6 +2,14 @@
 
 All notable changes to **Caelestia · Liquid Glass** are documented in this file.
 
+## [1.1.0] - 2026-11-20
+
+### Added
+- **Automatic Bilingual UI (English & French)**: new `services/I18n.qml` singleton and `services/I18nEn.js` catalog (~1,238 strings) covering the entire QML shell (Dynamic Island, Control Center, Dock, Mission Control, Spotlight, Lock Screen, Nexus Settings, Weather, and system panels).
+- **Live Language Switcher**: switch between *Automatic (system)*, *Français*, and *English* on the fly in **Settings (`Super + I`) → Language & region** (`~/.config/caelestia/lang.json` or `CAELESTIA_LANG=en|fr`).
+- **Locale-aware Dates**: replaced hardcoded `fr_FR` dates on the Lock Screen and Dynamic Island with `I18n.locale`.
+- **i18n Test Suite**: added `tests/test_i18n.py` enforced by GitHub Actions CI to verify complete FR → EN coverage, placeholder consistency, and clean imports.
+
 ## [1.0.0] - 2026-11-20
 
 First tagged public release of Caelestia · Liquid Glass for Hyprland ≥ 0.56 and `caelestia-shell` 2.3.

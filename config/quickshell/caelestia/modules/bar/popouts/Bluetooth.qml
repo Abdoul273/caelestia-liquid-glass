@@ -21,12 +21,12 @@ ColumnLayout {
     StyledText {
         Layout.topMargin: Tokens.padding.medium
         Layout.rightMargin: Tokens.padding.extraSmall
-        text: qsTr("Bluetooth")
+        text: I18n.tr("Bluetooth")
         font: Tokens.font.body.builders.medium.weight(Font.Medium).build()
     }
 
     Toggle {
-        label: qsTr("Activé")
+        label: I18n.tr("Activé")
         checked: Bluetooth.defaultAdapter?.enabled ?? false // qmllint disable unresolved-type
         toggle.onToggled: {
             const adapter = Bluetooth.defaultAdapter; // qmllint disable unresolved-type
@@ -36,7 +36,7 @@ ColumnLayout {
     }
 
     Toggle {
-        label: qsTr("Recherche...")
+        label: I18n.tr("Recherche...")
         checked: Bluetooth.defaultAdapter?.discovering ?? false // qmllint disable unresolved-type
         toggle.onToggled: {
             const adapter = Bluetooth.defaultAdapter; // qmllint disable unresolved-type
@@ -50,10 +50,10 @@ ColumnLayout {
         Layout.rightMargin: Tokens.padding.extraSmall
         text: {
             const devices = Bluetooth.devices.values; // qmllint disable unresolved-type
-            let available = qsTr("%1 appareil%2 disponible%2").arg(devices.length).arg(devices.length === 1 ? "" : "s");
+            let available = I18n.tr("%1 appareil%2 disponible%2").arg(devices.length).arg(devices.length === 1 ? "" : "s");
             const connected = devices.filter(d => d.connected).length;
             if (connected > 0)
-                available += qsTr(" (%1 connecté)").arg(connected);
+                available += I18n.tr(" (%1 connecté)").arg(connected);
             return available;
         }
         color: Colours.palette.m3onSurfaceVariant
@@ -177,7 +177,7 @@ ColumnLayout {
         inactiveColour: Colours.palette.m3primaryContainer
         inactiveOnColour: Colours.palette.m3onPrimaryContainer
         verticalPadding: Tokens.padding.extraSmall
-        text: qsTr("Ouvrir les paramètres")
+        text: I18n.tr("Ouvrir les paramètres")
         icon: "settings"
 
         onClicked: root.popouts.detachRequested("bluetooth")

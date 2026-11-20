@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import qs.components.misc
+import qs.services
 
 Scope {
     property alias lock: lock
@@ -57,7 +58,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "lock"
-        description: qsTr("Verrouiller la session actuelle")
+        description: I18n.tr("Verrouiller la session actuelle")
         onPressed: lock.locked = true
     }
 
@@ -65,7 +66,7 @@ Scope {
     CustomShortcut {
         // qmllint enable unresolved-type
         name: "unlock"
-        description: qsTr("Déverrouiller la session actuelle")
+        description: I18n.tr("Déverrouiller la session actuelle")
         onPressed: lock.unlock()
     }
 

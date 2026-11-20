@@ -60,7 +60,7 @@ Item {
                     spacing: Tokens.spacing.small
 
                     StyledText {
-                        text: qsTr("Fond d'écran introuvable ?")
+                        text: I18n.tr("Fond d'écran introuvable ?")
                         color: Colours.palette.m3onSurfaceVariant
                         font: Tokens.font.body.builders.large.size(28 * 2).weight(Font.Bold).build()
                     }
@@ -75,8 +75,8 @@ Item {
                         FileDialog {
                             id: dialog
 
-                            title: qsTr("Choisir un fond d'écran")
-                            filterLabel: qsTr("Fichiers image")
+                            title: I18n.tr("Choisir un fond d'écran")
+                            filterLabel: I18n.tr("Fichiers image")
                             filters: Images.validImageExtensions
                             onAccepted: path => Wallpapers.setWallpaper(path)
                         }
@@ -92,7 +92,7 @@ Item {
 
                             anchors.centerIn: parent
 
-                            text: qsTr("Choisir maintenant !")
+                            text: I18n.tr("Choisir maintenant !")
                             color: Colours.palette.m3onPrimary
                             font: Tokens.font.body.large
                         }

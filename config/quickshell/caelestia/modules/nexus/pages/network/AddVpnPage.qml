@@ -73,7 +73,7 @@ PageBase {
         nState.closeSubPage();
     }
 
-    title: editing ? qsTr("Modifier le fournisseur VPN") : qsTr("Ajouter un fournisseur VPN")
+    title: editing ? I18n.tr("Modifier le fournisseur VPN") : I18n.tr("Ajouter un fournisseur VPN")
     isSubPage: true
 
     Component.onCompleted: {
@@ -95,7 +95,7 @@ PageBase {
         StyledText {
             Layout.fillWidth: true
             Layout.leftMargin: Tokens.padding.small
-            text: qsTr("Les noms intégrés (wireguard, warp, tailscale, netbird) préremplissent leurs commandes. Pour les autres, précisez les commandes de connexion/déconnexion.")
+            text: I18n.tr("Les noms intégrés (wireguard, warp, tailscale, netbird) préremplissent leurs commandes. Pour les autres, précisez les commandes de connexion/déconnexion.")
             color: Colours.palette.m3onSurfaceVariant
             font: Tokens.font.body.small
             wrapMode: Text.WordWrap
@@ -106,10 +106,10 @@ PageBase {
 
             Layout.fillWidth: true
             Layout.topMargin: Tokens.spacing.small
-            placeholderText: qsTr("Nom du fournisseur")
+            placeholderText: I18n.tr("Nom du fournisseur")
             leadingIcon: "vpn_key"
-            supportingText: qsTr("Identifiant intégré ou nom personnalisé")
-            errorText: qsTr("Le nom du fournisseur est obligatoire")
+            supportingText: I18n.tr("Identifiant intégré ou nom personnalisé")
+            errorText: I18n.tr("Le nom du fournisseur est obligatoire")
             inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
 
             onAccepted: displayField.forceActiveFocus()
@@ -119,8 +119,8 @@ PageBase {
             id: displayField
 
             Layout.fillWidth: true
-            placeholderText: qsTr("Nom affiché")
-            supportingText: qsTr("Affiché dans la liste")
+            placeholderText: I18n.tr("Nom affiché")
+            supportingText: I18n.tr("Affiché dans la liste")
             leadingIcon: "label"
             inputMethodHints: Qt.ImhNoPredictiveText
 
@@ -131,25 +131,25 @@ PageBase {
             id: interfaceField
 
             Layout.fillWidth: true
-            placeholderText: qsTr("Interface")
+            placeholderText: I18n.tr("Interface")
             leadingIcon: "lan"
-            supportingText: qsTr("Interface réseau (pour WireGuard / vérifications)")
+            supportingText: I18n.tr("Interface réseau (pour WireGuard / vérifications)")
             inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
 
             onAccepted: connectField.forceActiveFocus()
         }
 
         SectionHeader {
-            text: qsTr("Commandes personnalisées (optionnel)")
+            text: I18n.tr("Commandes personnalisées (optionnel)")
         }
 
         StyledTextField {
             id: connectField
 
             Layout.fillWidth: true
-            placeholderText: qsTr("Commande de connexion")
+            placeholderText: I18n.tr("Commande de connexion")
             leadingIcon: "play_arrow"
-            supportingText: qsTr("Laisser vide pour utiliser la valeur par défaut")
+            supportingText: I18n.tr("Laisser vide pour utiliser la valeur par défaut")
             inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
 
             onAccepted: disconnectField.forceActiveFocus()
@@ -159,9 +159,9 @@ PageBase {
             id: disconnectField
 
             Layout.fillWidth: true
-            placeholderText: qsTr("Commande de déconnexion")
+            placeholderText: I18n.tr("Commande de déconnexion")
             leadingIcon: "stop"
-            supportingText: qsTr("Laisser vide pour utiliser la valeur par défaut")
+            supportingText: I18n.tr("Laisser vide pour utiliser la valeur par défaut")
             inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
 
             onAccepted: root.submit()
@@ -182,7 +182,7 @@ PageBase {
                 iconLabel.fill: 1
                 iconLabel.grade: 25
                 icon: "delete_forever"
-                text: qsTr("Supprimer")
+                text: I18n.tr("Supprimer")
                 onClicked: {
                     if (root.existing.providerId === VPN.selectedProvider && VPN.connected)
                         VPN.disconnect();
@@ -204,7 +204,7 @@ PageBase {
                     horizontalPadding: Tokens.padding.extraLarge
                     verticalPadding: Tokens.padding.medium
                     type: TextButton.Tonal
-                    text: qsTr("Annuler")
+                    text: I18n.tr("Annuler")
                     onClicked: root.nState.closeSubPage()
                 }
 
@@ -213,7 +213,7 @@ PageBase {
                     shapeMorph: true
                     horizontalPadding: Tokens.padding.extraLarge
                     verticalPadding: Tokens.padding.medium
-                    text: root.editing ? qsTr("Enregistrer") : qsTr("Ajouter")
+                    text: root.editing ? I18n.tr("Enregistrer") : I18n.tr("Ajouter")
                     disabled: !nameField.text.trim()
                     onClicked: root.submit()
                 }

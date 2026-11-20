@@ -22,7 +22,7 @@ StyledRect {
         spacing: Tokens.spacing.small
 
         StyledText {
-            text: qsTr("Filtre :")
+            text: I18n.tr("Filtre :")
         }
 
         StyledRect {
@@ -59,7 +59,7 @@ StyledRect {
                 anchors.centerIn: parent
                 anchors.margins: Tokens.padding.medium
 
-                text: qsTr("Sélectionner")
+                text: I18n.tr("Sélectionner")
                 color: root.dialog.selectionValid ? Colours.palette.m3onSurface : Colours.palette.m3outline
             }
         }
@@ -83,7 +83,7 @@ StyledRect {
                 anchors.centerIn: parent
                 anchors.margins: Tokens.padding.medium
 
-                text: qsTr("Annuler")
+                text: I18n.tr("Annuler")
             }
         }
     }

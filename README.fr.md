@@ -71,7 +71,7 @@ Verre translucide partout, Dynamic Island (9 pages + agents IA), Centre de contr
 
 ### 🎧 Petits plus
 - **Bascule audio Bluetooth automatique** : sortie et entrée basculent dès la connexion des écouteurs.
-- **Interface entièrement en français** (contributions i18n / anglais bienvenues — voir [CONTRIBUTING.md](CONTRIBUTING.md)).
+- **Interface bilingue automatique (FR / EN)** : détecte la langue du système (`LANG=fr_*` → français, anglais sinon), commutable en direct dans **Paramètres (`Super + I`) → Langue et région** (`~/.config/caelestia/lang.json`).
 - **Sons originaux** libres de droits pour les notifications, minuteurs, alarmes et branchements.
 
 ---

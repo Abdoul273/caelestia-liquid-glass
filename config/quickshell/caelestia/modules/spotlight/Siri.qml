@@ -159,16 +159,16 @@ Item {
 
     function statusText(): string {
         if (phase === "erreur")
-            return qsTr("Indisponible : %1").arg(detail || qsTr("erreur inconnue"));
+            return I18n.tr("Indisponible : %1").arg(detail || I18n.tr("erreur inconnue"));
         if (toolLabel && (phase === "outil" || phase === "reflexion"))
             return toolLabel;
         if (phase === "connexion")
-            return qsTr("Un instant…");
+            return I18n.tr("Un instant…");
         if (phase === "reflexion")
             return "…";
         if (micOn)
-            return qsTr("Je vous écoute…");
-        return qsTr("Que puis-je faire pour vous ?");
+            return I18n.tr("Je vous écoute…");
+        return I18n.tr("Que puis-je faire pour vous ?");
     }
 
     visible: morph > 0.001
@@ -863,7 +863,7 @@ Item {
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             visible: !typed.text
-                            text: root.micOn ? qsTr("Parlez… (Tab pour couper le micro)") : qsTr("Écrire à l'assistant…  (Tab pour parler)")
+                            text: root.micOn ? I18n.tr("Parlez… (Tab pour couper le micro)") : I18n.tr("Écrire à l'assistant…  (Tab pour parler)")
                             color: Qt.alpha(root.fg, 0.38)
                             font: typed.font
                         }

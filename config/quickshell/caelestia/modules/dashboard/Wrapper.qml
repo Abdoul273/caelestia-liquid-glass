@@ -7,20 +7,21 @@ import Caelestia.Config
 import qs.components
 import qs.components.filedialog
 import qs.utils
+import qs.services
 
 Item {
     id: root
 
     required property ScreenState screenState
     readonly property FileDialog facePicker: FileDialog {
-        title: qsTr("Choisir une photo de profil")
-        filterLabel: qsTr("Fichiers image")
+        title: I18n.tr("Choisir une photo de profil")
+        filterLabel: I18n.tr("Fichiers image")
         filters: Images.validImageExtensions
         onAccepted: path => {
             if (CUtils.copyFile(Qt.resolvedUrl(path), Qt.resolvedUrl(`${Paths.home}/.face`)))
-                Quickshell.execDetached(["notify-send", "-a", "caelestia-shell", "-u", "low", "-h", `STRING:image-path:${path}`, qsTr("Photo de profil modifiée"), qsTr("Photo de profil modifiée pour %1").arg(Paths.shortenHome(path))]);
+                Quickshell.execDetached(["notify-send", "-a", "caelestia-shell", "-u", "low", "-h", `STRING:image-path:${path}`, I18n.tr("Photo de profil modifiée"), I18n.tr("Photo de profil modifiée pour %1").arg(Paths.shortenHome(path))]);
             else
-                Quickshell.execDetached(["notify-send", "-a", "caelestia-shell", "-u", "critical", qsTr("Impossible de changer la photo de profil"), qsTr("Échec du changement de photo de profil pour %1").arg(Paths.shortenHome(path))]);
+                Quickshell.execDetached(["notify-send", "-a", "caelestia-shell", "-u", "critical", I18n.tr("Impossible de changer la photo de profil"), I18n.tr("Échec du changement de photo de profil pour %1").arg(Paths.shortenHome(path))]);
         }
     }
 

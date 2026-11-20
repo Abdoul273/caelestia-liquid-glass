@@ -221,7 +221,7 @@ Item {
                             isRound: true
                             horizontalPadding: Tokens.padding.largeIncreased
                             verticalPadding: Tokens.padding.medium
-                            text: qsTr("Annuler")
+                            text: I18n.tr("Annuler")
                             onClicked: {
                                 root.cancelled();
                                 root.open = false;

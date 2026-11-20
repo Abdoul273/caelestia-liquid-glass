@@ -684,16 +684,16 @@ Singleton {
         switch ((keyMgmt || "").trim().toLowerCase()) {
         case "":
         case "none":
-            return qsTr("Ouvrir");
+            return I18n.tr("Ouvrir");
         case "sae":
             return "WPA3";
         case "wpa-psk":
             return "WPA2";
         case "wpa-eap":
         case "wpa-eap-suite-b-192":
-            return qsTr("Entreprise");
+            return I18n.tr("Entreprise");
         case "owe":
-            return qsTr("Enhanced Open");
+            return I18n.tr("Enhanced Open");
         case "ieee8021x":
             return "802.1X";
         default:

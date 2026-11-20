@@ -17,7 +17,7 @@ PageBase {
     property string quickshellVersion
     property string cliVersion
 
-    title: qsTr("À propos")
+    title: I18n.tr("À propos")
 
     ColumnLayout {
         anchors.horizontalCenter: parent.horizontalCenter
@@ -85,72 +85,72 @@ PageBase {
 
         // System
         SectionHeader {
-            text: qsTr("Système")
+            text: I18n.tr("Système")
         }
 
         InfoRow {
             first: true
-            label: qsTr("Nom d'hôte")
+            label: I18n.tr("Nom d'hôte")
             value: SysInfo.hostname
         }
 
         InfoRow {
-            label: qsTr("Appareil")
+            label: I18n.tr("Appareil")
             value: SysInfo.device
         }
 
         InfoRow {
-            label: qsTr("Distribution")
+            label: I18n.tr("Distribution")
             value: SysInfo.osPrettyName || SysInfo.osName
         }
 
         InfoRow {
-            label: qsTr("Noyau")
+            label: I18n.tr("Noyau")
             value: SysInfo.kernel
         }
 
         InfoRow {
             last: true
-            label: qsTr("Firmware")
+            label: I18n.tr("Firmware")
             value: SysInfo.firmware
         }
 
         // Software
         SectionHeader {
-            text: qsTr("Logiciel")
+            text: I18n.tr("Logiciel")
         }
 
         InfoRow {
             first: true
-            label: qsTr("Shell")
+            label: I18n.tr("Shell")
             value: CUtils.version || "…"
         }
 
         InfoRow {
-            label: qsTr("CLI")
+            label: I18n.tr("CLI")
             value: root.cliVersion || "…"
         }
 
         InfoRow {
-            label: qsTr("Quickshell")
+            label: I18n.tr("Quickshell")
             value: root.quickshellVersion || "…"
         }
 
         InfoRow {
             last: true
-            label: qsTr("Qt")
+            label: I18n.tr("Qt")
             value: CUtils.qtVersion || "…"
         }
 
         // Plugins
         SectionHeader {
-            text: qsTr("Extensions")
+            text: I18n.tr("Extensions")
         }
 
         InfoRow {
             first: true
             last: true
-            label: qsTr("Extensions chargées")
+            label: I18n.tr("Extensions chargées")
             value: root.pluginCount.toString()
         }
     }

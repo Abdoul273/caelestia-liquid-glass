@@ -148,21 +148,21 @@ Item {
                 opacity: 0
 
                 StyledText {
-                    text: qsTr("Source : %1").arg(LyricsBackend.toString(Lyrics.backend))
+                    text: I18n.tr("Source : %1").arg(LyricsBackend.toString(Lyrics.backend))
                     color: Colours.palette.m3onSurfaceVariant
                     animate: true
                 }
 
                 StyledText {
                     Layout.maximumWidth: Tokens.sizes.dashboard.mediaTabWidth / 2
-                    text: qsTr("Piste sélectionnée : %1 | %2 | %3").arg(Lyrics.selectedCandidate.title).arg(Lyrics.selectedCandidate.artist).arg(Lyrics.selectedCandidate.album)
+                    text: I18n.tr("Piste sélectionnée : %1 | %2 | %3").arg(Lyrics.selectedCandidate.title).arg(Lyrics.selectedCandidate.artist).arg(Lyrics.selectedCandidate.album)
                     color: Colours.palette.m3onSurfaceVariant
                     wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                     animate: true
                 }
 
                 StyledText {
-                    text: qsTr("Décalage : %1 ms").arg(Lyrics.offset)
+                    text: I18n.tr("Décalage : %1 ms").arg(Lyrics.offset)
                     color: Colours.palette.m3onSurfaceVariant
                     animate: true
                 }
@@ -178,7 +178,7 @@ Item {
                 StyledText {
                     id: placeholderText
 
-                    text: Lyrics.loading ? qsTr("Chargement...") : qsTr("Aucune parole trouvée")
+                    text: Lyrics.loading ? I18n.tr("Chargement...") : I18n.tr("Aucune parole trouvée")
                     color: Colours.palette.m3onSurfaceVariant
                     font: Tokens.font.body.medium
                     animate: true

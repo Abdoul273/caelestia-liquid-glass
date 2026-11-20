@@ -46,14 +46,14 @@ Singleton {
 
     readonly property string statusText: {
         if (!present)
-            return qsTr("Sur secteur");
+            return I18n.tr("Sur secteur");
         if (full)
-            return qsTr("Chargée");
+            return I18n.tr("Chargée");
         if (charging)
-            return timeToFull > 0 ? qsTr("En charge · pleine dans %1").arg(fmtDuration(timeToFull)) : qsTr("En charge");
+            return timeToFull > 0 ? I18n.tr("En charge · pleine dans %1").arg(fmtDuration(timeToFull)) : I18n.tr("En charge");
         if (!UPower.onBattery)
-            return qsTr("Branchée, pas en charge");
-        return timeToEmpty > 0 ? qsTr("Environ %1 restantes").arg(fmtDuration(timeToEmpty)) : qsTr("Sur batterie");
+            return I18n.tr("Branchée, pas en charge");
+        return timeToEmpty > 0 ? I18n.tr("Environ %1 restantes").arg(fmtDuration(timeToEmpty)) : I18n.tr("Sur batterie");
     }
 
     function save(): void {
