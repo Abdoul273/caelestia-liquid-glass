@@ -1,0 +1,40 @@
+name: Bug Report
+description: Report an installation, shader, shell, or tool issue
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Clearly describe what happened and what you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      placeholder: |
+        1. Run `./install`
+        2. Press `Super + A`
+        3. Observe...
+    validations:
+      required: true
+  - type: input
+    id: distro
+    attributes:
+      label: Distro & Hyprland Version
+      placeholder: "e.g., EndeavourOS / Hyprland 0.56.0 / caelestia-shell 2.3"
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU / Monitor Setup
+      placeholder: "e.g., Intel UHD / AMD Radeon / NVIDIA + single or dual monitor"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Screenshots
+      description: Paste relevant output from `qs -c caelestia` or `journalctl --user`, or attach screenshots.
+      render: shell

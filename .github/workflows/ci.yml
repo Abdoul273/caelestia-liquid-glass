@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check shell script syntax
+        run: |
+          bash -n install uninstall \
+            config/sddm/install-login-screen \
+            config/plymouth/install-boot-splash \
+            tools/synchroniser \
+            bin/bt-audio-autoswitch \
+            bin/caelestia-quit-app
+          sh -n bin/caelestia-animwall bin/caelestia-logout bin/swappy
+
+      - name: Compile-check all Python scripts
+        run: |
+          python3 - << 'EOF'
+          import pathlib, py_compile
+          checked = 0
+          for folder in ("bin", "tools"):
+              for path in sorted(pathlib.Path(folder).iterdir()):
+                  if path.is_file() and path.read_bytes().startswith(b"#!/usr/bin/env python3"):
+                      py_compile.compile(str(path), doraise=True)
+                      checked += 1
+          print(f"Verified {checked} Python scripts.")
+          EOF
+
+      - name: Verify no hardcoded local home paths
+        run: |
+          if git grep -nE '/home/[a-zA-Z0-9._-]+/' -- ':!*.md' ':!.github/*'; then
+            echo "Found hardcoded /home/<user>/ path. Use @HOME@ or \$HOME instead."
+            exit 1
+          fi
+
+      - name: Install test dependencies and run pytest
+        run: |
+          python3 -m pip install --upgrade pip pytest
+          pytest -q tests/
