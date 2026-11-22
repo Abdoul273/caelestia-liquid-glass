@@ -521,6 +521,65 @@ Item {
     // ── Bluetooth connecté (icône verte au repos) ──
     readonly property var btConnected: Bluetooth.devices.values.filter(d => d?.connected)
     readonly property bool btAudio: btConnected.some(d => /audio|head|ear|phone/i.test(d?.icon ?? ""))
+    readonly property bool btEarbuds: btConnected.some(d => /pod|bud|tws|\bbx|cetw/i.test(d?.name ?? ""))
+
+    // ── Capsule au repos : teinte contextuelle, bureaux occupés, météo diurne/nocturne, horloge ──
+    readonly property var wsOccupied: {
+        const map = {};
+        map[wsId] = true;
+        for (const t of Hypr.toplevels.values) {
+            const id = t.workspace?.id ?? 0;
+            if (id > 0 && t.workspace?.monitor?.name === hyprMon?.name)
+                map[id] = true;
+        }
+        return map;
+    }
+    readonly property int idleUnread: Notifs.notClosed.length
+    readonly property string idleHourStr: Time.format(GlobalConfig.services.useTwelveHourClock ? "hh" : "HH")
+    readonly property string idleMinStr: Time.format("mm")
+    readonly property color idleAccent: {
+        if (battCharging)
+            return green;
+        if (showBattery && battery < 0.2)
+            return red;
+        if (FocusMode.active)
+            return FocusMode.info.tint;
+        if (Notifs.dnd)
+            return "#bf5af2";
+        if (Agents.busy)
+            return Agents.kindColour(Agents.lead?.kind ?? "");
+        return accent;
+    }
+    readonly property bool showIdleWeather: Island.weather && !!Weather.cc
+    readonly property string idleWeatherIcon: {
+        if (!Weather.cc)
+            return "";
+        const code = String(Weather.cc.weatherCode ?? "");
+        const isDay = Weather.cc.isDay !== 0;
+        if ((code === "0" || code === "1") && !isDay)
+            return "bedtime";
+        if (code === "2" && !isDay)
+            return "cloud";
+        return Weather.icon;
+    }
+    readonly property color idleWeatherTint: {
+        if (!Weather.cc)
+            return fgDim;
+        const code = Number(Weather.cc.weatherCode ?? -1);
+        const isDay = Weather.cc.isDay !== 0;
+        if (code === 0 || code === 1)
+            return isDay ? (Colours.light ? "#d97706" : "#fbbf24") : (Colours.light ? "#4f46e5" : "#a5b4fc");
+        if (code === 2)
+            return isDay ? (Colours.light ? "#d97706" : "#fcd34d") : (Colours.light ? "#3b82f6" : "#93c5fd");
+        if (code >= 95)
+            return Colours.light ? "#7c3aed" : "#c084fc";
+        if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82))
+            return Colours.light ? "#0284c7" : "#38bdf8";
+        if (code >= 71 && code <= 86)
+            return Colours.light ? "#0ea5e9" : "#bae6fd";
+        return fgDim;
+    }
+    readonly property string idleTempShort: Weather.cc ? Weather.temp.replace(/[CF]$/, "") : ""
 
     // ── Téléchargements et copies de fichiers (script caelestia-transfers) ──
     property list<var> transfers: []
@@ -1522,9 +1581,8 @@ Item {
         case "media":
             return Qt.size((hasLyrics ? 400 : 290) + actsInset, 40);
         default:
-            // Au repos : juste l'heure (ou rien si Island.clock est coupé)
-            // Heure au centre exact : les deux côtés prennent la largeur du plus large
-            return Island.clock ? Qt.size(Math.max(250, idleTime.implicitWidth + 2 * (Math.max(idleDate.implicitWidth, idleIcons.implicitWidth) + 20 + 18)), 40) : Qt.size(150, 0);
+            // Au repos : capsule équilibrée (zéro vide mort, espacement optique égal des deux côtés de l'heure)
+            return Island.clock ? Qt.size(Math.max(264, 18 + idleDate.implicitWidth + 24 + idleTime.implicitWidth + 24 + idleIcons.implicitWidth + 18), 40) : Qt.size(150, 0);
         }
     }
 
@@ -2326,6 +2384,8 @@ Item {
 
     // ── Interactions ──
     HoverHandler {
+        id: islandHover
+
         onHoveredChanged: root.hovered = hovered
     }
 
@@ -2689,88 +2749,281 @@ Item {
         height: root.target.height
         transformOrigin: Item.Top
 
-        // ── repos : cadran horloger de précision (date éditoriale à gauche, heure optique au centre, télémétrie à droite) ──
+        // ── repos : cadran Liquid Glass horloger (bureaux + date à gauche, heure roulante au centre, météo + télémétrie + batterie à droite) ──
         Face {
             id: idleFace
 
+            readonly property real hoverX: Math.max(0, Math.min(width, islandHover.point.position.x - (root.width - width) / 2))
+            readonly property bool mediaMiniOn: root.hasMedia && root.playing && root.pageName !== "player"
+            readonly property bool agentsMiniOn: Agents.busy && root.pageName !== "agents"
+            readonly property bool focusMiniOn: FocusMode.active || Notifs.dnd
+            readonly property bool btMiniOn: root.btConnected.length > 0
+            readonly property bool muteMiniOn: Audio.muted
+            readonly property bool vpnMiniOn: root.vpnOn
+
             active: root.mode === "idle"
 
-            // Reflet spéculaire optique sur la lèvre inférieure de la capsule au repos
+            // Halo céleste discret derrière l'horloge, teinté selon l'humeur du système (charge, focus, agents, thème)
+            Rectangle {
+                x: Math.round(idleTime.x + idleTime.width / 2 - width / 2)
+                anchors.verticalCenter: parent.verticalCenter
+                width: Math.min(Math.max(96, parent.width - 48), 152)
+                height: 30
+                radius: 15
+                opacity: root.hovered ? 1 : (Colours.light ? 0.6 : 0.85)
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.25; color: Qt.alpha(root.idleAccent, Colours.light ? 0.06 : 0.08) }
+                    GradientStop { position: 0.5; color: Qt.alpha(root.idleAccent, Colours.light ? 0.13 : 0.17) }
+                    GradientStop { position: 0.75; color: Qt.alpha(root.idleAccent, Colours.light ? 0.06 : 0.08) }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+
+                Behavior on opacity {
+                    NumberAnimation { duration: 240 }
+                }
+            }
+
+            // Voile spéculaire qui suit le curseur au survol (0 % CPU au repos)
+            Rectangle {
+                id: idleHoverSheen
+
+                x: idleFace.hoverX - width / 2
+                anchors.verticalCenter: parent.verticalCenter
+                width: 112
+                height: 36
+                radius: 18
+                opacity: root.hovered ? 1 : 0
+                visible: opacity > 0.01
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.3; color: Qt.alpha("#ffffff", Colours.light ? 0.08 : 0.06) }
+                    GradientStop { position: 0.5; color: Qt.alpha(root.idleAccent, Colours.light ? 0.12 : 0.14) }
+                    GradientStop { position: 0.7; color: Qt.alpha("#ffffff", Colours.light ? 0.08 : 0.06) }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+
+                Behavior on x {
+                    NumberAnimation { duration: 110; easing.type: Easing.OutCubic }
+                }
+                Behavior on opacity {
+                    NumberAnimation { duration: 200 }
+                }
+            }
+
+            // Caustique optique sur la lèvre inférieure de la capsule (teintée par l'état actif)
             Rectangle {
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: 1.5
                 anchors.horizontalCenter: parent.horizontalCenter
-                width: Math.max(80, parent.width - 42)
+                width: Math.max(80, parent.width - 52)
                 height: 1
-                opacity: root.hovered ? 0.34 : 0.15
+                opacity: root.hovered ? 0.44 : 0.22
                 gradient: Gradient {
                     orientation: Gradient.Horizontal
                     GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 0.25; color: "#ffffff" }
-                    GradientStop { position: 0.5; color: Qt.alpha(root.accent, 0.85) }
-                    GradientStop { position: 0.75; color: "#ffffff" }
+                    GradientStop { position: 0.26; color: Qt.alpha("#ffffff", Colours.light ? 0.45 : 0.6) }
+                    GradientStop { position: 0.5; color: Qt.alpha(root.idleAccent, 0.92) }
+                    GradientStop { position: 0.74; color: Qt.alpha("#ffffff", Colours.light ? 0.45 : 0.6) }
                     GradientStop { position: 1.0; color: "transparent" }
                 }
+
                 Behavior on opacity {
                     NumberAnimation { duration: 220 }
                 }
             }
 
-            // Aile gauche : Jour en capitales suivies + quantième dans un puits de verre + témoin de notifications
+            // Point lumineux de caustique qui glisse sur le rebord sous le curseur
+            Rectangle {
+                x: Math.max(24, Math.min(idleFace.width - width - 24, idleFace.hoverX - width / 2))
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 1.5
+                width: 68
+                height: 1.5
+                radius: 0.75
+                opacity: root.hovered ? 0.72 : 0
+                visible: opacity > 0.01
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.5; color: "#ffffff" }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+
+                Behavior on x {
+                    NumberAnimation { duration: 95; easing.type: Easing.OutCubic }
+                }
+                Behavior on opacity {
+                    NumberAnimation { duration: 180 }
+                }
+            }
+
+            // ── Aile gauche : Piste de bureaux vitrée · Date éditoriale · Pastille notifications non lues ──
             Row {
                 id: idleDate
 
                 anchors.left: parent.left
-                anchors.leftMargin: 16
+                anchors.leftMargin: 18
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 6
+                spacing: 0
 
-                StyledText {
+                // Indicateur de bureaux cliquable dans une micro-piste vitrée (perles jusqu'à 5 bureaux, numéro au-delà)
+                Item {
+                    id: idleWsWrap
+
+                    readonly property bool compactNum: root.wsLast > 5 || root.wsId > 5
+
                     anchors.verticalCenter: parent.verticalCenter
-                    text: {
-                        const s = I18n.locale.toString(Time.date, "ddd").replace(".", "");
-                        return s.toUpperCase();
+                    visible: Island.workspaces
+                    width: visible ? wsTrack.implicitWidth + 8 : 0
+                    height: 20
+
+                    Rectangle {
+                        id: wsTrack
+
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        implicitWidth: idleWsWrap.compactNum ? Math.max(20, wsNumTxt.implicitWidth + 10) : wsBeadsRow.implicitWidth + 10
+                        width: implicitWidth
+                        height: 16
+                        radius: 8
+                        color: Qt.alpha(root.fg, root.hovered ? 0.1 : 0.065)
+                        border.width: 0.5
+                        border.color: Qt.alpha(root.fg, root.hovered ? 0.2 : 0.14)
+
+                        Behavior on color { ColorAnimation { duration: 200 } }
+                        Behavior on border.color { ColorAnimation { duration: 200 } }
+
+                        // Reflet spéculaire supérieur sur la micro-piste
+                        Rectangle {
+                            anchors.top: parent.top
+                            anchors.topMargin: 1
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: parent.width * 0.55
+                            height: 1
+                            radius: 0.5
+                            color: "#ffffff"
+                            opacity: Colours.light ? 0.35 : 0.2
+                        }
+
+                        Row {
+                            id: wsBeadsRow
+
+                            anchors.centerIn: parent
+                            visible: !idleWsWrap.compactNum
+                            spacing: 3.5
+
+                            Repeater {
+                                model: idleWsWrap.compactNum ? 0 : Math.min(root.wsLast, 5)
+
+                                Item {
+                                    id: wsBead
+
+                                    required property int index
+                                    readonly property int wsNum: index + 1
+                                    readonly property bool isCurrent: wsNum === root.wsId
+                                    readonly property bool isOccupied: !!root.wsOccupied[wsNum]
+
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: isCurrent ? 13 : (isOccupied ? 4.5 : 3.5)
+                                    height: 16
+
+                                    Behavior on width {
+                                        NumberAnimation { duration: 280; easing.type: Easing.OutCubic }
+                                    }
+
+                                    // Halo lumineux sous la pilule du bureau actif
+                                    Rectangle {
+                                        anchors.centerIn: parent
+                                        width: parent.width + 5
+                                        height: 9
+                                        radius: 4.5
+                                        color: root.idleAccent
+                                        opacity: wsBead.isCurrent ? (root.hovered ? 0.34 : 0.2) : 0
+                                        visible: opacity > 0.01
+
+                                        Behavior on opacity { NumberAnimation { duration: 200 } }
+                                        Behavior on color { ColorAnimation { duration: 420 } }
+                                    }
+
+                                    Rectangle {
+                                        anchors.centerIn: parent
+                                        width: parent.width
+                                        height: wsBead.isCurrent ? 4.5 : (wsBead.isOccupied ? 4.5 : 3.5)
+                                        radius: height / 2
+                                        color: wsBead.isCurrent ? root.idleAccent : Qt.alpha(root.fg, wsBead.isOccupied ? 0.58 : 0.24)
+
+                                        Behavior on color { ColorAnimation { duration: 240 } }
+                                        Behavior on height { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        anchors.margins: -2
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            if (wsBead.wsNum !== root.wsId)
+                                                Hypr.dispatch(Hypr.usingLua ? `hl.dsp.focus({ workspace = ${wsBead.wsNum} })` : `workspace ${wsBead.wsNum}`);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Repli compact au-delà de 5 bureaux
+                        StyledText {
+                            id: wsNumTxt
+
+                            anchors.centerIn: parent
+                            visible: idleWsWrap.compactNum
+                            text: `${root.wsId}`
+                            color: root.idleAccent
+                            font.pointSize: 7.8
+                            font.weight: Font.Bold
+                            font.features: { "tnum": 1 }
+                        }
                     }
-                    color: root.fgDim
-                    font.pointSize: 8.8
-                    font.weight: Font.DemiBold
-                    font.letterSpacing: 0.7
                 }
 
-                Rectangle {
+                // Date éditoriale épurée (sans cadre lourd) : jour en petites capitales + quantième net
+                Row {
                     anchors.verticalCenter: parent.verticalCenter
-                    width: Math.max(20, dayNumText.implicitWidth + 9)
-                    height: 19
-                    radius: 6
-                    color: Qt.alpha(root.fg, root.hovered ? 0.11 : 0.07)
-                    border.width: 0.5
-                    border.color: Qt.alpha(root.fg, 0.16)
+                    spacing: 4.5
 
-                    Behavior on color {
-                        ColorAnimation { duration: 200 }
+                    StyledText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: {
+                            const s = I18n.locale.toString(Time.date, "ddd").replace(".", "");
+                            return s.toUpperCase();
+                        }
+                        color: root.fgDim
+                        font.pointSize: 8.4
+                        font.weight: Font.DemiBold
+                        font.letterSpacing: 0.65
                     }
 
                     StyledText {
                         id: dayNumText
 
-                        anchors.centerIn: parent
+                        anchors.verticalCenter: parent.verticalCenter
                         text: I18n.locale.toString(Time.date, "d")
                         color: root.fg
-                        font.pointSize: 9.2
+                        font.pointSize: 9.5
                         font.weight: Font.Bold
-                        font.features: {
-                            "tnum": 1
-                        }
+                        font.features: { "tnum": 1 }
                     }
                 }
 
-                // Témoin discret de notifications en attente dans l'île
+                // Pastille concentrique des notifications non lues (Notifs.notClosed uniquement, zéro saut d'espacement)
                 Item {
                     anchors.verticalCenter: parent.verticalCenter
-                    width: Notifs.list.length > 0 ? (Notifs.list.length > 1 ? notifBadgeRow.implicitWidth + 9 : 7) : 0
-                    height: 16
-                    opacity: Notifs.list.length > 0 ? 1 : 0
+                    width: root.idleUnread > 0 ? notifPill.implicitWidth + 7 : 0
+                    height: 20
+                    opacity: root.idleUnread > 0 ? 1 : 0
                     visible: opacity > 0.01
+                    clip: true
 
                     Behavior on width {
                         NumberAnimation { duration: 280; easing.type: Easing.OutCubic }
@@ -2780,194 +3033,229 @@ Item {
                     }
 
                     Rectangle {
-                        anchors.centerIn: parent
-                        width: parent.width
-                        height: Notifs.list.length > 1 ? 15 : 6
-                        radius: height / 2
-                        color: Notifs.list.length > 1 ? Qt.alpha(root.accent, 0.18) : root.accent
-                        border.width: Notifs.list.length > 1 ? 0.5 : 0
-                        border.color: Qt.alpha(root.accent, 0.45)
+                        id: notifPill
+
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        implicitWidth: Math.max(20, notifBadgeRow.implicitWidth + 10)
+                        width: implicitWidth
+                        height: 18
+                        radius: 9
+                        scale: root.idleUnread > 0 ? 1 : 0.72
+                        color: Qt.alpha(root.accent, Colours.light ? 0.16 : 0.15)
+                        border.width: 0.5
+                        border.color: Qt.alpha(root.accent, Colours.light ? 0.36 : 0.38)
+
+                        Behavior on scale {
+                            NumberAnimation { duration: 280; easing.type: Easing.OutBack }
+                        }
+
+                        // Micro reflet supérieur sur la pastille
+                        Rectangle {
+                            anchors.top: parent.top
+                            anchors.topMargin: 1
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: parent.width * 0.5
+                            height: 1
+                            radius: 0.5
+                            color: "#ffffff"
+                            opacity: Colours.light ? 0.35 : 0.22
+                        }
 
                         Row {
                             id: notifBadgeRow
 
                             anchors.centerIn: parent
-                            visible: Notifs.list.length > 1
-                            spacing: 3
+                            spacing: 2.5
 
-                            Rectangle {
+                            MaterialIcon {
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: 4.5
-                                height: 4.5
-                                radius: 2.25
+                                text: "notifications"
                                 color: root.accent
+                                fontStyle: Tokens.font.icon.size(9.5).build()
+                                fill: 1
                             }
                             StyledText {
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: Notifs.list.length
+                                text: `${root.idleUnread}`
                                 color: root.fg
                                 font.pointSize: 7.5
                                 font.weight: Font.Bold
-                                font.features: {
-                                    "tnum": 1
+                                font.features: { "tnum": 1 }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Filet optique gauche effilé (toujours centré au pixel près entre aile gauche et horloge)
+            Rectangle {
+                visible: idleDate.implicitWidth > 2
+                x: Math.round((18 + idleDate.implicitWidth + idleTime.x) / 2)
+                anchors.verticalCenter: parent.verticalCenter
+                width: 1
+                height: 15
+                radius: 0.5
+                opacity: root.hovered ? 0.95 : 0.65
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.5; color: Qt.alpha(root.fg, 0.28) }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+
+                Behavior on opacity {
+                    NumberAnimation { duration: 200 }
+                }
+            }
+
+            // ── Centre : Horloge horlogère roulante (chiffres individuels + deux rubis optiques, 0 % CPU entre les minutes) ──
+            Row {
+                id: idleTime
+
+                readonly property real leftBound: 18 + idleDate.implicitWidth
+                readonly property real rightBound: idleFace.width - 18 - idleIcons.implicitWidth
+
+                x: Math.round((leftBound + rightBound - width) / 2)
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenterOffset: 0.5
+                spacing: 0
+
+                // Heures (2 chiffres à roulement indépendant)
+                Row {
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: -0.3
+
+                    ClockDigit { digit: root.idleHourStr.charAt(0) || "0" }
+                    ClockDigit { digit: root.idleHourStr.charAt(1) || "0" }
+                }
+
+                // Séparateur horloger : deux rubis optiques centrés + micro-pulsation unique à chaque minute
+                Item {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 10
+                    height: 18
+
+                    Column {
+                        id: colonSep
+
+                        anchors.centerIn: parent
+                        spacing: 3.6
+                        scale: root.hovered ? 1.12 : 1
+
+                        Behavior on scale {
+                            NumberAnimation { duration: 200; easing.type: Easing.OutBack }
+                        }
+
+                        SequentialAnimation {
+                            id: colonTick
+
+                            NumberAnimation {
+                                target: colonSep
+                                property: "scale"
+                                to: 1.28
+                                duration: 140
+                                easing.type: Easing.OutCubic
+                            }
+                            NumberAnimation {
+                                target: colonSep
+                                property: "scale"
+                                to: 1.0
+                                duration: 240
+                                easing.type: Easing.OutBack
+                            }
+                        }
+
+                        Connections {
+                            target: Time
+
+                            function onMinutesChanged(): void {
+                                if (root.mode === "idle" && !root.hidden)
+                                    colonTick.restart();
+                            }
+                        }
+
+                        Repeater {
+                            model: 2
+
+                            Rectangle {
+                                required property int index
+
+                                width: 3
+                                height: 3
+                                radius: 1.5
+                                color: root.idleAccent
+                                opacity: root.hovered ? 1 : 0.92
+
+                                Behavior on color { ColorAnimation { duration: 420 } }
+
+                                Rectangle {
+                                    anchors.centerIn: parent
+                                    width: 1.2
+                                    height: 1.2
+                                    radius: 0.6
+                                    color: "#ffffff"
+                                    opacity: 0.55
                                 }
                             }
                         }
                     }
                 }
+
+                // Minutes (2 chiffres à roulement indépendant)
+                Row {
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: -0.3
+
+                    ClockDigit { digit: root.idleMinStr.charAt(0) || "0" }
+                    ClockDigit { digit: root.idleMinStr.charAt(1) || "0" }
+                }
             }
 
-            // Filet optique gauche
+            // Filet optique droit effilé (toujours centré au pixel près entre horloge et aile droite)
             Rectangle {
-                anchors.right: idleTime.left
-                anchors.rightMargin: 11
+                visible: idleIcons.implicitWidth > 2
+                x: Math.round((idleTime.x + idleTime.width + (idleFace.width - 18 - idleIcons.implicitWidth)) / 2)
                 anchors.verticalCenter: parent.verticalCenter
                 width: 1
-                height: 11
+                height: 15
                 radius: 0.5
-                color: Qt.alpha(root.fg, root.hovered ? 0.16 : 0.08)
-                Behavior on color {
-                    ColorAnimation { duration: 200 }
+                opacity: root.hovered ? 0.95 : 0.65
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.5; color: Qt.alpha(root.fg, 0.28) }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+
+                Behavior on opacity {
+                    NumberAnimation { duration: 200 }
                 }
             }
 
-            // Centre exact : Heure horlogère tabulaire avec deux-points à pulsation optique
-            Row {
-                id: idleTime
-
-                anchors.centerIn: parent
-                spacing: 1
-
-                StyledText {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: Time.format("HH")
-                    color: root.fg
-                    font.pointSize: 13.8
-                    font.weight: Font.Bold
-                    font.letterSpacing: 0.3
-                    font.features: {
-                        "tnum": 1
-                    }
-                }
-
-                StyledText {
-                    id: colonSep
-
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.verticalCenterOffset: -1
-                    text: ":"
-                    color: root.accent
-                    font.pointSize: 13.2
-                    font.weight: Font.Bold
-
-                    SequentialAnimation on opacity {
-                        running: root.mode === "idle" && !root.hidden
-                        loops: Animation.Infinite
-                        onRunningChanged: if (!running) colonSep.opacity = 0.85
-                        NumberAnimation {
-                            to: 0.32
-                            duration: 1000
-                            easing.type: Easing.InOutSine
-                        }
-                        NumberAnimation {
-                            to: 0.95
-                            duration: 1000
-                            easing.type: Easing.InOutSine
-                        }
-                    }
-                }
-
-                StyledText {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: Time.format("mm")
-                    color: root.fg
-                    font.pointSize: 13.8
-                    font.weight: Font.Bold
-                    font.letterSpacing: 0.3
-                    font.features: {
-                        "tnum": 1
-                    }
-                }
-            }
-
-            // Filet optique droit
-            Rectangle {
-                anchors.left: idleTime.right
-                anchors.leftMargin: 11
-                anchors.verticalCenter: parent.verticalCenter
-                width: 1
-                height: 11
-                radius: 0.5
-                color: Qt.alpha(root.fg, root.hovered ? 0.16 : 0.08)
-                Behavior on color {
-                    ColorAnimation { duration: 200 }
-                }
-            }
-
-            // Aile droite : Télémétrie matérielle (confidentialité, étagère, mini-spectre média, agents, Bluetooth, batterie)
+            // ── Aile droite : Météo en direct · Télémétrie concentrique (vie privée, étagère, média, agents, focus, BT, son, VPN) · Batterie ──
             Row {
                 id: idleIcons
 
+                readonly property bool hasBeforePrivacy: root.showIdleWeather
+                readonly property bool hasBeforeShelf: hasBeforePrivacy || root.micInUse || root.camInUse
+                readonly property bool hasBeforeMedia: hasBeforeShelf || root.shelf.length > 0
+                readonly property bool hasBeforeAgents: hasBeforeMedia || idleFace.mediaMiniOn
+                readonly property bool hasBeforeFocus: hasBeforeAgents || idleFace.agentsMiniOn
+                readonly property bool hasBeforeBt: hasBeforeFocus || idleFace.focusMiniOn
+                readonly property bool hasBeforeMute: hasBeforeBt || idleFace.btMiniOn
+                readonly property bool hasBeforeVpn: hasBeforeMute || idleFace.muteMiniOn
+                readonly property bool hasBeforeBatt: hasBeforeVpn || idleFace.vpnMiniOn
+
                 anchors.right: parent.right
-                anchors.rightMargin: 16
+                anchors.rightMargin: 18
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 6
+                spacing: 0
 
-                PrivacyDot {
-                    visible: root.micInUse
-                    dotColor: "#ff9f0a"
-                }
-                PrivacyDot {
-                    visible: root.camInUse
-                    dotColor: root.green
-                }
-
-                // Étagère de fichiers
-                Rectangle {
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: root.shelf.length > 0
-                    width: shelfCount.implicitWidth + 12
-                    height: 19
-                    radius: 6
-                    color: Qt.alpha(root.fg, 0.08)
-                    border.width: 0.5
-                    border.color: Qt.alpha(root.fg, 0.15)
-
-                    Row {
-                        id: shelfCount
-
-                        anchors.centerIn: parent
-                        spacing: 3
-
-                        MaterialIcon {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: "inventory_2"
-                            color: root.fg
-                            fontStyle: Tokens.font.icon.size(9.5).build()
-                            fill: 1
-                        }
-                        StyledText {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: root.shelf.length
-                            color: root.fg
-                            font.pointSize: 8
-                            font.weight: Font.Bold
-                            font.features: {
-                                "tnum": 1
-                            }
-                        }
-                    }
-                }
-
-                // Complication média en direct (mini-pochette + micro-spectre Cava 3 bandes) quand la musique tourne en tâche de fond
+                // Complication météo en direct (icône jour/nuit teintée + halo subtil + température compacte)
                 Item {
-                    readonly property bool activeMedia: root.hasMedia && root.playing && root.pageName !== "player"
-
                     anchors.verticalCenter: parent.verticalCenter
-                    width: activeMedia ? 34 : 0
-                    height: 19
-                    opacity: activeMedia ? 1 : 0
-                    scale: activeMedia ? 1 : 0.75
+                    width: root.showIdleWeather ? idleWeatherRow.implicitWidth : 0
+                    height: 20
+                    opacity: root.showIdleWeather ? 1 : 0
                     visible: opacity > 0.01
                     clip: true
 
@@ -2977,16 +3265,161 @@ Item {
                     Behavior on opacity {
                         NumberAnimation { duration: 240 }
                     }
-                    Behavior on scale {
-                        NumberAnimation { duration: 300; easing.type: Easing.OutBack }
+
+                    Row {
+                        id: idleWeatherRow
+
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 3.5
+
+                        Item {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 15
+                            height: 15
+
+                            // Micro halo solaire / lunaire discret derrière le glyphe météo
+                            Rectangle {
+                                anchors.centerIn: parent
+                                width: 15
+                                height: 15
+                                radius: 7.5
+                                color: root.idleWeatherTint
+                                opacity: Colours.light ? 0.14 : 0.18
+                            }
+
+                            MaterialIcon {
+                                anchors.centerIn: parent
+                                text: root.idleWeatherIcon
+                                color: root.idleWeatherTint
+                                fontStyle: Tokens.font.icon.size(12.5).build()
+                                fill: 1
+                            }
+                        }
+
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: root.idleTempShort
+                            color: root.fg
+                            font.pointSize: 9.2
+                            font.weight: Font.DemiBold
+                            font.features: { "tnum": 1 }
+                        }
+                    }
+                }
+
+                // Points de confidentialité (micro orange / caméra verte)
+                Item {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: root.micInUse ? 9 + (idleIcons.hasBeforePrivacy ? 6 : 0) : 0
+                    height: 20
+                    visible: width > 0.5
+
+                    PrivacyDot {
+                        anchors.right: parent.right
+                        anchors.rightMargin: 1
+                        anchors.verticalCenter: parent.verticalCenter
+                        dotColor: "#ff9f0a"
+                    }
+                }
+                Item {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: root.camInUse ? 9 + (idleIcons.hasBeforePrivacy || root.micInUse ? 6 : 0) : 0
+                    height: 20
+                    visible: width > 0.5
+
+                    PrivacyDot {
+                        anchors.right: parent.right
+                        anchors.rightMargin: 1
+                        anchors.verticalCenter: parent.verticalCenter
+                        dotColor: root.green
+                    }
+                }
+
+                // Étagère de fichiers déposés (pilule concentrique)
+                Item {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: root.shelf.length > 0 ? shelfPill.implicitWidth + (idleIcons.hasBeforeShelf ? 6 : 0) : 0
+                    height: 20
+                    opacity: root.shelf.length > 0 ? 1 : 0
+                    visible: opacity > 0.01
+                    clip: true
+
+                    Behavior on width {
+                        NumberAnimation { duration: 280; easing.type: Easing.OutCubic }
+                    }
+                    Behavior on opacity {
+                        NumberAnimation { duration: 220 }
                     }
 
                     Rectangle {
-                        anchors.fill: parent
-                        radius: 6
-                        color: Qt.alpha(root.fg, 0.07)
+                        id: shelfPill
+
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        implicitWidth: shelfCount.implicitWidth + 12
+                        width: implicitWidth
+                        height: 20
+                        radius: 10
+                        color: Qt.alpha(root.fg, 0.09)
                         border.width: 0.5
-                        border.color: Qt.alpha(root.fg, 0.14)
+                        border.color: Qt.alpha(root.fg, 0.18)
+
+                        Row {
+                            id: shelfCount
+
+                            anchors.centerIn: parent
+                            spacing: 3
+
+                            MaterialIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "inventory_2"
+                                color: root.fg
+                                fontStyle: Tokens.font.icon.size(9.5).build()
+                                fill: 1
+                            }
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: `${root.shelf.length}`
+                                color: root.fg
+                                font.pointSize: 7.8
+                                font.weight: Font.Bold
+                                font.features: { "tnum": 1 }
+                            }
+                        }
+                    }
+                }
+
+                // Complication média en direct (pochette vinyle circulaire + micro-spectre Cava 3 bandes)
+                Item {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: idleFace.mediaMiniOn ? 38 + (idleIcons.hasBeforeMedia ? 6 : 0) : 0
+                    height: 20
+                    opacity: idleFace.mediaMiniOn ? 1 : 0
+                    visible: opacity > 0.01
+                    clip: true
+
+                    Behavior on width {
+                        NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+                    }
+                    Behavior on opacity {
+                        NumberAnimation { duration: 240 }
+                    }
+
+                    Rectangle {
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 38
+                        height: 20
+                        radius: 10
+                        scale: idleFace.mediaMiniOn ? 1 : 0.72
+                        color: Qt.alpha(root.accent, Colours.light ? 0.14 : 0.13)
+                        border.width: 0.5
+                        border.color: Qt.alpha(root.accent, 0.3)
+
+                        Behavior on scale {
+                            NumberAnimation { duration: 300; easing.type: Easing.OutBack }
+                        }
 
                         Row {
                             anchors.centerIn: parent
@@ -2994,8 +3427,8 @@ Item {
 
                             Cover {
                                 anchors.verticalCenter: parent.verticalCenter
-                                size: 13
-                                radius: 3.5
+                                size: 14
+                                radius: 7
                             }
 
                             Bars {
@@ -3009,60 +3442,92 @@ Item {
                     }
                 }
 
+                // Agents IA au travail (avec compteur si plusieurs)
                 IdleIcon {
-                    shown: Agents.busy && root.pageName !== "agents"
+                    shown: idleFace.agentsMiniOn
                     icon: "smart_toy"
                     tint: Agents.kindColour(Agents.lead?.kind ?? "")
-                }
-                IdleIcon {
-                    shown: FocusMode.active
-                    icon: FocusMode.info.icon
-                    tint: FocusMode.info.tint
-                }
-                IdleIcon {
-                    shown: root.btConnected.length > 0
-                    icon: root.btAudio ? "headphones" : "bluetooth"
-                    tint: root.green
+                    count: Agents.working
+                    leadGap: idleIcons.hasBeforeAgents ? 6 : 0
                 }
 
-                // Bloc batterie matériel : pourcentage tabulaire + jauge vectorielle
-                Row {
+                // Concentration ou Ne pas déranger
+                IdleIcon {
+                    shown: idleFace.focusMiniOn
+                    icon: FocusMode.active ? FocusMode.info.icon : "do_not_disturb_on"
+                    tint: FocusMode.active ? FocusMode.info.tint : "#bf5af2"
+                    leadGap: idleIcons.hasBeforeFocus ? 6 : 0
+                }
+
+                // Bluetooth connecté (icône écouteurs pour CETW572/BX012, casque pour audio, sinon Bluetooth)
+                IdleIcon {
+                    shown: idleFace.btMiniOn
+                    icon: root.btEarbuds ? "earbuds" : root.btAudio ? "headphones" : "bluetooth"
+                    tint: root.green
+                    leadGap: idleIcons.hasBeforeBt ? 6 : 0
+                }
+
+                // Son coupé (utile quand la barre est masquée)
+                IdleIcon {
+                    shown: idleFace.muteMiniOn
+                    icon: "volume_off"
+                    tint: root.red
+                    leadGap: idleIcons.hasBeforeMute ? 6 : 0
+                }
+
+                // VPN actif
+                IdleIcon {
+                    shown: idleFace.vpnMiniOn
+                    icon: "vpn_lock"
+                    tint: root.green
+                    leadGap: idleIcons.hasBeforeVpn ? 6 : 0
+                }
+
+                // Bloc batterie matériel : pourcentage tabulaire (si charge ou faible) + jauge vectorielle
+                Item {
                     anchors.verticalCenter: parent.verticalCenter
                     visible: root.showBattery
-                    spacing: 4.5
+                    width: root.showBattery ? battRow.implicitWidth + (idleIcons.hasBeforeBatt ? 8 : 0) : 0
+                    height: 20
 
-                    StyledText {
+                    Row {
+                        id: battRow
+
+                        anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
-                        visible: root.batteryPctShown
-                        text: `${Math.round(root.battery * 100)}%`
-                        color: root.battCharging ? root.green : root.battery < 0.2 ? root.red : root.fgDim
-                        font.pointSize: 8.8
-                        font.weight: Font.DemiBold
-                        font.features: {
-                            "tnum": 1
+                        spacing: 4.5
+
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: root.batteryPctShown
+                            text: `${Math.round(root.battery * 100)}%`
+                            color: root.battCharging ? root.green : root.battery < 0.2 ? root.red : root.fgDim
+                            font.pointSize: 8.8
+                            font.weight: Font.DemiBold
+                            font.features: { "tnum": 1 }
                         }
-                    }
 
-                    BatteryGlyph {
-                        id: idleBatt
+                        BatteryGlyph {
+                            id: idleBatt
 
-                        anchors.verticalCenter: parent.verticalCenter
-                        pct: root.battery
-                        charging: root.battCharging
+                            anchors.verticalCenter: parent.verticalCenter
+                            pct: root.battery
+                            charging: root.battCharging
 
-                        SequentialAnimation on opacity {
-                            running: root.showBattery && root.battery < 0.1 && !root.charging && root.mode === "idle"
-                            loops: Animation.Infinite
-                            onRunningChanged: if (!running) idleBatt.opacity = 1
-                            NumberAnimation {
-                                to: 0.35
-                                duration: 800
-                                easing.type: Easing.InOutQuad
-                            }
-                            NumberAnimation {
-                                to: 1
-                                duration: 800
-                                easing.type: Easing.InOutQuad
+                            SequentialAnimation on opacity {
+                                running: root.showBattery && root.battery < 0.1 && !root.charging && root.mode === "idle"
+                                loops: Animation.Infinite
+                                onRunningChanged: if (!running) idleBatt.opacity = 1
+                                NumberAnimation {
+                                    to: 0.35
+                                    duration: 800
+                                    easing.type: Easing.InOutQuad
+                                }
+                                NumberAnimation {
+                                    to: 1
+                                    duration: 800
+                                    easing.type: Easing.InOutQuad
+                                }
                             }
                         }
                     }
@@ -9262,6 +9727,19 @@ Item {
         width: 26
         height: 12.5
 
+        // Halo doux discret autour de la batterie en charge ou faible (< 20 %)
+        Rectangle {
+            anchors.centerIn: glyphShell
+            width: glyphShell.width + 6
+            height: glyphShell.height + 6
+            radius: height / 2
+            color: glyph.charging ? "#34d399" : "#ff453a"
+            opacity: glyph.charging ? 0.2 : (glyph.pct < 0.2 ? 0.18 : 0)
+            visible: opacity > 0.01
+
+            Behavior on opacity { NumberAnimation { duration: 280 } }
+        }
+
         Rectangle {
             id: glyphShell
 
@@ -9343,20 +9821,110 @@ Item {
         }
     }
 
-    // Icône d'état de l'île au repos dans son micro-puits optique
+    // Chiffre d'horloge horloger à roulement vertical fluide (0 % CPU entre deux minutes)
+    component ClockDigit: Item {
+        id: cd
+
+        property string digit: "0"
+        property color textColor: root.fg
+        property real ptSize: 13.8
+        property string shown: ""
+        property string prev: ""
+        property real roll: 1
+
+        readonly property string activeChar: shown !== "" ? shown : digit
+
+        implicitWidth: Math.ceil(curTxt.implicitWidth)
+        implicitHeight: Math.ceil(curTxt.implicitHeight) + 2
+        clip: true
+
+        Component.onCompleted: shown = digit
+
+        onDigitChanged: {
+            if (shown === "") {
+                shown = digit;
+                return;
+            }
+            if (digit === shown)
+                return;
+            prev = shown;
+            shown = digit;
+            rollAnim.restart();
+        }
+
+        NumberAnimation {
+            id: rollAnim
+
+            target: cd
+            property: "roll"
+            from: 0
+            to: 1
+            duration: 380
+            easing.type: Easing.OutBack
+            easing.overshoot: 0.7
+        }
+
+        // Ancien chiffre qui glisse vers le haut et s'efface
+        StyledText {
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: 1 - cd.roll * (cd.height * 0.62)
+            opacity: cd.roll < 0.75 ? Math.max(0, 1 - cd.roll * 1.45) : 0
+            scale: 1 - cd.roll * 0.16
+            visible: cd.roll < 0.99 && cd.prev !== ""
+            text: cd.prev
+            color: cd.textColor
+            font.pointSize: cd.ptSize
+            font.weight: Font.Bold
+            font.features: { "tnum": 1 }
+        }
+
+        // Légère ombre optique pour une lisibilité parfaite sur fond clair comme sombre
+        StyledText {
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: 1.8 + (1 - cd.roll) * (cd.height * 0.62)
+            opacity: (Colours.light ? 0.06 : 0.34) * Math.min(1, cd.roll * 1.35)
+            scale: 0.86 + 0.14 * Math.min(1, cd.roll)
+            text: cd.activeChar
+            color: "#000000"
+            font.pointSize: cd.ptSize
+            font.weight: Font.Bold
+            font.features: { "tnum": 1 }
+        }
+
+        // Nouveau chiffre au premier plan
+        StyledText {
+            id: curTxt
+
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: 1 + (1 - cd.roll) * (cd.height * 0.62)
+            opacity: Math.min(1, cd.roll * 1.35)
+            scale: 0.86 + 0.14 * Math.min(1, cd.roll)
+            text: cd.activeChar
+            color: cd.textColor
+            font.pointSize: cd.ptSize
+            font.weight: Font.Bold
+            font.features: { "tnum": 1 }
+        }
+    }
+
+    // Icône d'état de l'île au repos dans sa lentille circulaire concentrique (zéro saut de largeur)
     component IdleIcon: Item {
         id: ii
 
         property bool shown
         property string icon
         property color tint
+        property int count: 0
+        property real leadGap: 6
+
+        readonly property real pillW: count > 1 ? Math.max(32, iiRow.implicitWidth + 10) : 20
 
         anchors.verticalCenter: parent?.verticalCenter
-        width: shown ? 19 : 0
-        height: 19
+        width: shown ? pillW + leadGap : 0
+        height: 20
         opacity: shown ? 1 : 0
-        scale: shown ? 1 : 0.65
         visible: opacity > 0.01
+        clip: true
 
         Behavior on width {
             NumberAnimation {
@@ -9366,30 +9934,66 @@ Item {
         }
         Behavior on opacity {
             NumberAnimation {
-                duration: 240
-            }
-        }
-        Behavior on scale {
-            NumberAnimation {
-                duration: 300
-                easing.type: Easing.OutBack
+                duration: 220
             }
         }
 
         Rectangle {
-            anchors.fill: parent
-            radius: 6
-            color: Qt.alpha(ii.tint, 0.12)
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            width: ii.pillW
+            height: 20
+            radius: 10
+            scale: ii.shown ? 1 : 0.72
+            color: Qt.alpha(ii.tint, Colours.light ? 0.16 : 0.14)
             border.width: 0.5
-            border.color: Qt.alpha(ii.tint, 0.28)
-        }
+            border.color: Qt.alpha(ii.tint, Colours.light ? 0.34 : 0.32)
 
-        MaterialIcon {
-            anchors.centerIn: parent
-            text: ii.icon
-            color: ii.tint
-            fontStyle: Tokens.font.icon.size(11.5).build()
-            fill: 1
+            Behavior on scale {
+                NumberAnimation {
+                    duration: 300
+                    easing.type: Easing.OutBack
+                }
+            }
+            Behavior on color { ColorAnimation { duration: 240 } }
+            Behavior on border.color { ColorAnimation { duration: 240 } }
+
+            // Reflet spéculaire supérieur sur la lentille circulaire
+            Rectangle {
+                anchors.top: parent.top
+                anchors.topMargin: 1
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: parent.width * 0.5
+                height: 1
+                radius: 0.5
+                color: "#ffffff"
+                opacity: Colours.light ? 0.35 : 0.24
+            }
+
+            Row {
+                id: iiRow
+
+                anchors.centerIn: parent
+                spacing: 2.5
+
+                MaterialIcon {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: ii.icon
+                    color: ii.tint
+                    fontStyle: Tokens.font.icon.size(11.5).build()
+                    fill: 1
+                }
+
+                StyledText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: ii.count > 1
+                    text: `${ii.count}`
+                    color: root.fg
+                    font.pointSize: 7.4
+                    font.weight: Font.Bold
+                    font.features: { "tnum": 1 }
+                }
+            }
         }
     }
 

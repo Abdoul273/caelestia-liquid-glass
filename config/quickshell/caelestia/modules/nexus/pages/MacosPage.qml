@@ -98,6 +98,14 @@ PageBase {
         }
 
         ToggleRow {
+            enabled: Island.clock
+            text: I18n.tr("Météo dans l'île au repos")
+            subtext: I18n.tr("Icône météo teintée et température en direct à côté de l'heure")
+            checked: Island.weather
+            onToggled: Island.set("weather", checked)
+        }
+
+        ToggleRow {
             last: true
             enabled: Island.enabled
             text: I18n.tr("Bord haut invisible")

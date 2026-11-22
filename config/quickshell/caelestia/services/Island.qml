@@ -19,6 +19,8 @@ Singleton {
     readonly property bool clock: enabled && opts.clock
     // Batterie à côté de l'heure au repos
     readonly property bool battery: clock && opts.battery
+    // Météo (icône et température) dans l'île au repos
+    readonly property bool weather: clock && opts.weather
     // Les bulles de Caelestia (bas à droite) passent aussi par l'île
     readonly property bool toasts: enabled && opts.toasts
     // Le changement de bureau s'affiche dans l'île (l'ancien indicateur du bas est retiré)
@@ -62,6 +64,7 @@ Singleton {
             property bool hideTopBorder: true
             property bool clock: true
             property bool battery: true
+            property bool weather: true
             property bool toasts: true
             property bool workspaces: true
             property bool lyrics: true
