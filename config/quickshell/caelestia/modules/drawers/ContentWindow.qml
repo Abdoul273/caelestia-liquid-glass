@@ -684,6 +684,13 @@ StyledWindow {
                 width: ipc.size?.[0] ?? 0
                 height: ipc.size?.[1] ?? 0
                 color: "white"
+
+                onXChanged: maskRefresh.restart()
+                onYChanged: maskRefresh.restart()
+                onWidthChanged: maskRefresh.restart()
+                onHeightChanged: maskRefresh.restart()
+                Component.onCompleted: maskRefresh.restart()
+                Component.onDestruction: maskRefresh.restart()
             }
         }
     }
@@ -694,8 +701,50 @@ StyledWindow {
         anchors.fill: parent
         sourceItem: windowMask
         hideSource: true
+        live: false
         visible: false
         textureSize: Qt.size(Math.round(width / 4), Math.round(height / 4))
+
+        Component.onCompleted: maskRefresh.restart()
+    }
+
+    // Rafraîchit le masque des fenêtres uniquement sur changement Hyprland (0 FPS au repos)
+    Timer {
+        id: maskRefresh
+
+        interval: 80
+        onTriggered: {
+            if (Glass.ios)
+                windowMaskTex.scheduleUpdate();
+        }
+    }
+
+    Connections {
+        target: Hypr
+
+        function onFocusedWorkspaceChanged(): void {
+            maskRefresh.restart();
+        }
+
+        function onActiveWsIdChanged(): void {
+            maskRefresh.restart();
+        }
+    }
+
+    Connections {
+        target: Hypr.toplevels
+
+        function onValuesChanged(): void {
+            maskRefresh.restart();
+        }
+    }
+
+    Connections {
+        target: root.monitor
+
+        function onActiveWorkspaceChanged(): void {
+            maskRefresh.restart();
+        }
     }
 
     // Cadre, barre, sidebar et utilitaires en liquid glass
@@ -718,7 +767,9 @@ StyledWindow {
             readonly property real tintAlpha: Glass.strength(Glass.ios ? (Colours.light ? 0.3 : 0.24) : Colours.light ? 0.56 : 0.46)
             readonly property real light: Colours.light ? 1.2 : 1
             readonly property real shadowStrength: 0.17 * Math.max(0, root.shadowOpacity) / 0.7
-            readonly property point mouse: Qt.point(interactions.mouseX / Math.max(1, width), interactions.mouseY / Math.max(1, height))
+            readonly property point mouse: interactions.containsMouse
+                ? Qt.point(interactions.mouseX / Math.max(1, width), interactions.mouseY / Math.max(1, height))
+                : Qt.point(0.5, 0.0)
             property real hover: interactions.containsMouse ? 1 : 0
 
             Behavior on hover {
@@ -728,7 +779,7 @@ StyledWindow {
                 }
             }
 
-            fragmentShader: Qt.resolvedUrl(Quickshell.shellPath(Glass.ios ? "assets/shaders/liquidios.frag.qsb" : "assets/shaders/glassblob.frag.qsb"))
+            fragmentShader: Qt.resolvedUrl(Quickshell.shellPath(Glass.ios ? (Glass.fastShader ? "assets/shaders/liquidios-fast.frag.qsb" : "assets/shaders/liquidios.frag.qsb") : "assets/shaders/glassblob.frag.qsb"))
         }
     }
 

@@ -3,12 +3,12 @@
 #  Caelestia Liquid Glass — installateur
 #  https://github.com/Abdoul273/caelestia-liquid-glass
 #
-#  Usage : ./install [--yes] [--no-deps] [--dry-run] [--help]
+#  Usage : ./install [--yes] [--no-deps] [--profile ultra|eco|auto] [--dry-run] [--help]
 # ============================================================================
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TESTED_SHELL_VERSION="2.3"
+TESTED_SHELL_VERSION="2.5"
 MIN_HYPRLAND="0.56"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 DATA_DIR="$HOME/.local/share/caelestia-liquid-glass"
@@ -84,23 +84,35 @@ usage() {
     cat <<EOF
 Usage : ./install [options]
 
-  --yes       répond « oui » à toutes les questions
-  --no-deps   n'installe aucun paquet (copie seulement la configuration)
-  --dry-run   montre ce qui serait fait, sans rien modifier
-  --help      affiche cette aide
+  --yes                     répond « oui » à toutes les questions
+  --no-deps                 n'installe aucun paquet (copie seulement la configuration)
+  --profile ultra|eco|auto  choisit le profil de performance sans question
+  --dry-run                 montre ce qui serait fait, sans rien modifier
+  --help                    affiche cette aide
 
 Pour désinstaller : ./uninstall
 EOF
 }
 
-for arg in "$@"; do
-    case $arg in
+PERF_PROFILE=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
         -y|--yes) ASSUME_YES=1 ;;
         --no-deps) NO_DEPS=1 ;;
+        --profile)
+            shift
+            PERF_PROFILE="${1:-}"
+            [[ $PERF_PROFILE =~ ^(ultra|eco|auto)$ ]] || fail "Profil invalide : $PERF_PROFILE (attendu : ultra | eco | auto)"
+            ;;
+        --profile=*)
+            PERF_PROFILE="${1#*=}"
+            [[ $PERF_PROFILE =~ ^(ultra|eco|auto)$ ]] || fail "Profil invalide : $PERF_PROFILE (attendu : ultra | eco | auto)"
+            ;;
         -n|--dry-run) DRY_RUN=1 ;;
         -h|--help) usage; exit 0 ;;
-        *) usage; fail "Option inconnue : $arg" ;;
+        *) usage; fail "Option inconnue : $1" ;;
     esac
+    shift
 done
 
 # ---------------------------------------------------------------- vérifications
@@ -525,8 +537,80 @@ cat <<EOF
 EOF
 ask "On y va ?" o || { info "Installation annulée."; exit 0; }
 
+choose_performance_profile() {
+    title "Profil de performance Liquid Glass"
+    local gpu="GPU intégré" dedicated=0 has_bat=0 cores
+    cores=$(nproc 2>/dev/null || echo 2)
+    for vf in /sys/class/drm/card*/device/vendor; do
+        [[ -r $vf ]] || continue
+        case "$(tr '[:upper:]' '[:lower:]' < "$vf")" in
+            0x10de) gpu="NVIDIA dédié"; dedicated=1; break ;;
+            0x1002) gpu="AMD Radeon"; dedicated=1 ;;
+            0x8086) [[ $dedicated -eq 0 ]] && gpu="Intel iGPU" ;;
+        esac
+    done
+    for tf in /sys/class/power_supply/*/type; do
+        [[ -r $tf ]] && [[ "$(cat "$tf")" == "Battery" ]] && { has_bat=1; break; }
+    done
+
+    local rec_num=1 rec_key="ultra"
+    if (( ! dedicated )) && (( cores <= 4 || has_bat )); then
+        rec_num=2
+        rec_key="eco"
+    fi
+
+    local chosen="$PERF_PROFILE"
+    if [[ -z $chosen ]]; then
+        local machine_desc="$gpu · ${cores} threads"
+        (( has_bat )) && machine_desc+=" · portable" || machine_desc+=" · secteur"
+        info "Matériel détecté : ${machine_desc} (recommandé : ${rec_num})"
+        printf '%s\n' \
+            "  ${B}1)${R} Puissance maximale (${ACC}ultra${R})   — PC puissant / GPU dédié : shader haute précision, panneaux préchargés en RAM" \
+            "  ${B}2)${R} Fluide & Autonomie (${ACC}eco${R})     — même rendu Liquid Glass, shader GPU ×2 plus léger, panneaux chargés à la demande" \
+            "  ${B}3)${R} Automatique (${ACC}auto${R})           — pleine précision sur secteur, optimisé automatiquement sur batterie"
+        if (( ASSUME_YES )) || [[ ! -t 0 ]]; then
+            chosen="$rec_key"
+            info "Mode automatique : profil ${chosen} retenu"
+        else
+            local ans=""
+            read -r -p "  ${B}?${R} Quel profil appliquer ? [${rec_num}] " ans || true
+            case "${ans:-$rec_num}" in
+                1|ultra|u|U) chosen="ultra" ;;
+                2|eco|e|E) chosen="eco" ;;
+                3|auto|a|A) chosen="auto" ;;
+                *) chosen="$rec_key" ;;
+            esac
+        fi
+    fi
+
+    if (( DRY_RUN )); then
+        info "profil Liquid Glass : performance=${chosen} (dans ~/.config/caelestia/glass.json)"
+        return
+    fi
+    mkdir -p "$HOME/.config/caelestia"
+    python3 - "$HOME/.config/caelestia/glass.json" "$chosen" <<'PY'
+import json, sys
+from pathlib import Path
+p = Path(sys.argv[1])
+perf = sys.argv[2]
+data = {}
+if p.is_file():
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        data = {}
+data.setdefault("shell", "ios")
+data.setdefault("gtk", "nautilus")
+data.setdefault("density", 0.62 if perf == "eco" else 0.55)
+data["performance"] = perf
+p.write_text(json.dumps(data, indent=4, ensure_ascii=False) + "\n", encoding="utf-8")
+PY
+    ok "Profil Liquid Glass enregistré : ${chosen} (modifiable à tout moment dans Paramètres → Fond d'écran et style)"
+}
+
 install_deps
 install_files
+choose_performance_profile
 enable_services
 install_cursor
 title "Fonds d'écran"

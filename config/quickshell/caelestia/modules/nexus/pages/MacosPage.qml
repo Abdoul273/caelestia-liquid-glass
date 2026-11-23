@@ -61,9 +61,17 @@ PageBase {
         ToggleRow {
             enabled: Island.enabled
             text: I18n.tr("Paroles en direct")
-            subtext: I18n.tr("Sous le titre de la musique (cache d'Aura, .lrc, LRCLIB en ligne)")
+            subtext: I18n.tr("Sous le titre de la musique (cache d'Onde, .lrc, LRCLIB en ligne)")
             checked: Island.lyrics
             onToggled: Island.set("lyrics", checked)
+        }
+
+        ToggleRow {
+            enabled: Island.enabled
+            text: I18n.tr("Agents IA dans l'île")
+            subtext: I18n.tr("Suivi Claude Code / Codex et demandes de permissions en direct")
+            checked: Island.agents
+            onToggled: Island.set("agents", checked)
         }
 
         ToggleRow {

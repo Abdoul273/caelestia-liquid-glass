@@ -9,9 +9,12 @@ import Quickshell.Services.UPower
 // session, dashboard, menus de la barre et écran de verrouillage.
 // Réglable en direct dans Paramètres (Super + I) → Fond d'écran et style → Liquid glass,
 // enregistré dans ~/.config/caelestia/glass.json (modifiable à la main aussi) :
-//   shell : "classic" (verre teinté, le compromis) | "ios" (verre plein) | "off" (Caelestia d'origine)
-//   gtk   : "nautilus" | "complet" | "off" (appliqué par caelestia-glass-gtk)
-//   density : intensité du verre de 0 (très transparent) à 1 (presque opaque), 0.5 = réglage d'origine
+//   shell       : "classic" (verre teinté, le compromis) | "ios" (verre plein) | "off" (Caelestia d'origine)
+//   gtk         : "nautilus" | "complet" | "off" (appliqué par caelestia-glass-gtk)
+//   density     : intensité du verre de 0 (très transparent) à 1 (presque opaque), 0.5 = réglage d'origine
+//   performance : "ultra" (puissance maximale, shader haute précision, panneaux préchargés)
+//                 | "eco" (fluide & autonomie, même rendu Liquid Glass, shader ~2× plus léger, panneaux à la demande)
+//                 | "auto" (s'adapte automatiquement entre secteur et batterie)
 // Les notifications restent en verre dans tous les cas.
 Singleton {
     id: root
@@ -22,14 +25,23 @@ Singleton {
     readonly property string style: opts.shell === "ios" ? "ios" : "classic"
     readonly property string shellMode: opts.shell
     readonly property string gtkMode: opts.gtk
+    // Profil de performance normalisé (accepte aussi les alias "quality"/"balanced")
+    readonly property string perfMode: (opts.performance === "ultra" || opts.performance === "quality")
+        ? "ultra"
+        : (opts.performance === "eco" || opts.performance === "balanced")
+            ? "eco"
+            : "auto"
+    readonly property bool ultra: perfMode === "ultra"
+    readonly property bool fastShader: perfMode === "eco" || (perfMode === "auto" && UPower.onBattery)
+    readonly property bool lazyPanels: !ultra
+    readonly property bool ecoOnBattery: !ultra
     readonly property bool ios: panels && style === "ios"
     // Verre plein façon iOS 26 / macOS 27 : tout l'intérieur des panneaux posés sur le bureau
     // montre le fond net à travers une lentille (et plus seulement les bords). false = flou d'avant.
-    // Sur batterie : flou classique, plus léger pour le GPU intégré.
-    readonly property bool clear: ios && !UPower.onBattery
-    // Le verre montre aussi le fond animé (2ᵉ lecture de la vidéo, sur secteur seulement :
-    // environ 15 % d'un cœur de plus). false = le verre montre l'image fixe de la vidéo.
-    readonly property bool clearVideo: clear
+    // Sur batterie (hors profil ultra) : flou classique, plus léger pour le GPU intégré.
+    readonly property bool clear: ios && (ultra || !UPower.onBattery)
+    // Le verre montre aussi le fond animé (2ᵉ lecture de la vidéo, sur secteur seulement et hors mode eco).
+    readonly property bool clearVideo: clear && perfMode !== "eco"
     // Boutons et interrupteurs façon macOS (reflet, liseré, curseur lentille). false = style d'origine.
     readonly property bool controls: panels
     // Contrôles en verre bombé (shader glasscontrol) au lieu des simples dégradés. false = version d'avant.
@@ -107,6 +119,7 @@ Singleton {
             property string shell: "classic"
             property string gtk: "nautilus"
             property real density: 0.5
+            property string performance: "auto"
         }
     }
 }

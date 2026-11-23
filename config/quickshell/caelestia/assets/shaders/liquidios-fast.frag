@@ -1,0 +1,182 @@
+#version 440
+
+// Liquid glass optimisé (profil Fluide & Autonomie / iGPU) :
+// même rendu visuel que liquidios.frag (lentille 44 px, aberration chromatique,
+// double spéculaire, Fresnel, contraste adaptatif, lumière au pointeur) avec ~2x
+// moins de lectures de texture par pixel pour garder 60 FPS sur iGPU et batterie.
+
+layout(location = 0) in vec2 qt_TexCoord0;
+layout(location = 0) out vec4 fragColor;
+
+layout(std140, binding = 0) uniform buf {
+    mat4 qt_Matrix;
+    float qt_Opacity;
+    vec2 texel;
+    vec3 tint;
+    float tintAlpha;
+    float light;
+    float shadowStrength;
+    vec2 mouse;
+    float hover;
+    vec4 zone;       // largeur du cadre à gauche, en haut, à droite, en bas (px)
+    float refraction; // 0 = pas de réfraction
+    float thickAlpha; // opacité du verre « épais » quand le fond risque de noyer le contenu
+    float unknownBg;  // 1 = on ne sait pas ce qu'il y a derrière (fenêtre flottante) : verre épais
+    float clearGlass; // 1 = tout le corps est une lentille nette (iOS 26 / macOS 27), 0 = flou de Hyprland
+    float clearVeil;  // voile de lisibilité posé sur le fond net
+};
+
+layout(binding = 1) uniform sampler2D source;
+layout(binding = 2) uniform sampler2D wallpaper;
+layout(binding = 3) uniform sampler2D windows; // blanc là où une fenêtre est sous le verre
+
+const float PI2 = 6.28318530718;
+
+float ring(vec2 uv, float radius, int n, out vec2 grad) {
+    float sum = 0.0;
+    grad = vec2(0.0);
+    for (int i = 0; i < n; i++) {
+        float ang = PI2 * (float(i) + 0.5) / float(n);
+        vec2 dir = vec2(cos(ang), sin(ang));
+        float s = texture(source, uv + dir * radius * texel).a;
+        sum += s;
+        grad -= dir * s;
+    }
+    return sum / float(n);
+}
+
+void main() {
+    vec2 uv = qt_TexCoord0;
+    float a0 = texture(source, uv).a;
+
+    float p0 = texture(source, uv + vec2(16.0, 0.0) * texel).a;
+    float p1 = texture(source, uv - vec2(16.0, 0.0) * texel).a;
+    float p2 = texture(source, uv + vec2(0.0, 16.0) * texel).a;
+    float p3 = texture(source, uv - vec2(0.0, 16.0) * texel).a;
+    float pMax = max(max(p0, p1), max(p2, p3));
+    float pMin = min(min(p0, p1), min(p2, p3));
+
+    if (a0 < 0.004) {
+        if (pMax < 0.004 || shadowStrength <= 0.0) {
+            fragColor = vec4(0.0);
+            return;
+        }
+        vec2 g;
+        float sh = ring(uv - vec2(0.0, 5.0) * texel, 12.0, 6, g) * shadowStrength;
+        fragColor = vec4(0.0, 0.0, 0.0, sh) * qt_Opacity;
+        return;
+    }
+
+    // Profil du bord : biseau de lentille et liseré (échantillonnage allégé 8 / 6 / 4)
+    vec2 gWide = vec2(0.0);
+    float avgWide = 1.0;
+    float avgMid = 1.0;
+    float avgNarrow = 1.0;
+    if (pMin < 0.996) {
+        avgWide = ring(uv, 15.0, 8, gWide);
+        vec2 gMid;
+        avgMid = ring(uv, 6.0, 6, gMid);
+        vec2 gNarrow;
+        avgNarrow = ring(uv, 1.6, 4, gNarrow);
+    }
+
+    float bevel = clamp((1.0 - avgWide) * 2.0, 0.0, 1.0);   // 1 au bord, 0 à ~15 px
+    float bevelIn = clamp((1.0 - avgMid) * 2.0, 0.0, 1.0);  // 1 au bord, 0 à ~6 px
+    float line = clamp((1.0 - avgNarrow) * 2.2, 0.0, 1.0);
+    vec2 n = length(gWide) > 1e-4 ? normalize(gWide) : vec2(0.0); // vers l'extérieur
+
+    // Éclairage : lumière en haut à gauche, reflet secondaire en bas à droite
+    vec2 L = normalize(vec2(-0.5, -0.87));
+    float facing = dot(n, L);
+    float key = pow(max(facing, 0.0), 1.6);
+    float back = pow(max(-facing, 0.0), 2.2) * 0.7;
+
+    vec2 px = uv / texel;
+    vec2 size = 1.0 / texel;
+    float outside = min(min(px.x - zone.x, px.y - zone.y), min(size.x - zone.z - px.x, size.y - zone.w - px.y));
+    float frameMask = 1.0 - smoothstep(0.0, 36.0, outside);
+    float overWin = texture(windows, uv).r;
+
+    // ─── Fond adaptatif : wallpaperTex étant déjà demi-résolution, 1 sample suffit
+    float tintL = dot(tint, vec3(0.299, 0.587, 0.114));
+    vec3 wp = texture(wallpaper, uv).rgb;
+    float wpContrast = abs(dot(wp, vec3(0.299, 0.587, 0.114)) - tintL);
+    float wpThick = smoothstep(0.12, 0.5, wpContrast) * 0.75;
+    float unknown = max(unknownBg, overWin * (1.0 - frameMask));
+    float thick = max(unknown, wpThick * (1.0 - frameMask));
+    vec3 col = tint;
+    float a = mix(tintAlpha, max(thickAlpha, tintAlpha), thick);
+
+    // ─── Réfraction du fond d'écran sur le bureau / cadre
+    float zoneMask = max(frameMask, 1.0 - overWin);
+
+    // ─── Corps de la lentille nette (iOS 26 / macOS 27)
+    float body = zoneMask * clearGlass;
+    if (body > 0.002) {
+        vec2 gBig = vec2(0.0);
+        float avgBig = 1.0;
+        float q0 = texture(source, uv + vec2(44.0, 0.0) * texel).a;
+        float q1 = texture(source, uv - vec2(44.0, 0.0) * texel).a;
+        float q2 = texture(source, uv + vec2(0.0, 44.0) * texel).a;
+        float q3 = texture(source, uv - vec2(0.0, 44.0) * texel).a;
+        if (min(min(q0, q1), min(q2, q3)) < 0.996)
+            avgBig = ring(uv, 44.0, 8, gBig);
+        float dome = clamp((1.0 - avgBig) * 2.0, 0.0, 1.0);
+        vec2 nBig = length(gBig) > 1e-4 ? normalize(gBig) : vec2(0.0);
+        float bend = pow(dome, 1.7);
+        vec2 duv = uv - nBig * bend * 34.0 * texel;
+        vec2 cshift = -nBig * bend * 3.0 * texel;
+        vec3 bg = vec3(texture(wallpaper, duv + cshift).r, texture(wallpaper, duv).g, texture(wallpaper, duv - cshift).b);
+        float bl = dot(bg, vec3(0.299, 0.587, 0.114));
+        bg = mix(vec3(bl), bg, 1.15);
+        float veil = mix(clearVeil, max(thickAlpha + 0.08, clearVeil), thick);
+        vec3 glassCol = mix(bg, tint, veil);
+        glassCol = mix(glassCol, vec3(1.0), (0.045 + bend * 0.07) * light);
+        col = mix(col, glassCol, body);
+        a = mix(a, 1.0, body);
+    }
+
+    // ─── Loupe sur le biseau (surtout quand clearGlass == 0 sur batterie ou transition)
+    float lens = pow(bevel, 1.6) * refraction * zoneMask * (1.0 - body * 0.65);
+    if (lens > 0.004) {
+        vec2 disp = -n * lens * 26.0 * texel;
+        vec3 refr;
+        refr.r = texture(wallpaper, uv + disp * 1.06).r;
+        refr.g = texture(wallpaper, uv + disp).g;
+        refr.b = texture(wallpaper, uv + disp * 0.94).b;
+        float luma = dot(refr, vec3(0.299, 0.587, 0.114));
+        refr = mix(vec3(luma), refr, 1.15) * 1.05;
+        float w = clamp(lens * 1.3, 0.0, 0.92);
+        col = mix(col, refr, w / max(a + w * (1.0 - a), 1e-3));
+        a = a + w * (1.0 - a);
+    }
+
+    // ─── Épaisseur : ombre interne juste à l'intérieur du biseau
+    float innerShade = bevel * (1.0 - bevelIn) * 0.14;
+    col *= 1.0 - innerShade;
+
+    // ─── Halo de Fresnel
+    float fresnel = pow(bevelIn, 2.0);
+    col = mix(col, vec3(1.0), fresnel * 0.1 * light);
+    a += fresnel * 0.06;
+
+    // ─── Reflets spéculaires : large sur le biseau, net sur le liseré
+    vec3 rimTint = mix(vec3(1.0), vec3(0.5 + 0.5 * n.x, 0.55 + 0.2 * (n.x + n.y), 0.5 + 0.5 * n.y), 0.08);
+    float specWide = (key + back) * bevel * bevel * 0.45;
+    float lineLit = line * (0.32 + 1.0 * max(key, back * 1.3));
+    col = mix(col, rimTint, clamp((specWide + lineLit * 0.85) * light, 0.0, 1.0));
+    a += specWide * 0.2 + lineLit * 0.45;
+
+    // ─── Reflet qui suit le pointeur (calculé uniquement au survol)
+    if (hover > 0.005) {
+        vec2 md = (uv - mouse) / texel;
+        float d2 = dot(md, md);
+        float spot = exp(-d2 / (2.0 * 120.0 * 120.0)) * hover;
+        float spotRim = exp(-d2 / (2.0 * 80.0 * 80.0)) * hover * (line + bevel * 0.8);
+        col = mix(col, vec3(1.0), clamp(spot * 0.06 + spotRim * 0.55, 0.0, 1.0));
+        a += spot * 0.03 + spotRim * 0.3;
+    }
+
+    a = clamp(a, 0.0, 1.0) * a0 * qt_Opacity;
+    fragColor = vec4(col * a, a);
+}

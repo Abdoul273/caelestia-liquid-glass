@@ -60,6 +60,14 @@ Item {
     anchors.margins: borderThickness
     anchors.leftMargin: bar.implicitWidth
 
+    // Hôte plein cadre pour les Loaders des panneaux paresseux (conserve exact x/y dans Panels)
+    Item {
+        id: lazyHost
+
+        anchors.fill: parent
+        z: 10
+    }
+
     Item {
         id: osdWrapper
 
@@ -140,7 +148,7 @@ Item {
         anchors.top: parent.top
     }
 
-    // Dynamic Island : collée au haut de l'écran, au-dessus de la marge du cadre
+    // Dynamic Island : collée au haut de l'écran, toujours active
     IslandModule.Island {
         id: island
 
@@ -152,198 +160,381 @@ Item {
         anchors.topMargin: -root.borderThickness
     }
 
-    // Centre de contrôle : descend du haut de l'écran, à droite
-    CC.ControlCenter {
+    // ── Panneaux modaux / secondaires : à la demande en profil Fluide/Auto, préchargés en Ultra ──
+
+    LazyPanel {
         id: controlCenter
 
-        screen: root.screen
-        screenState: root.screenState
+        host: lazyHost
+        wantOpen: root.screenState.controlCenter
+        sourceComponent: Component {
+            Item {
+                property alias panel: ccPanel
 
-        anchors.right: parent.right
-        anchors.rightMargin: 6
-        anchors.top: parent.top
-        anchors.topMargin: -root.borderThickness
-        island: island
+                CC.ControlCenter {
+                    id: ccPanel
+
+                    screen: root.screen
+                    screenState: root.screenState
+                    island: root.island
+
+                    anchors.right: parent.right
+                    anchors.rightMargin: 6
+                    anchors.top: parent.top
+                    anchors.topMargin: -root.borderThickness
+                }
+            }
+        }
     }
 
-    // Spotlight : une goutte de verre tombe de l'île jusqu'au centre de l'écran
-    SpotlightModule.Spotlight {
+    LazyPanel {
         id: spotlight
 
-        screen: root.screen
-        screenState: root.screenState
-        island: island
+        host: lazyHost
+        wantOpen: root.screenState.spotlight
+        sourceComponent: Component {
+            Item {
+                property alias panel: p
 
-        anchors.horizontalCenter: parent.horizontalCenter
-        y: Math.round(parent.height * 0.2)
+                SpotlightModule.Spotlight {
+                    id: p
+
+                    screen: root.screen
+                    screenState: root.screenState
+                    island: root.island
+
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: Math.round(parent.height * 0.2)
+                }
+            }
+        }
     }
 
-    // Calculatrice : une ligne comme Spotlight, à la même place
-    SpotlightModule.Calculator {
+    LazyPanel {
         id: calculator
 
-        screen: root.screen
-        screenState: root.screenState
-        island: island
+        host: lazyHost
+        wantOpen: root.screenState.calculator
+        sourceComponent: Component {
+            Item {
+                property alias panel: p
 
-        anchors.horizontalCenter: parent.horizontalCenter
-        y: Math.round(parent.height * 0.2)
+                SpotlightModule.Calculator {
+                    id: p
+
+                    screen: root.screen
+                    screenState: root.screenState
+                    island: root.island
+
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: Math.round(parent.height * 0.2)
+                }
+            }
+        }
     }
 
-    // Assistant vocal (Super + Maj + Espace) : orbe + réponse parlée, Gemini Live
-    SpotlightModule.Siri {
+    LazyPanel {
         id: siri
 
-        screen: root.screen
-        screenState: root.screenState
-        island: island
+        host: lazyHost
+        wantOpen: root.screenState.siri
+        unloadDelayMs: 600000
+        sourceComponent: Component {
+            Item {
+                property alias panel: p
 
-        anchors.horizontalCenter: parent.horizontalCenter
-        y: Math.round(parent.height * 0.2)
+                SpotlightModule.Siri {
+                    id: p
+
+                    screen: root.screen
+                    screenState: root.screenState
+                    island: root.island
+
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: Math.round(parent.height * 0.2)
+                }
+            }
+        }
     }
 
-    // Outils d'écriture (Super + Maj + W) : même goutte, sur le texte sélectionné
-    SpotlightModule.WritingTools {
+    LazyPanel {
         id: writing
 
-        screen: root.screen
-        screenState: root.screenState
-        island: island
+        host: lazyHost
+        wantOpen: root.screenState.writing
+        sourceComponent: Component {
+            Item {
+                property alias panel: p
 
-        anchors.horizontalCenter: parent.horizontalCenter
-        y: Math.round(parent.height * 0.2)
+                SpotlightModule.WritingTools {
+                    id: p
+
+                    screen: root.screen
+                    screenState: root.screenState
+                    island: root.island
+
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: Math.round(parent.height * 0.2)
+                }
+            }
+        }
     }
 
-    // Traduction (Super + Alt + T) : une ligne comme Spotlight
-    SpotlightModule.Translate {
+    LazyPanel {
         id: translate
 
-        screen: root.screen
-        screenState: root.screenState
-        island: island
+        host: lazyHost
+        wantOpen: root.screenState.translate
+        sourceComponent: Component {
+            Item {
+                property alias panel: p
 
-        anchors.horizontalCenter: parent.horizontalCenter
-        y: Math.round(parent.height * 0.2)
+                SpotlightModule.Translate {
+                    id: p
+
+                    screen: root.screen
+                    screenState: root.screenState
+                    island: root.island
+
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: Math.round(parent.height * 0.2)
+                }
+            }
+        }
     }
 
-    // Dictée (Super + Maj + D) : même goutte, le texte dicté s'affiche en direct
-    SpotlightModule.Dictation {
+    LazyPanel {
         id: dictation
 
-        screen: root.screen
-        screenState: root.screenState
-        island: island
+        host: lazyHost
+        wantOpen: root.screenState.dictation
+        sourceComponent: Component {
+            Item {
+                property alias panel: p
 
-        anchors.horizontalCenter: parent.horizontalCenter
-        y: Math.round(parent.height * 0.2)
+                SpotlightModule.Dictation {
+                    id: p
+
+                    screen: root.screen
+                    screenState: root.screenState
+                    island: root.island
+
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: Math.round(parent.height * 0.2)
+                }
+            }
+        }
     }
 
-    // Projection (Super + P) : même goutte, les 4 modes en une rangée
-    SpotlightModule.Display {
+    LazyPanel {
         id: display
 
-        screen: root.screen
-        screenState: root.screenState
-        island: island
+        host: lazyHost
+        wantOpen: root.screenState.display
+        sourceComponent: Component {
+            Item {
+                property alias panel: p
 
-        anchors.horizontalCenter: parent.horizontalCenter
-        y: Math.round(parent.height * 0.2)
+                SpotlightModule.Display {
+                    id: p
+
+                    screen: root.screen
+                    screenState: root.screenState
+                    island: root.island
+
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: Math.round(parent.height * 0.2)
+                }
+            }
+        }
     }
 
-    // Presse-papiers (Super + V) : même goutte de verre
-    SpotlightModule.Clipboard {
+    LazyPanel {
         id: clipboard
 
-        screen: root.screen
-        screenState: root.screenState
-        island: island
+        host: lazyHost
+        wantOpen: root.screenState.clipboard
+        sourceComponent: Component {
+            Item {
+                property alias panel: p
 
-        anchors.horizontalCenter: parent.horizontalCenter
-        y: Math.round(parent.height * 0.16)
+                SpotlightModule.Clipboard {
+                    id: p
+
+                    screen: root.screen
+                    screenState: root.screenState
+                    island: root.island
+
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: Math.round(parent.height * 0.16)
+                }
+            }
+        }
     }
 
-    // Emojis (Super + .) : même goutte de verre
-    SpotlightModule.Emoji {
+    LazyPanel {
         id: emoji
 
-        screen: root.screen
-        screenState: root.screenState
-        island: island
+        host: lazyHost
+        wantOpen: root.screenState.emoji
+        sourceComponent: Component {
+            Item {
+                property alias panel: p
 
-        anchors.horizontalCenter: parent.horizontalCenter
-        y: Math.round(parent.height * 0.16)
+                SpotlightModule.Emoji {
+                    id: p
+
+                    screen: root.screen
+                    screenState: root.screenState
+                    island: root.island
+
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: Math.round(parent.height * 0.16)
+                }
+            }
+        }
     }
 
-    // Raccourcis (Super + H) : recherche façon Spotlight
-    SpotlightModule.KeyHelp {
+    LazyPanel {
         id: keyhelp
 
-        screen: root.screen
-        screenState: root.screenState
-        island: island
+        host: lazyHost
+        wantOpen: root.screenState.keyhelp
+        sourceComponent: Component {
+            Item {
+                property alias panel: p
 
-        anchors.horizontalCenter: parent.horizontalCenter
-        y: Math.round(parent.height * 0.2)
+                SpotlightModule.KeyHelp {
+                    id: p
+
+                    screen: root.screen
+                    screenState: root.screenState
+                    island: root.island
+
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: Math.round(parent.height * 0.2)
+                }
+            }
+        }
     }
 
-    // Horloge (Super + Maj + O) : même goutte de verre
-    SpotlightModule.Clock {
+    LazyPanel {
         id: clock
 
-        screen: root.screen
-        screenState: root.screenState
-        island: island
+        host: lazyHost
+        wantOpen: root.screenState.clock
+        sourceComponent: Component {
+            Item {
+                property alias panel: p
 
-        anchors.horizontalCenter: parent.horizontalCenter
-        y: Math.round(parent.height * 0.1)
+                SpotlightModule.Clock {
+                    id: p
+
+                    screen: root.screen
+                    screenState: root.screenState
+                    island: root.island
+
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: Math.round(parent.height * 0.1)
+                }
+            }
+        }
     }
 
-    // Paramètres (Super + I) : Nexus dans la goutte de verre
-    SpotlightModule.Settings {
+    LazyPanel {
         id: settings
 
-        screen: root.screen
-        screenState: root.screenState
-        island: island
+        host: lazyHost
+        wantOpen: root.screenState.settings
+        sourceComponent: Component {
+            Item {
+                property alias panel: p
 
-        anchors.horizontalCenter: parent.horizontalCenter
-        y: Math.round((parent.height - height) / 2)
+                SpotlightModule.Settings {
+                    id: p
+
+                    screen: root.screen
+                    screenState: root.screenState
+                    island: root.island
+
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: Math.round((parent.height - height) / 2)
+                }
+            }
+        }
     }
 
-    // Annoter une capture : même goutte de verre
-    SpotlightModule.Annotate {
+    LazyPanel {
         id: annotate
 
-        screen: root.screen
-        screenState: root.screenState
-        island: island
+        host: lazyHost
+        wantOpen: root.screenState.annotate
+        sourceComponent: Component {
+            Item {
+                property alias panel: p
 
-        anchors.horizontalCenter: parent.horizontalCenter
-        y: Math.max(0, Math.round((parent.height - height) / 2))
+                SpotlightModule.Annotate {
+                    id: p
+
+                    screen: root.screen
+                    screenState: root.screenState
+                    island: root.island
+
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: Math.max(0, Math.round((parent.height - height) / 2))
+                }
+            }
+        }
     }
 
-    // Écouteurs 3D (Super + Maj + B) : même goutte de verre façon AirPodsDesktop
-    SpotlightModule.Earbuds {
+    LazyPanel {
         id: earbuds
 
-        screen: root.screen
-        screenState: root.screenState
-        island: island
+        host: lazyHost
+        wantOpen: root.screenState.earbuds
+        sourceComponent: Component {
+            Item {
+                property alias panel: p
 
-        anchors.horizontalCenter: parent.horizontalCenter
-        y: Math.round(parent.height * 0.12)
+                SpotlightModule.Earbuds {
+                    id: p
+
+                    screen: root.screen
+                    screenState: root.screenState
+                    island: root.island
+
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: Math.round(parent.height * 0.12)
+                }
+            }
+        }
     }
 
-    // Dock : sort du bas de l'écran au survol
-    DockModule.Dock {
+    // Dock : chargé uniquement si Island.dock est activé
+    LazyPanel {
         id: dock
 
-        screen: root.screen
-        screenState: root.screenState
+        host: lazyHost
+        wantOpen: Island.dock
+        keepLoaded: false
+        unloadDelayMs: 5000
+        sourceComponent: Component {
+            Item {
+                property alias panel: p
 
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: -root.borderThickness
+                DockModule.Dock {
+                    id: p
+
+                    screen: root.screen
+                    screenState: root.screenState
+                    fullscreen: dock.fullscreen
+
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.bottom: parent.bottom
+                    anchors.bottomMargin: -root.borderThickness
+                }
+            }
+        }
     }
 
     BarPopouts.ClipWrapper {

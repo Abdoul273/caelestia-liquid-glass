@@ -44,6 +44,21 @@ PageBase {
             icon: "block"
         }
     ]
+    readonly property list<string> perfModes: ["ultra", "eco", "auto"]
+    readonly property list<MenuItem> perfItems: [
+        MenuItem {
+            text: I18n.tr("Puissance maximale")
+            icon: "bolt"
+        },
+        MenuItem {
+            text: I18n.tr("Fluide & autonomie")
+            icon: "eco"
+        },
+        MenuItem {
+            text: I18n.tr("Automatique")
+            icon: "auto_awesome"
+        }
+    ]
 
     title: I18n.tr("Fond d'écran et style")
 
@@ -254,6 +269,20 @@ PageBase {
             valueLabel: value < 0.34 ? I18n.tr("Très transparent") : value < 0.46 ? I18n.tr("Transparent") : value <= 0.54 ? I18n.tr("Équilibré") : value < 0.75 ? I18n.tr("Dense") : I18n.tr("Très dense")
             value: Glass.density
             onMoved: v => Glass.set("density", Math.round(v * 100) / 100)
+        }
+
+        SelectRow {
+            Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
+
+            label: I18n.tr("Profil de performance")
+            subtext: ({
+                    ultra: I18n.tr("PC puissant : shader haute précision, panneaux préchargés en RAM, aucune réduction"),
+                    eco: I18n.tr("Même rendu Liquid Glass, shader GPU ×2 plus léger et panneaux chargés à la demande"),
+                    auto: I18n.tr("Pleine précision sur secteur, optimisé automatiquement sur batterie")
+                })[Glass.perfMode] ?? ""
+            menuItems: root.perfItems
+            active: root.perfItems[Math.max(0, root.perfModes.indexOf(Glass.perfMode))]
+            onSelected: item => Glass.set("performance", root.perfModes[root.perfItems.indexOf(item)])
         }
 
         SelectRow {

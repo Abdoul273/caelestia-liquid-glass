@@ -1261,6 +1261,15 @@ var strings = {
     "TÉLÉCHARGEMENT": "DOWNLOAD",
     "Vidéos": "Videos",
     "fin %1": "ends %1",
+    "Agents IA dans l'île": "AI agents in the island",
+    "Fluide & autonomie": "Smooth & battery saver",
+    "Même rendu Liquid Glass, shader GPU ×2 plus léger et panneaux chargés à la demande": "Same Liquid Glass look, 2× lighter GPU shader and on-demand panels",
+    "PC puissant : shader haute précision, panneaux préchargés en RAM, aucune réduction": "High-end PC: full-precision shader, panels preloaded in RAM, no throttling",
+    "Pleine précision sur secteur, optimisé automatiquement sur batterie": "Full precision on AC power, automatically optimized on battery",
+    "Profil de performance": "Performance profile",
+    "Puissance maximale": "Maximum power",
+    "Sous le titre de la musique (cache d'Onde, .lrc, LRCLIB en ligne)": "Below the track title (Onde cache, .lrc, online LRCLIB)",
+    "Suivi Claude Code / Codex et demandes de permissions en direct": "Live Claude Code / Codex tracking and permission prompts",
     "🔒 Note chiffrée\nOuvre-la dans AetherNotes pour la lire.": "🔒 Encrypted note\nOpen it in AetherNotes to read."
 };
 

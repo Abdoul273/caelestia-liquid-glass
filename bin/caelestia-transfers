@@ -216,6 +216,9 @@ class Tracker:
             if not pid.isdigit():
                 continue
             try:
+                with open(f"/proc/{pid}/comm", "rb") as f:
+                    if f.read().strip() != b"rclone":
+                        continue
                 with open(f"/proc/{pid}/cmdline", "rb") as f:
                     if DRIVE_LOG.encode() not in f.read():
                         continue
@@ -277,7 +280,7 @@ def main():
         if items or finished or last != "":
             print(json.dumps(msg, ensure_ascii=False), flush=True)
         last = "" if not items and not finished else "x"
-        time.sleep(1)
+        time.sleep(1.0 if (items or finished) else 3.0)
 
 
 if __name__ == "__main__":

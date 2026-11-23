@@ -91,14 +91,14 @@ Singleton {
             return;
         // Dès le débranchement : sur une batterie usée, la jauge peut sauter de 48 % à 7 % sous
         // charge, attendre 20 % arrive trop tard.
-        const low = UPower.onBattery;
+        const low = UPower.onBattery && Glass.ecoOnBattery;
         if (autoSaver && low && !saverOn && PowerProfiles.profile !== PowerProfile.PowerSaver) {
             profileBefore = PowerProfiles.profile;
             PowerProfiles.profile = PowerProfile.PowerSaver;
             saverOn = true;
             hyprEco(true);
             save();
-        } else if (saverOn && (!UPower.onBattery || !autoSaver)) {
+        } else if (saverOn && (!low || !autoSaver)) {
             if (PowerProfiles.profile === PowerProfile.PowerSaver)
                 PowerProfiles.profile = profileBefore;
             saverOn = false;
@@ -116,6 +116,13 @@ Singleton {
     }
 
     onPctChanged: checkSaver()
+    Connections {
+        target: Glass
+
+        function onEcoOnBatteryChanged(): void {
+            root.checkSaver();
+        }
+    }
     Connections {
         target: UPower
 

@@ -88,10 +88,14 @@ def read_proc(pid):
 
 
 BACKGROUND = {"app-server", "mcp-server", "mcp", "login", "logout", "update", "completion", "doctor", "daemon"}
+AGENT_COMMS = {"claude", "codex", "node", "bun", "mainthread"}
 
 
 def agent_of(p):
     comm = p["comm"].lower()
+    # Filtrage rapide avant d'ouvrir /exe et /cmdline sur les ~250 processus système
+    if comm not in AGENT_COMMS and not (comm and comm[0].isdigit()):
+        return None
     try:
         exe = os.readlink(f"/proc/{p['pid']}/exe")
     except OSError:
@@ -443,7 +447,8 @@ def watch():
             print(line, flush=True)
             last = line
         busy = any(a["status"] != "idle" for a in snap["agents"]) or snap["perms"]
-        time.sleep(0.4 if snap["perms"] else 1 if busy else 2)
+        has_agents = bool(snap["agents"])
+        time.sleep(0.5 if snap["perms"] else 1.5 if busy else 3.0 if has_agents else 4.0)
 
 
 # ───────────────────────── hook ─────────────────────────
