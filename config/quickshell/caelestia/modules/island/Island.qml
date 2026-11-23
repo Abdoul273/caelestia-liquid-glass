@@ -481,40 +481,123 @@ Item {
         return ` · ${pct} % ` + (min < 60 ? I18n.tr("il y a %1 min").arg(min) : I18n.tr("il y a %1 h").arg(Math.floor(min / 60)));
     }
 
+    function openInfoDrop(kind: string): void {
+        const s = root.screenState;
+        if (!s)
+            return;
+        root.expanded = false;
+        s.controlCenter = false;
+        s.dashboard = false;
+        if (kind === "controlCenter") {
+            s.controlCenter = true;
+        } else if (kind === "tasks") {
+            s.quickNotes = false;
+            s.quickTasks = true;
+            s.dashboardTab = 0;
+            s.dashboard = true;
+        } else if (kind in s) {
+            s[kind] = true;
+        }
+    }
+
+    function runInfoChip(action: string): void {
+        if (action === "alarm")
+            openInfoDrop("clock");
+        else if (action === "earbuds")
+            openInfoDrop("earbuds");
+        else if (action === "cc")
+            openInfoDrop("controlCenter");
+        else if (action === "caffeine")
+            pageName = "caffeine";
+        else if (action === "night")
+            NightLight.toggle();
+        else if (action === "focus")
+            FocusMode.stop();
+        else if (action === "dnd")
+            Notifs.dnd = false;
+        else if (action === "tasks")
+            openInfoDrop("tasks");
+        else if (action === "notifs")
+            Island.notifCenter = true;
+        else if (action === "unmuteMic") {
+            if (Audio.source?.ready && Audio.source?.audio)
+                Audio.source.audio.muted = false;
+        } else if (action === "unmuteAudio") {
+            if (Audio.sink?.ready && Audio.sink?.audio)
+                Audio.sink.audio.muted = false;
+        }
+    }
+
+    readonly property string infoWeatherRange: {
+        const today = Weather.forecast && Weather.forecast.length > 0 ? Weather.forecast[0] : null;
+        if (!today || today.minTempC === undefined || today.maxTempC === undefined)
+            return Weather.windSpeed > 0 ? `${Math.round(Weather.windSpeed)} km/h` : "";
+        const lo = Weather.formatTemp(today.minTempC).replace(/[CF]$/, "");
+        const hi = Weather.formatTemp(today.maxTempC).replace(/[CF]$/, "");
+        return `${lo}/${hi}`;
+    }
+
+    readonly property string infoBattSub: {
+        const w = root.sysWatts > 0.2 ? `${root.sysWatts.toFixed(root.sysWatts >= 10 ? 0 : 1).replace(".", ",")} W` : "";
+        if (BatteryInfo.full)
+            return I18n.tr("Chargée");
+        if (root.battCharging) {
+            const dur = BatteryInfo.fmtDuration(BatteryInfo.timeToFull);
+            if (dur && w)
+                return `${dur} · ${w}`;
+            if (dur)
+                return dur;
+            return w ? `${I18n.tr("En charge")} · ${w}` : I18n.tr("En charge");
+        }
+        if (!UPower.onBattery)
+            return I18n.tr("Sur secteur");
+        const dur = BatteryInfo.fmtDuration(BatteryInfo.timeToEmpty);
+        if (dur && w)
+            return `${dur} · ${w}`;
+        if (dur)
+            return dur;
+        return w || I18n.tr("Sur batterie");
+    }
+
     readonly property list<var> infoChips: {
         void (now);
         void (Time.date);
         const out = [];
         const al = nextAlarm();
         if (al)
-            out.push({ icon: "alarm", text: `${al.label} · ${dayWord(al.at)}${Qt.formatTime(al.at, "HH:mm")}`, tint: "#ff9f0a" });
-        for (const d of btConnected)
-            out.push({ icon: /audio|head|ear|phone/i.test(d?.icon ?? "") ? "headphones" : "bluetooth", text: (d.name || I18n.tr("Bluetooth")) + btBatteryText(d), tint: root.green });
+            out.push({ icon: "alarm", text: `${al.label} · ${dayWord(al.at)}${Qt.formatTime(al.at, "HH:mm")}`, tint: "#ff9f0a", action: "alarm" });
+        for (const d of btConnected) {
+            const isBuds = /pod|bud|tws|\bbx|cetw/i.test(d?.name ?? "");
+            const icon = isBuds ? "earbuds" : /audio|head|ear|phone/i.test(d?.icon ?? "") ? "headphones" : "bluetooth";
+            out.push({ icon, text: (d.name || I18n.tr("Bluetooth")) + btBatteryText(d), tint: root.green, action: isBuds ? "earbuds" : "cc" });
+        }
         if (IdleInhibitor.enabled)
-            out.push({ icon: "coffee", text: IdleInhibitor.until > 0 ? I18n.tr("Écran allumé · %1").arg(IdleInhibitor.remainingText()) : I18n.tr("Écran toujours allumé"), tint: root.accent });
+            out.push({ icon: "coffee", text: IdleInhibitor.until > 0 ? I18n.tr("Écran allumé · %1").arg(IdleInhibitor.remainingText()) : I18n.tr("Écran toujours allumé"), tint: root.accent, action: "caffeine" });
         if (NightLight.enabled)
-            out.push({ icon: "nightlight", text: I18n.tr("Nuit · %1 K").arg(NightLight.temperature), tint: "#ff9f0a" });
+            out.push({ icon: "nightlight", text: I18n.tr("Nuit · %1 K").arg(NightLight.temperature), tint: "#ff9f0a", action: "night" });
         if (FocusMode.active)
-            out.push({ icon: FocusMode.info.icon, text: `${FocusMode.info.name} · ${FocusMode.untilText()}`, tint: FocusMode.info.tint });
+            out.push({ icon: FocusMode.info.icon, text: `${FocusMode.info.name} · ${FocusMode.untilText()}`, tint: FocusMode.info.tint, action: "focus" });
         else if (Notifs.dnd)
-            out.push({ icon: "do_not_disturb_on", text: I18n.tr("Ne pas déranger"), tint: "#bf5af2" });
+            out.push({ icon: "do_not_disturb_on", text: I18n.tr("Ne pas déranger"), tint: "#bf5af2", action: "dnd" });
         const late = Tasks.overdueCount;
         if (late > 0)
-            out.push({ icon: "assignment_late", text: late > 1 ? I18n.tr("%1 tâches en retard").arg(late) : I18n.tr("1 tâche en retard"), tint: root.red });
+            out.push({ icon: "assignment_late", text: late > 1 ? I18n.tr("%1 tâches en retard").arg(late) : I18n.tr("1 tâche en retard"), tint: root.red, action: "tasks" });
         const next = Tasks.sorted.find(t => !t.done && t.due > Date.now() && Tasks.isToday(t));
         if (next)
-            out.push({ icon: "task_alt", text: `${next.text} · ${Qt.formatTime(new Date(next.due), "HH:mm")}`, tint: "#0a84ff" });
+            out.push({ icon: "task_alt", text: `${next.text} · ${Qt.formatTime(new Date(next.due), "HH:mm")}`, tint: "#0a84ff", action: "tasks" });
         else if (Tasks.todayCount > 0)
-            out.push({ icon: "task_alt", text: Tasks.todayCount > 1 ? I18n.tr("%1 tâches aujourd'hui").arg(Tasks.todayCount) : I18n.tr("1 tâche aujourd'hui"), tint: "#0a84ff" });
+            out.push({ icon: "task_alt", text: Tasks.todayCount > 1 ? I18n.tr("%1 tâches aujourd'hui").arg(Tasks.todayCount) : I18n.tr("1 tâche aujourd'hui"), tint: "#0a84ff", action: "tasks" });
         const unread = Notifs.notClosed.length;
         if (unread > 0)
-            out.push({ icon: "notifications", text: unread > 1 ? I18n.tr("%1 notifications").arg(unread) : I18n.tr("1 notification"), tint: root.fg });
+            out.push({ icon: "notifications", text: unread > 1 ? I18n.tr("%1 notifications").arg(unread) : I18n.tr("1 notification"), tint: root.accent, action: "notifs" });
         if (Audio.sourceMuted)
-            out.push({ icon: "mic_off", text: I18n.tr("Micro coupé"), tint: root.red });
+            out.push({ icon: "mic_off", text: I18n.tr("Micro coupé"), tint: root.red, action: "unmuteMic" });
         if (Audio.muted)
-            out.push({ icon: "volume_off", text: I18n.tr("Son coupé"), tint: root.red });
+            out.push({ icon: "volume_off", text: I18n.tr("Son coupé"), tint: root.red, action: "unmuteAudio" });
         if (VPN.connected)
-            out.push({ icon: "vpn_key", text: I18n.tr("VPN"), tint: root.green });
+            out.push({ icon: "vpn_lock", text: I18n.tr("VPN"), tint: root.green, action: "cc" });
+        if ((Nmcli.deviceStatus !== null && !Nmcli.isConnected && !Nmcli.active && !Nmcli.hasAvailableEthernet) || (!Nmcli.wifiEnabled && !Nmcli.activeEthernet))
+            out.push({ icon: "wifi_off", text: I18n.tr("Hors ligne"), tint: "#ff9f0a", action: "cc" });
         return out;
     }
 
@@ -1561,9 +1644,9 @@ Item {
         case "player":
             return Qt.size(pageWidth, (hasLyrics ? 202 : 178) + (shelf.length > 0 ? shelfExtra : 10));
         case "info":
-            return Qt.size(pageWidth, 112 + (infoChips.length > 0 ? infoFlow.implicitHeight + 10 : 0) + shelfExtra);
+            return Qt.size(pageWidth, (infoChips.length > 0 ? 108 + infoFlow.implicitHeight + 24 : 116) + shelfExtra);
         case "perf":
-            return Qt.size(pageWidth, 150);
+            return Qt.size(pageWidth, 222);
         case "record":
             return Qt.size(210 + actsInset, 40);
         case "transfer":
@@ -2487,10 +2570,83 @@ Item {
     ServiceRef {
         service: root.paged ? Storage : null
     }
-    // Fréquence moyenne du processeur (GHz) et ventilateur (tr/min), relevés pendant la page Performances
+    // Fréquence moyenne CPU (GHz), ventilateur (tr/min), charge et top processus temps réel (actifs uniquement sur la page Perf)
     property real cpuGhz
     property int fanRpm: -1
     property real tempPeak
+    property real perfLoad: 0
+    property int perfProcCount: 0
+    property string perfSort: "cpu" // "cpu" ou "ram"
+    property var perfPrevSnap: null
+    property list<var> perfApps: []
+
+    readonly property list<var> topProcs: {
+        const list = [...perfApps];
+        if (perfSort === "ram")
+            list.sort((a, b) => (b.rss - a.rss) || (b.cpu - a.cpu));
+        else
+            list.sort((a, b) => (b.cpu - a.cpu) || (b.rss - a.rss));
+        return list.slice(0, 3);
+    }
+
+    function fmtRamKb(kb: real): string {
+        if (!(kb > 0))
+            return "0 Mo";
+        if (kb >= 1048576)
+            return `${(kb / 1048576).toFixed(kb >= 10485760 ? 0 : 1).replace(".", ",")} Go`;
+        return `${Math.max(1, Math.round(kb / 1024))} Mo`;
+    }
+
+    function perfAppLabel(key: string): string {
+        const k = (key ?? "").trim();
+        const map = {
+            chrome: "Chrome",
+            chromium: "Chromium",
+            firefox: "Firefox",
+            antigravity: "Antigravity",
+            code: "VS Code",
+            quickshell: "Shell",
+            kitty: "Kitty",
+            Hyprland: "Hyprland",
+            "node-MainThread": "Node.js",
+            node: "Node.js",
+            language_server: "LSP",
+            nautilus: "Fichiers",
+            pulsar: "Pulsar",
+            onde: "Onde",
+            pipewire: "PipeWire",
+            wireplumber: "Audio"
+        };
+        if (map[k])
+            return map[k];
+        const clean = k.replace(/\.py$/i, "").replace(/^proton\.vpn\.daemon$/i, "Proton VPN");
+        return clean.length > 0 ? clean.charAt(0).toUpperCase() + clean.slice(1) : "?";
+    }
+
+    function openMonitorApp(): void {
+        root.expanded = false;
+        Quickshell.execDetached(["sh", "-c", 'if [ -x "$HOME/.local/bin/pulsar" ]; then exec "$HOME/.local/bin/pulsar"; elif command -v pulsar >/dev/null 2>&1; then exec pulsar; elif command -v btop >/dev/null 2>&1; then exec kitty -e btop; else exec kitty -e top; fi']);
+    }
+
+    function focusProcessApp(key: string): void {
+        const needle = (key ?? "").toLowerCase().replace(/\.py$/, "");
+        if (needle) {
+            for (const t of Hypr.toplevels.values) {
+                const ipc = t.lastIpcObject ?? {};
+                const cls = String(ipc.class ?? "").toLowerCase();
+                const title = String(ipc.title ?? "").toLowerCase();
+                if ((cls && (cls.includes(needle) || needle.includes(cls))) || (needle === "chrome" && /chrom|brave/.test(cls)) || (title && needle.length >= 4 && title.includes(needle))) {
+                    const addr = String(ipc.address ?? "").replace(/^0x/, "");
+                    if (addr) {
+                        root.expanded = false;
+                        Hypr.dispatch(Hypr.usingLua ? `hl.dsp.focus({ window = "address:0x${addr}" })` : `focuswindow address:0x${addr}`);
+                        return;
+                    }
+                }
+            }
+        }
+        openMonitorApp();
+    }
 
     Timer {
         running: root.mode === "perf"
@@ -2506,12 +2662,97 @@ Item {
     Process {
         id: sensorProc
 
-        command: ["sh", "-c", "f=0; n=0; for x in /sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_cur_freq; do f=$((f + $(cat $x))); n=$((n + 1)); done; [ $n -gt 0 ] && echo $((f / n)) || echo 0; cat /sys/class/hwmon/*/fan1_input 2>/dev/null | head -1 || true"]
+        command: ["python3", "-c", `
+import glob, json, os
+freqs = []
+for p in glob.glob("/sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_cur_freq"):
+    try: freqs.append(int(open(p).read().strip()))
+    except Exception: pass
+fan = -1
+for p in glob.glob("/sys/class/hwmon/*/fan1_input"):
+    try: fan = int(open(p).read().strip()); break
+    except Exception: pass
+load1 = 0.0
+try: load1 = float(open("/proc/loadavg").read().split()[0])
+except Exception: pass
+pg = os.sysconf("SC_PAGE_SIZE") // 1024
+hz = os.sysconf("SC_CLK_TCK")
+ncpu = os.cpu_count() or 1
+me = os.getpid()
+apps = {}
+total_p = 0
+for pid in os.listdir("/proc"):
+    if not pid.isdigit(): continue
+    ipid = int(pid)
+    if ipid == me: continue
+    try:
+        st = open(f"/proc/{pid}/stat").read()
+        i, j = st.index("("), st.rindex(")")
+        comm = st[i+1:j]
+        f = st[j+2:].split()
+        ticks = int(f[11]) + int(f[12])
+        rss = int(f[21]) * pg
+    except Exception: continue
+    total_p += 1
+    if rss == 0 or comm in ("fuser", "ps", "sh", "dash"): continue
+    key = comm
+    if comm.startswith("python"):
+        try:
+            args = open(f"/proc/{pid}/cmdline", "rb").read().split(b"\\0")
+            sc = next((os.path.basename(a.decode("utf-8", "ignore")) for a in args[1:] if a and not a.startswith(b"-")), "")
+            if sc and not sc.startswith("-"): key = sc
+        except Exception: pass
+    elif comm.startswith("chrome") or comm == "chromium": key = "chrome"
+    elif comm.startswith("firefox") or comm in ("Web Content", "Isolated Web Co", "RDD Process", "Socket Process"): key = "firefox"
+    elif comm.startswith("antigravity"): key = "antigravity"
+    elif comm.startswith("language_server"): key = "language_server"
+    elif comm.startswith("node"): key = "node"
+    elif comm.startswith("qs") or comm == "quickshell": key = "quickshell"
+    if key.startswith("caelestia-") or key.startswith("ano-"): key = "quickshell"
+    cur = apps.get(key)
+    if cur:
+        cur["t"] += ticks; cur["r"] += rss; cur["c"] += 1
+    else:
+        apps[key] = {"k": key, "t": ticks, "r": rss, "c": 1, "p": ipid}
+vals = list(apps.values())
+keep = {x["k"]: x for x in sorted(vals, key=lambda x: -x["r"])[:16]}
+keep.update({x["k"]: x for x in sorted(vals, key=lambda x: -x["t"])[:16]})
+print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "load": round(load1, 2), "procs": total_p, "hz": hz, "ncpu": ncpu, "apps": list(keep.values())}))
+`]
         stdout: StdioCollector {
             onStreamFinished: {
-                const l = text.trim().split("\n");
-                root.cpuGhz = (parseInt(l[0]) || 0) / 1e6;
-                root.fanRpm = l.length > 1 && l[1] !== "" ? parseInt(l[1]) : -1;
+                try {
+                    const d = JSON.parse(text);
+                    root.cpuGhz = (d.freq || 0) / 1e6;
+                    root.fanRpm = d.fan !== undefined ? d.fan : -1;
+                    root.perfLoad = d.load || 0;
+                    root.perfProcCount = d.procs || 0;
+                    const nowMs = Date.now();
+                    const prev = root.perfPrevSnap;
+                    const dt = prev ? (nowMs - prev.t) / 1000 : 0;
+                    const hz = d.hz || 100;
+                    const ncpu = d.ncpu || 1;
+                    const nextTicks = {};
+                    const out = [];
+                    for (const a of (d.apps ?? [])) {
+                        nextTicks[a.k] = a.t;
+                        let cpu = 0;
+                        if (prev && dt >= 0.25 && dt < 15 && prev.ticks[a.k] !== undefined) {
+                            const delta = Math.max(0, a.t - prev.ticks[a.k]);
+                            cpu = Math.min(100, (delta / hz / dt / ncpu) * 100);
+                        }
+                        out.push({
+                            key: a.k,
+                            name: root.perfAppLabel(a.k),
+                            cpu: Math.round(cpu * 10) / 10,
+                            rss: a.r || 0,
+                            count: a.c || 1,
+                            pid: a.p || 0
+                        });
+                    }
+                    root.perfPrevSnap = { t: nowMs, ticks: nextTicks };
+                    root.perfApps = out;
+                } catch (e) {}
             }
         }
     }
@@ -2525,8 +2766,13 @@ Item {
         }
     }
 
-    // NetworkUsage est un singleton QML (compteur de références simple)
-    onPagedChanged: NetworkUsage.refCount += paged ? 1 : -1
+    // NetworkUsage est un singleton QML (compteur de références simple) ;
+    // préchauffage d'un relevé de processus dès l'ouverture de l'île pour un % CPU instantané
+    onPagedChanged: {
+        NetworkUsage.refCount += paged ? 1 : -1;
+        if (paged && !sensorProc.running)
+            sensorProc.running = true;
+    }
     Component.onDestruction: {
         if (paged)
             NetworkUsage.refCount--;
@@ -8631,207 +8877,797 @@ Item {
             }
         }
 
-        // ── page Infos : heure, date, météo détaillée, batterie + pastilles d'état ──
+        // ── page Infos : cadran Liquid Glass horloger (heure roulante + secondes chronographe, météo atmosphérique, énergie, pastilles interactives) ──
         Face {
+            id: infoFace
+
+            readonly property real hoverX: Math.max(0, Math.min(width, islandHover.point.position.x - (root.width - width) / 2))
+            readonly property color battTint: root.battCharging ? root.green : root.battery < 0.2 ? root.red : root.fg
+
             active: root.mode === "info"
             slide: root.pageSlide("info")
 
-            Column {
-                anchors.left: parent.left
-                anchors.leftMargin: 28
-                y: 22
-                spacing: 2
+            // Halo céleste discret derrière le cadran horloger
+            Rectangle {
+                x: 12
+                y: 12
+                width: 204
+                height: 68
+                radius: 34
+                opacity: Colours.light ? 0.35 : 0.58
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.35; color: Qt.alpha(root.idleAccent, 0.13) }
+                    GradientStop { position: 0.72; color: Qt.alpha(root.idleAccent, 0.05) }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+            }
 
+            // Caustique optique sur la lèvre inférieure de la page Infos + point lumineux sous le pointeur
+            Rectangle {
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 1.5
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.max(120, parent.width - 72)
+                height: 1
+                opacity: root.hovered ? 0.36 : 0.18
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.25; color: Qt.alpha("#ffffff", Colours.light ? 0.45 : 0.6) }
+                    GradientStop { position: 0.5; color: Qt.alpha(root.idleAccent, 0.9) }
+                    GradientStop { position: 0.75; color: Qt.alpha("#ffffff", Colours.light ? 0.45 : 0.6) }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+            }
+
+            Rectangle {
+                x: Math.max(32, Math.min(infoFace.width - width - 32, infoFace.hoverX - width / 2))
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 1.5
+                width: 84
+                height: 1.5
+                radius: 0.75
+                opacity: root.hovered ? 0.65 : 0
+                visible: opacity > 0.01
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.5; color: "#ffffff" }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+
+                Behavior on x { NumberAnimation { duration: 95; easing.type: Easing.OutCubic } }
+                Behavior on opacity { NumberAnimation { duration: 180 } }
+            }
+
+            // ── Colonne gauche : Horloge roulante + secondes chronographe · Date éditoriale · Piste bureaux & raccourcis ──
+            Item {
+                id: infoClockCol
+
+                x: 24
+                y: 16
+                width: 182
+                height: 78
+
+                // Horloge roulante 25.5 pt + rubis battant (uniquement page Infos active) + pilule secondes chronographe
                 Row {
-                    spacing: 1
+                    id: infoClockRow
 
-                    StyledText {
-                        anchors.baseline: infoMinTxt.baseline
-                        text: Time.format("HH")
-                        color: root.fg
-                        font.pointSize: 26
-                        font.weight: Font.Bold
-                        font.features: {
-                            "tnum": 1
-                        }
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    spacing: 0
+
+                    Row {
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: -0.5
+
+                        ClockDigit { digit: root.idleHourStr.charAt(0) || "0"; ptSize: 25.5 }
+                        ClockDigit { digit: root.idleHourStr.charAt(1) || "0"; ptSize: 25.5 }
                     }
-                    StyledText {
-                        anchors.baseline: infoMinTxt.baseline
-                        text: ":"
-                        color: root.accent
-                        font.pointSize: 24
-                        font.weight: Font.Bold
-                        opacity: (Time.date.getSeconds() % 2 === 0) ? 0.95 : 0.35
 
-                        Behavior on opacity {
-                            NumberAnimation {
-                                duration: 420
-                                easing.type: Easing.InOutSine
+                    Item {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 13
+                        height: 26
+
+                        Column {
+                            anchors.centerIn: parent
+                            spacing: 5.5
+                            opacity: root.mode === "info" ? (Time.seconds % 2 === 0 ? 1.0 : 0.42) : 0.9
+
+                            Behavior on opacity {
+                                NumberAnimation {
+                                    duration: 360
+                                    easing.type: Easing.InOutSine
+                                }
+                            }
+
+                            Repeater {
+                                model: 2
+
+                                Rectangle {
+                                    required property int index
+
+                                    width: 4.4
+                                    height: 4.4
+                                    radius: 2.2
+                                    color: root.idleAccent
+
+                                    Behavior on color { ColorAnimation { duration: 420 } }
+
+                                    Rectangle {
+                                        anchors.centerIn: parent
+                                        width: 1.6
+                                        height: 1.6
+                                        radius: 0.8
+                                        color: "#ffffff"
+                                        opacity: 0.58
+                                    }
+                                }
                             }
                         }
                     }
-                    StyledText {
-                        id: infoMinTxt
 
-                        text: Time.format("mm")
-                        color: root.fg
-                        font.pointSize: 26
-                        font.weight: Font.Bold
-                        font.features: {
-                            "tnum": 1
-                        }
+                    Row {
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: -0.5
+
+                        ClockDigit { digit: root.idleMinStr.charAt(0) || "0"; ptSize: 25.5 }
+                        ClockDigit { digit: root.idleMinStr.charAt(1) || "0"; ptSize: 25.5 }
                     }
-                    Rectangle {
-                        anchors.verticalCenter: infoMinTxt.verticalCenter
+
+                    // Pilule concentrique des secondes avec micro-barre chronographe (0 → 59 s)
+                    Item {
+                        anchors.verticalCenter: parent.verticalCenter
                         anchors.verticalCenterOffset: 2
-                        width: infoSecTxt.implicitWidth + 9
-                        height: 17
-                        radius: 5
-                        color: Qt.alpha(root.fg, 0.06)
-                        border.width: 0.5
-                        border.color: Qt.alpha(root.fg, 0.14)
+                        width: 33
+                        height: 21
 
-                        StyledText {
-                            id: infoSecTxt
+                        Rectangle {
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 26
+                            height: 20
+                            radius: 10
+                            color: Qt.alpha(root.fg, 0.07)
+                            border.width: 0.5
+                            border.color: Qt.alpha(root.fg, 0.16)
+                            clip: true
 
-                            anchors.centerIn: parent
-                            text: Time.format("ss")
-                            color: root.fgDim
-                            font.pointSize: 8
-                            font.weight: Font.Bold
-                            font.features: {
-                                "tnum": 1
+                            // Reflet spéculaire supérieur
+                            Rectangle {
+                                anchors.top: parent.top
+                                anchors.topMargin: 1
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                width: 13
+                                height: 1
+                                radius: 0.5
+                                color: "#ffffff"
+                                opacity: Colours.light ? 0.35 : 0.22
+                            }
+
+                            StyledText {
+                                id: infoSecTxt
+
+                                anchors.centerIn: parent
+                                anchors.verticalCenterOffset: -0.5
+                                text: Time.format("ss")
+                                color: root.fgDim
+                                font.pointSize: 8
+                                font.weight: Font.Bold
+                                font.features: { "tnum": 1 }
+                            }
+
+                            // Piste et barre de progression fine de la minute en cours
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.leftMargin: 5
+                                anchors.rightMargin: 5
+                                anchors.bottom: parent.bottom
+                                anchors.bottomMargin: 1.5
+                                height: 1.5
+                                radius: 0.75
+                                color: Qt.alpha(root.fg, 0.12)
+
+                                Rectangle {
+                                    anchors.left: parent.left
+                                    anchors.top: parent.top
+                                    anchors.bottom: parent.bottom
+                                    width: Math.max(2, parent.width * (Time.seconds / 59))
+                                    radius: 0.75
+                                    color: root.idleAccent
+                                    opacity: 0.92
+
+                                    Behavior on width {
+                                        NumberAnimation { duration: 280; easing.type: Easing.OutCubic }
+                                    }
+                                    Behavior on color { ColorAnimation { duration: 420 } }
+                                }
                             }
                         }
                     }
                 }
+
+                // Date éditoriale complète
                 StyledText {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    y: 41
+                    elide: Text.ElideRight
                     text: I18n.locale.toString(Time.date, I18n.isFr ? "dddd d MMMM" : "dddd, MMMM d").toUpperCase()
                     color: root.fgDim
-                    font.pointSize: 7.5
+                    font.pointSize: 7.8
                     font.weight: Font.Bold
                     font.letterSpacing: 0.7
                 }
-            }
 
-            // Météo détaillée + batterie dans un puits de télémétrie biseauté
-            Rectangle {
-                anchors.right: parent.right
-                anchors.rightMargin: 26
-                y: 18
-                width: Math.max(infoTelCol.implicitWidth + 22, 148)
-                height: 66
-                radius: 13
-                color: Qt.alpha(root.fg, 0.05)
-                border.width: 0.5
-                border.color: Qt.alpha(root.fg, 0.12)
+                // Barre inférieure gauche : piste vitrée des bureaux + raccourcis Horloge & Centre de contrôle
+                Row {
+                    anchors.left: parent.left
+                    anchors.bottom: parent.bottom
+                    spacing: 6
 
-                Column {
-                    id: infoTelCol
+                    // Piste de bureaux en continuité visuelle directe avec l'île au repos
+                    Rectangle {
+                        id: infoWsTrack
 
-                    anchors.right: parent.right
-                    anchors.rightMargin: 11
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: 2
+                        readonly property bool compactNum: root.wsLast > 5 || root.wsId > 5
 
-                    Row {
-                        anchors.right: parent.right
-                        spacing: 6
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: Island.workspaces
+                        width: compactNum ? Math.max(22, infoWsNum.implicitWidth + 10) : infoWsBeads.implicitWidth + 12
+                        height: 18
+                        radius: 9
+                        color: Qt.alpha(root.fg, 0.065)
+                        border.width: 0.5
+                        border.color: Qt.alpha(root.fg, 0.14)
 
-                        MaterialIcon {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: Weather.icon
-                            color: root.accent
-                            fontStyle: Tokens.font.icon.size(16).build()
-                            fill: 1
+                        Rectangle {
+                            anchors.top: parent.top
+                            anchors.topMargin: 1
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: parent.width * 0.55
+                            height: 1
+                            radius: 0.5
+                            color: "#ffffff"
+                            opacity: Colours.light ? 0.35 : 0.2
                         }
-                        StyledText {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: Weather.cc ? Weather.temp : "—"
-                            color: root.fg
-                            font.pointSize: 15
-                            font.weight: Font.Bold
-                            font.features: {
-                                "tnum": 1
-                            }
-                        }
-                        StyledText {
-                            anchors.verticalCenter: parent.verticalCenter
-                            visible: !!Weather.cc
-                            text: (Weather.description || "").toUpperCase()
-                            color: root.fgDim
-                            font.pointSize: 7
-                            font.weight: Font.Bold
-                            font.letterSpacing: 0.5
-                        }
-                    }
-                    Row {
-                        anchors.right: parent.right
-                        spacing: 9
 
-                        StyledText {
-                            anchors.verticalCenter: parent.verticalCenter
-                            visible: !!Weather.cc
-                            text: I18n.tr("Ressenti %1 · %2 %").arg(Weather.feelsLike).arg(Weather.humidity)
-                            color: root.fgDim
-                            font.pointSize: 7.8
-                            font.features: {
-                                "tnum": 1
-                            }
-                        }
                         Row {
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: 5
-                            visible: UPower.displayDevice.isLaptopBattery
+                            id: infoWsBeads
 
-                            StyledText {
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: `${Math.round(root.battery * 100)} %`
-                                color: root.battCharging ? root.green : root.battery < 0.2 ? root.red : root.fg
-                                font.pointSize: 8
-                                font.weight: Font.Bold
-                                font.features: {
-                                    "tnum": 1
+                            anchors.centerIn: parent
+                            visible: !infoWsTrack.compactNum
+                            spacing: 3.5
+
+                            Repeater {
+                                model: infoWsTrack.compactNum ? 0 : Math.min(root.wsLast, 5)
+
+                                Item {
+                                    id: iWsBead
+
+                                    required property int index
+                                    readonly property int wsNum: index + 1
+                                    readonly property bool isCurrent: wsNum === root.wsId
+                                    readonly property bool isOccupied: !!root.wsOccupied[wsNum]
+
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: isCurrent ? 13 : (isOccupied ? 4.5 : 3.5)
+                                    height: 16
+
+                                    Behavior on width { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+
+                                    Rectangle {
+                                        anchors.centerIn: parent
+                                        width: parent.width
+                                        height: iWsBead.isCurrent ? 4.5 : (iWsBead.isOccupied ? 4.5 : 3.5)
+                                        radius: height / 2
+                                        color: iWsBead.isCurrent ? root.idleAccent : Qt.alpha(root.fg, iWsBead.isOccupied ? 0.58 : 0.24)
+
+                                        Behavior on color { ColorAnimation { duration: 220 } }
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        anchors.margins: -2
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            if (iWsBead.wsNum !== root.wsId)
+                                                Hypr.dispatch(Hypr.usingLua ? `hl.dsp.focus({ workspace = ${iWsBead.wsNum} })` : `workspace ${iWsBead.wsNum}`);
+                                        }
+                                    }
                                 }
                             }
-                            BatteryGlyph {
-                                anchors.verticalCenter: parent.verticalCenter
-                                pct: root.battery
-                                charging: root.battCharging
-                            }
+                        }
+
+                        StyledText {
+                            id: infoWsNum
+
+                            anchors.centerIn: parent
+                            visible: infoWsTrack.compactNum
+                            text: `${root.wsId}`
+                            color: root.idleAccent
+                            font.pointSize: 7.8
+                            font.weight: Font.Bold
+                            font.features: { "tnum": 1 }
+                        }
+                    }
+
+                    // Bouton rapide Horloge / Minuteur
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 20
+                        height: 18
+                        radius: 9
+                        scale: infoClockBtn.pressed ? 0.9 : 1
+                        color: Qt.alpha(root.fg, infoClockBtn.containsMouse ? 0.14 : 0.065)
+                        border.width: 0.5
+                        border.color: Qt.alpha(root.fg, infoClockBtn.containsMouse ? 0.26 : 0.14)
+
+                        Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        MaterialIcon {
+                            anchors.centerIn: parent
+                            text: "schedule"
+                            color: infoClockBtn.containsMouse ? root.fg : root.fgDim
+                            fontStyle: Tokens.font.icon.size(10.5).build()
+                            fill: 1
+                        }
+
+                        MouseArea {
+                            id: infoClockBtn
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.openInfoDrop("clock")
+                        }
+                    }
+
+                    // Bouton rapide Centre de contrôle
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 20
+                        height: 18
+                        radius: 9
+                        scale: infoCcBtn.pressed ? 0.9 : 1
+                        color: Qt.alpha(root.fg, infoCcBtn.containsMouse ? 0.14 : 0.065)
+                        border.width: 0.5
+                        border.color: Qt.alpha(root.fg, infoCcBtn.containsMouse ? 0.26 : 0.14)
+
+                        Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        MaterialIcon {
+                            anchors.centerIn: parent
+                            text: "tune"
+                            color: infoCcBtn.containsMouse ? root.fg : root.fgDim
+                            fontStyle: Tokens.font.icon.size(10.5).build()
+                            fill: 1
+                        }
+
+                        MouseArea {
+                            id: infoCcBtn
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.openInfoDrop("controlCenter")
                         }
                     }
                 }
             }
 
-            // Pastilles d'état : alarme, Bluetooth, caféine, nuit, tâches…
+            // ── Zone droite : Deux puits de verre distincts (Météo atmosphérique + Énergie) ──
+            Item {
+                id: infoCardsZone
+
+                anchors.left: infoClockCol.right
+                anchors.leftMargin: 12
+                anchors.right: parent.right
+                anchors.rightMargin: 24
+                y: 16
+                height: 78
+
+                // Puits 1 : Météo atmosphérique (cliquable pour rafraîchir)
+                Rectangle {
+                    id: infoWeatherCard
+
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    width: parent.width - (UPower.displayDevice.isLaptopBattery ? 124 : 0)
+                    radius: 16
+                    scale: infoWeatherArea.pressed ? 0.985 : 1
+                    border.width: 0.5
+                    border.color: Weather.cc ? Qt.alpha(root.idleWeatherTint, infoWeatherArea.containsMouse ? 0.42 : 0.24) : Qt.alpha(root.fg, 0.14)
+                    gradient: Gradient {
+                        GradientStop {
+                            position: 0.0
+                            color: Weather.cc ? Qt.alpha(root.idleWeatherTint, Colours.light ? 0.12 : 0.1) : Qt.alpha(root.fg, 0.06)
+                        }
+                        GradientStop {
+                            position: 1.0
+                            color: Qt.alpha(root.fg, 0.04)
+                        }
+                    }
+
+                    Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+                    Behavior on border.color { ColorAnimation { duration: 180 } }
+
+                    // Reflet spéculaire supérieur sur le puits météo
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.topMargin: 1
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.leftMargin: 14
+                        anchors.rightMargin: 14
+                        height: 1
+                        radius: 0.5
+                        color: "#ffffff"
+                        opacity: Colours.light ? 0.32 : 0.16
+                    }
+
+                    // Haut de la carte : emblème solaire/lunaire + température + ville & condition
+                    Item {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        anchors.topMargin: 11
+                        height: 36
+
+                        // Emblème météo lumineux avec halo
+                        Item {
+                            id: infoWeatherGlyph
+
+                            anchors.left: parent.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 34
+                            height: 34
+
+                            Rectangle {
+                                anchors.centerIn: parent
+                                width: 34
+                                height: 34
+                                radius: 17
+                                color: Weather.cc ? root.idleWeatherTint : root.fgDim
+                                opacity: Weather.cc ? (Colours.light ? 0.15 : 0.18) : 0.08
+                            }
+
+                            Rectangle {
+                                anchors.centerIn: parent
+                                width: 26
+                                height: 26
+                                radius: 13
+                                color: Weather.cc ? Qt.alpha(root.idleWeatherTint, 0.14) : Qt.alpha(root.fg, 0.06)
+                                border.width: 0.5
+                                border.color: Weather.cc ? Qt.alpha(root.idleWeatherTint, 0.34) : Qt.alpha(root.fg, 0.14)
+                            }
+
+                            MaterialIcon {
+                                anchors.centerIn: parent
+                                text: Weather.cc ? root.idleWeatherIcon : "cloud_off"
+                                color: Weather.cc ? root.idleWeatherTint : root.fgDim
+                                fontStyle: Tokens.font.icon.size(16).build()
+                                fill: 1
+                            }
+                        }
+
+                        StyledText {
+                            id: infoTempBig
+
+                            anchors.left: infoWeatherGlyph.right
+                            anchors.leftMargin: 8
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: Weather.cc ? root.idleTempShort : "—"
+                            color: root.fg
+                            font.pointSize: 17
+                            font.weight: Font.Bold
+                            font.features: { "tnum": 1 }
+                        }
+
+                        Column {
+                            anchors.left: infoTempBig.right
+                            anchors.leftMargin: 8
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 1
+
+                            StyledText {
+                                width: parent.width
+                                horizontalAlignment: Text.AlignRight
+                                elide: Text.ElideRight
+                                visible: !!Weather.city
+                                text: (Weather.city || "").toUpperCase()
+                                color: Weather.cc ? root.idleWeatherTint : root.fgDim
+                                font.pointSize: 6.8
+                                font.weight: Font.Bold
+                                font.letterSpacing: 0.65
+                            }
+
+                            StyledText {
+                                width: parent.width
+                                horizontalAlignment: Text.AlignRight
+                                elide: Text.ElideRight
+                                text: Weather.cc ? (Weather.description || "") : I18n.tr("Météo indisponible")
+                                color: root.fgDim
+                                font.pointSize: 7.8
+                                font.weight: Font.DemiBold
+                            }
+                        }
+                    }
+
+                    // Filet interne discret
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        anchors.bottom: infoWeatherFoot.top
+                        anchors.bottomMargin: 6
+                        height: 1
+                        visible: !!Weather.cc
+                        gradient: Gradient {
+                            orientation: Gradient.Horizontal
+                            GradientStop { position: 0.0; color: "transparent" }
+                            GradientStop { position: 0.5; color: Qt.alpha(root.fg, 0.12) }
+                            GradientStop { position: 1.0; color: "transparent" }
+                        }
+                    }
+
+                    // Bas de la carte : ressenti · humidité · min/max du jour (ou vent)
+                    Row {
+                        id: infoWeatherFoot
+
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.bottom: parent.bottom
+                        anchors.bottomMargin: 8
+                        visible: !!Weather.cc
+                        spacing: 10
+
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: I18n.tr("Ress. %1").arg(Weather.feelsLike.replace(/[CF]$/, ""))
+                            color: root.fgDim
+                            font.pointSize: 7.5
+                            font.weight: Font.Medium
+                            font.features: { "tnum": 1 }
+                        }
+
+                        Row {
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 2
+
+                            MaterialIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "water_drop"
+                                color: Colours.light ? "#0284c7" : "#38bdf8"
+                                fontStyle: Tokens.font.icon.size(9.5).build()
+                                fill: 1
+                            }
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: `${Weather.humidity}%`
+                                color: root.fgDim
+                                font.pointSize: 7.5
+                                font.weight: Font.Medium
+                                font.features: { "tnum": 1 }
+                            }
+                        }
+
+                        Row {
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: root.infoWeatherRange !== ""
+                            spacing: 2
+
+                            MaterialIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: Weather.forecast && Weather.forecast.length > 0 ? "thermostat" : "air"
+                                color: root.fgDim
+                                fontStyle: Tokens.font.icon.size(9.5).build()
+                                fill: 1
+                            }
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: root.infoWeatherRange
+                                color: root.fgDim
+                                font.pointSize: 7.5
+                                font.weight: Font.Medium
+                                font.features: { "tnum": 1 }
+                            }
+                        }
+                    }
+
+                    MouseArea {
+                        id: infoWeatherArea
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: Weather.reload()
+                    }
+                }
+
+                // Puits 2 : Énergie & batterie de précision (cliquable → Centre de contrôle)
+                Rectangle {
+                    id: infoBattCard
+
+                    visible: UPower.displayDevice.isLaptopBattery
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    width: 116
+                    radius: 16
+                    scale: infoBattArea.pressed ? 0.98 : 1
+                    border.width: 0.5
+                    border.color: Qt.alpha(infoFace.battTint, root.battCharging || root.battery < 0.2 ? (infoBattArea.containsMouse ? 0.5 : 0.34) : (infoBattArea.containsMouse ? 0.28 : 0.14))
+                    gradient: Gradient {
+                        GradientStop {
+                            position: 0.0
+                            color: Qt.alpha(infoFace.battTint, root.battCharging || root.battery < 0.2 ? (Colours.light ? 0.14 : 0.13) : 0.065)
+                        }
+                        GradientStop {
+                            position: 1.0
+                            color: Qt.alpha(root.fg, 0.035)
+                        }
+                    }
+
+                    Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+                    Behavior on border.color { ColorAnimation { duration: 180 } }
+
+                    // Reflet spéculaire supérieur sur le puits batterie
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.topMargin: 1
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.leftMargin: 14
+                        anchors.rightMargin: 14
+                        height: 1
+                        radius: 0.5
+                        color: "#ffffff"
+                        opacity: Colours.light ? 0.32 : 0.16
+                    }
+
+                    // Haut : Pourcentage tabulaire + glyphe batterie
+                    Item {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 11
+                        anchors.topMargin: 12
+                        height: 22
+
+                        StyledText {
+                            anchors.left: parent.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: `${Math.round(root.battery * 100)}%`
+                            color: root.battCharging ? root.green : root.battery < 0.2 ? root.red : root.fg
+                            font.pointSize: 13.5
+                            font.weight: Font.Bold
+                            font.features: { "tnum": 1 }
+                        }
+
+                        BatteryGlyph {
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            pct: root.battery
+                            charging: root.battCharging
+                        }
+                    }
+
+                    // Milieu : Jauge énergétique liquide horizontale
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        y: 44
+                        height: 4
+                        radius: 2
+                        color: Qt.alpha(root.fg, 0.1)
+
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            width: Math.max(4, parent.width * Math.max(0, Math.min(1, root.battery)))
+                            radius: 2
+                            gradient: Gradient {
+                                orientation: Gradient.Horizontal
+                                GradientStop {
+                                    position: 0.0
+                                    color: root.battCharging ? "#22c55e" : root.battery < 0.2 ? "#ff453a" : root.accent
+                                }
+                                GradientStop {
+                                    position: 1.0
+                                    color: root.battCharging ? "#34d399" : root.battery < 0.2 ? "#ff6b6b" : root.fg
+                                }
+                            }
+
+                            Behavior on width { NumberAnimation { duration: 600; easing.type: Easing.OutCubic } }
+                        }
+                    }
+
+                    // Bas : Autonomie / puissance en Watts / état de charge
+                    StyledText {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        anchors.bottomMargin: 9
+                        elide: Text.ElideRight
+                        text: root.infoBattSub
+                        color: root.battCharging ? root.green : root.battery < 0.2 ? root.red : root.fgDim
+                        font.pointSize: 7.4
+                        font.weight: Font.DemiBold
+                        font.features: { "tnum": 1 }
+                    }
+
+                    MouseArea {
+                        id: infoBattArea
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.openInfoDrop("controlCenter")
+                    }
+                }
+            }
+
+            // Séparateur horizontal discret avant les pastilles d'action
+            Rectangle {
+                x: 26
+                y: 100
+                width: parent.width - 52
+                height: 1
+                visible: root.infoChips.length > 0
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.2; color: Qt.alpha(root.fg, 0.12) }
+                    GradientStop { position: 0.8; color: Qt.alpha(root.fg, 0.12) }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+            }
+
+            // ── Pastilles d'état concentriques & interactives (alarme, Bluetooth, caféine, nuit, tâches, notifs, son, VPN) ──
             Flow {
                 id: infoFlow
 
-                x: 26
-                y: 92
-                width: parent.width - 52
+                x: 24
+                y: 108
+                width: parent.width - 48
                 spacing: 6
 
                 add: Transition {
                     NumberAnimation {
                         property: "scale"
-                        from: 0.6
+                        from: 0.65
                         to: 1
-                        duration: 320
+                        duration: 300
                         easing.type: Easing.OutBack
                     }
                     NumberAnimation {
                         property: "opacity"
                         from: 0
                         to: 1
-                        duration: 220
+                        duration: 200
                     }
                 }
                 move: Transition {
                     NumberAnimation {
                         properties: "x,y"
-                        duration: 280
+                        duration: 260
                         easing.type: Easing.OutCubic
                     }
                 }
@@ -8844,18 +9680,35 @@ Item {
 
                         required property var modelData
 
-                        width: Math.min(chipRow.implicitWidth + 18, infoFlow.width)
-                        height: 25
-                        radius: 8
-                        color: Qt.alpha(chip.modelData.tint, 0.11)
+                        width: Math.min(chipRow.implicitWidth + 20, infoFlow.width)
+                        height: 26
+                        radius: 13
+                        scale: chipArea.pressed ? 0.96 : 1
+                        color: Qt.alpha(chip.modelData.tint, chipArea.pressed ? 0.26 : chipArea.containsMouse ? 0.2 : 0.12)
                         border.width: 0.5
-                        border.color: Qt.alpha(chip.modelData.tint, 0.28)
+                        border.color: Qt.alpha(chip.modelData.tint, chipArea.containsMouse ? 0.52 : 0.3)
+
+                        Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+                        Behavior on color { ColorAnimation { duration: 150 } }
+                        Behavior on border.color { ColorAnimation { duration: 150 } }
+
+                        // Reflet spéculaire supérieur sur la pastille
+                        Rectangle {
+                            anchors.top: parent.top
+                            anchors.topMargin: 1
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: Math.max(12, parent.width - 18)
+                            height: 1
+                            radius: 0.5
+                            color: "#ffffff"
+                            opacity: Colours.light ? 0.32 : 0.2
+                        }
 
                         Row {
                             id: chipRow
 
                             anchors.verticalCenter: parent.verticalCenter
-                            x: 9
+                            x: 10
                             spacing: 5
 
                             MaterialIcon {
@@ -8867,154 +9720,675 @@ Item {
                             }
                             StyledText {
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: Math.min(implicitWidth, infoFlow.width - 50)
+                                width: Math.min(implicitWidth, infoFlow.width - 52)
                                 elide: Text.ElideRight
                                 text: chip.modelData.text
                                 color: root.fg
                                 font.pointSize: 8.2
                                 font.weight: Font.DemiBold
-                                font.features: {
-                                    "tnum": 1
-                                }
+                                font.features: { "tnum": 1 }
                             }
+                        }
+
+                        MouseArea {
+                            id: chipArea
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.runInfoChip(chip.modelData.action ?? "")
                         }
                     }
                 }
             }
         }
 
-        // ── performances en direct : CPU, RAM, disque, réseau ──
+        // ── performances & processus en direct : 4 cadrans Liquid Glass, oscilloscope réseau, top 3 processus + Pulsar ──
         Face {
+            id: perfFace
+
+            readonly property real hoverX: Math.max(0, Math.min(width, islandHover.point.position.x - (root.width - width) / 2))
+
             active: root.mode === "perf"
             slide: root.pageSlide("perf")
 
-            Row {
-                anchors.left: parent.left
-                anchors.leftMargin: 24
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.verticalCenterOffset: -4
-                spacing: 8
-
-                PerfRing {
-                    icon: "memory"
-                    label: "CPU"
-                    value: Cpu.percentage
-                    sub: root.cpuGhz > 0 ? `${root.cpuGhz.toFixed(1).replace(".", ",")} GHz` : ""
-                }
-                // Température en direct : bleu au calme, orange vers 71 °C, rouge vers 86 °C
-                PerfRing {
-                    icon: Cpu.temperature >= 86 ? "local_fire_department" : "device_thermostat"
-                    label: I18n.tr("Temp.")
-                    value: Math.max(0, Math.min(1, (Cpu.temperature - 35) / 60))
-                    centerText: Cpu.temperature > 0 ? `${Math.round(Cpu.temperature)}°` : "—"
-                    sub: root.fanRpm > 0 ? I18n.tr("Ventilo %1").arg(root.fanRpm) : root.fanRpm === 0 ? I18n.tr("Ventilo arrêté") : root.tempPeak > 0 ? I18n.tr("Max %1°").arg(Math.round(root.tempPeak)) : ""
-                }
-                PerfRing {
-                    icon: "memory_alt"
-                    label: "RAM"
-                    value: Memory.percentage
-                    sub: root.kibText(Memory.used, Memory.total)
-                }
-                PerfRing {
-                    icon: "hard_drive"
-                    label: "Disque"
-                    value: Storage.primaryDisk?.perc ?? 0
-                    sub: Storage.primaryDisk ? root.freeText(Storage.primaryDisk.total - Storage.primaryDisk.used) : ""
+            // Caustique optique sur la lèvre inférieure + point lumineux sous le pointeur
+            Rectangle {
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 1.5
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.max(120, parent.width - 72)
+                height: 1
+                opacity: root.hovered ? 0.36 : 0.18
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.25; color: Qt.alpha("#ffffff", Colours.light ? 0.45 : 0.6) }
+                    GradientStop { position: 0.5; color: Qt.alpha(root.idleAccent, 0.9) }
+                    GradientStop { position: 0.75; color: Qt.alpha("#ffffff", Colours.light ? 0.45 : 0.6) }
+                    GradientStop { position: 1.0; color: "transparent" }
                 }
             }
 
-            // Réseau : débit descendant / montant + courbe dans un puits biseauté
+            Rectangle {
+                x: Math.max(32, Math.min(perfFace.width - width - 32, perfFace.hoverX - width / 2))
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 1.5
+                width: 84
+                height: 1.5
+                radius: 0.75
+                opacity: root.hovered ? 0.65 : 0
+                visible: opacity > 0.01
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.5; color: "#ffffff" }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+
+                Behavior on x { NumberAnimation { duration: 95; easing.type: Easing.OutCubic } }
+                Behavior on opacity { NumberAnimation { duration: 180 } }
+            }
+
+            // ── Rangée supérieure : 4 cadrans chronographes en verre + oscilloscope réseau double canal ──
             Item {
+                id: perfTopRow
+
+                anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.rightMargin: 24
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.verticalCenterOffset: -4
-                width: 142
-                height: 92
+                anchors.leftMargin: 22
+                anchors.rightMargin: 22
+                y: 16
+                height: 98
 
+                Row {
+                    id: perfRingsRow
+
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 7
+
+                    PerfRing {
+                        icon: "memory"
+                        label: "CPU"
+                        value: Cpu.percentage
+                        sub: root.cpuGhz > 0 ? `${root.cpuGhz.toFixed(1).replace(".", ",")} GHz` : ""
+                    }
+                    // Température en direct : cyan au calme, accent tempéré, orange 70 °C, rouge 85 °C
+                    PerfRing {
+                        icon: Cpu.temperature >= 85 ? "local_fire_department" : "device_thermostat"
+                        label: I18n.tr("Temp.")
+                        thermal: true
+                        rawTemp: Cpu.temperature
+                        value: Math.max(0, Math.min(1, (Cpu.temperature - 35) / 60))
+                        centerText: Cpu.temperature > 0 ? `${Math.round(Cpu.temperature)}°` : "—"
+                        sub: root.fanRpm > 0 ? `${root.fanRpm} tr` : root.fanRpm === 0 ? I18n.tr("Ventilo arrêté") : root.tempPeak > 0 ? I18n.tr("Max %1°").arg(Math.round(root.tempPeak)) : ""
+                    }
+                    PerfRing {
+                        icon: "memory_alt"
+                        label: "RAM"
+                        value: Memory.percentage
+                        sub: root.kibText(Memory.used, Memory.total).replace(".", ",")
+                    }
+                    PerfRing {
+                        icon: "hard_drive"
+                        label: I18n.tr("Disque")
+                        value: Storage.primaryDisk?.perc ?? 0
+                        sub: Storage.primaryDisk ? root.freeText(Storage.primaryDisk.total - Storage.primaryDisk.used).replace(" libres", "").replace(" free", "") : ""
+                    }
+                }
+
+                // Puits oscilloscope réseau double canal (cyan ↓ / violet ↑)
                 Rectangle {
-                    anchors.fill: parent
-                    radius: 15
-                    color: Qt.alpha(root.fg, 0.05)
-                    border.width: 0.5
-                    border.color: Qt.alpha(root.fg, 0.14)
-                    clip: true
+                    id: perfNetCard
 
+                    readonly property color dlColor: Colours.light ? "#0284c7" : "#38bdf8"
+                    readonly property color ulColor: Colours.light ? "#7c3aed" : "#a78bfa"
+
+                    anchors.left: perfRingsRow.right
+                    anchors.leftMargin: 8
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    radius: 16
+                    scale: perfNetArea.pressed ? 0.985 : 1
+                    border.width: 0.5
+                    border.color: Qt.alpha(dlColor, perfNetArea.containsMouse ? 0.44 : 0.22)
+                    clip: true
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: Qt.alpha(perfNetCard.dlColor, Colours.light ? 0.1 : 0.085) }
+                        GradientStop { position: 1.0; color: Qt.alpha(root.fg, 0.035) }
+                    }
+
+                    Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+                    Behavior on border.color { ColorAnimation { duration: 180 } }
+
+                    // Reflet spéculaire supérieur
                     Rectangle {
                         anchors.top: parent.top
+                        anchors.topMargin: 1
                         anchors.left: parent.left
                         anchors.right: parent.right
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
+                        anchors.leftMargin: 14
+                        anchors.rightMargin: 14
                         height: 1
-                        color: Qt.alpha("#ffffff", 0.14)
+                        radius: 0.5
+                        color: "#ffffff"
+                        opacity: Colours.light ? 0.34 : 0.18
                     }
-                }
 
-                SparklineItem {
-                    id: netSpark
+                    // En-tête réseau + témoin d'activité
+                    Item {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.leftMargin: 11
+                        anchors.rightMargin: 11
+                        anchors.topMargin: 8
+                        height: 12
 
-                    property real targetMax: 1024
-                    property real smoothMax: targetMax
-
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.bottom: parent.bottom
-                    anchors.margins: 6
-                    height: 34
-                    line1: NetworkUsage.uploadBuffer // qmllint disable missing-type
-                    line1Color: Colours.palette.m3secondary
-                    line1FillAlpha: 0.12
-                    line2: NetworkUsage.downloadBuffer // qmllint disable missing-type
-                    line2Color: Colours.palette.m3tertiary
-                    line2FillAlpha: 0.22
-                    maxValue: smoothMax
-                    historyLength: NetworkUsage.historyLength
-
-                    Connections {
-                        function onValuesChanged(): void {
-                            netSpark.targetMax = Math.max(NetworkUsage.downloadBuffer.maximum, NetworkUsage.uploadBuffer.maximum, 1024);
-                            netSlide.restart();
+                        StyledText {
+                            anchors.left: parent.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: I18n.tr("Réseau").toUpperCase()
+                            color: root.fgDim
+                            font.pointSize: 6.5
+                            font.weight: Font.Bold
+                            font.letterSpacing: 0.7
                         }
 
-                        target: NetworkUsage.downloadBuffer
+                        Rectangle {
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 5.5
+                            height: 5.5
+                            radius: 2.75
+                            color: (NetworkUsage.downloadSpeed > 128 || NetworkUsage.uploadSpeed > 128) ? perfNetCard.dlColor : root.green
+                            opacity: (Nmcli.wifiEnabled || Nmcli.hasAvailableEthernet) ? 0.9 : 0.3
+                        }
                     }
 
-                    NumberAnimation {
-                        id: netSlide
+                    // Débits descendant / montant
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.leftMargin: 10
+                        anchors.rightMargin: 10
+                        anchors.topMargin: 21
+                        spacing: 0
 
-                        target: netSpark
-                        property: "slideProgress"
-                        from: 0
-                        to: 1
-                        duration: GlobalConfig.dashboard.resourceUpdateInterval
+                        NetLine {
+                            icon: "south"
+                            tint: perfNetCard.dlColor
+                            speed: NetworkUsage.downloadSpeed
+                            big: true
+                        }
+                        NetLine {
+                            icon: "north"
+                            tint: perfNetCard.ulColor
+                            speed: NetworkUsage.uploadSpeed
+                        }
                     }
 
-                    Behavior on smoothMax {
+                    // Ligne de référence discrète dans la zone oscilloscope
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 8
+                        anchors.bottom: parent.bottom
+                        anchors.bottomMargin: 22
+                        height: 1
+                        color: Qt.alpha(root.fg, 0.07)
+                    }
+
+                    SparklineItem {
+                        id: netSpark
+
+                        property real targetMax: 1024
+                        property real smoothMax: targetMax
+
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        anchors.leftMargin: 6
+                        anchors.rightMargin: 6
+                        anchors.bottomMargin: 5
+                        height: 36
+                        line1: NetworkUsage.uploadBuffer // qmllint disable missing-type
+                        line1Color: perfNetCard.ulColor
+                        line1FillAlpha: 0.16
+                        line2: NetworkUsage.downloadBuffer // qmllint disable missing-type
+                        line2Color: perfNetCard.dlColor
+                        line2FillAlpha: 0.26
+                        maxValue: smoothMax
+                        historyLength: NetworkUsage.historyLength
+
+                        Connections {
+                            function onValuesChanged(): void {
+                                netSpark.targetMax = Math.max(NetworkUsage.downloadBuffer.maximum, NetworkUsage.uploadBuffer.maximum, 1024);
+                                netSlide.restart();
+                            }
+
+                            target: NetworkUsage.downloadBuffer
+                        }
+
                         NumberAnimation {
-                            duration: 600
-                            easing.type: Easing.OutCubic
+                            id: netSlide
+
+                            target: netSpark
+                            property: "slideProgress"
+                            from: 0
+                            to: 1
+                            duration: GlobalConfig.dashboard.resourceUpdateInterval
+                        }
+
+                        Behavior on smoothMax {
+                            NumberAnimation {
+                                duration: 600
+                                easing.type: Easing.OutCubic
+                            }
+                        }
+                    }
+
+                    MouseArea {
+                        id: perfNetArea
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.openMonitorApp()
+                    }
+                }
+            }
+
+            // Séparateur horizontal effilé entre capteurs et processus
+            Rectangle {
+                x: 24
+                y: 121
+                width: parent.width - 48
+                height: 1
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.2; color: Qt.alpha(root.fg, 0.13) }
+                    GradientStop { position: 0.8; color: Qt.alpha(root.fg, 0.13) }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+            }
+
+            // ── Barre d'en-tête Processus : compteur + charge, sélecteur CPU|RAM, lanceur Pulsar ──
+            Item {
+                id: perfProcHead
+
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: 22
+                anchors.rightMargin: 22
+                y: 128
+                height: 22
+
+                Row {
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 6
+
+                    MaterialIcon {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "speed"
+                        color: root.idleAccent
+                        fontStyle: Tokens.font.icon.size(12).build()
+                        fill: 1
+                    }
+
+                    StyledText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: I18n.tr("Processus").toUpperCase()
+                        color: root.fg
+                        font.pointSize: 7.3
+                        font.weight: Font.Bold
+                        font.letterSpacing: 0.7
+                    }
+
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: root.perfProcCount > 0
+                        width: procMetaTxt.implicitWidth + 12
+                        height: 17
+                        radius: 8.5
+                        color: Qt.alpha(root.fg, 0.065)
+                        border.width: 0.5
+                        border.color: Qt.alpha(root.fg, 0.13)
+
+                        StyledText {
+                            id: procMetaTxt
+
+                            anchors.centerIn: parent
+                            text: `${root.perfProcCount} · ` + I18n.tr("charge %1").arg(root.perfLoad.toFixed(2).replace(".", ","))
+                            color: root.fgDim
+                            font.pointSize: 6.9
+                            font.weight: Font.DemiBold
+                            font.features: { "tnum": 1 }
                         }
                     }
                 }
 
-                Column {
-                    anchors.left: parent.left
-                    anchors.top: parent.top
-                    anchors.leftMargin: 12
-                    anchors.topMargin: 8
-                    spacing: 1
+                Row {
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 6
 
-                    NetLine {
-                        icon: "south"
-                        tint: Colours.palette.m3tertiary
-                        speed: NetworkUsage.downloadSpeed
-                        big: true
+                    // Contrôle segmenté vitré : tri CPU | RAM en direct
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 74
+                        height: 20
+                        radius: 10
+                        color: Qt.alpha(root.fg, 0.065)
+                        border.width: 0.5
+                        border.color: Qt.alpha(root.fg, 0.14)
+
+                        // Pastille glissante active
+                        Rectangle {
+                            x: root.perfSort === "cpu" ? 2 : 37
+                            y: 2
+                            width: 35
+                            height: 16
+                            radius: 8
+                            color: Qt.alpha(root.accent, Colours.light ? 0.22 : 0.24)
+                            border.width: 0.5
+                            border.color: Qt.alpha(root.accent, 0.45)
+
+                            Behavior on x {
+                                NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+                            }
+                        }
+
+                        Row {
+                            anchors.fill: parent
+
+                            Item {
+                                width: 37
+                                height: parent.height
+
+                                StyledText {
+                                    anchors.centerIn: parent
+                                    text: "CPU"
+                                    color: root.perfSort === "cpu" ? root.fg : root.fgDim
+                                    font.pointSize: 6.8
+                                    font.weight: Font.Bold
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.perfSort = "cpu"
+                                }
+                            }
+
+                            Item {
+                                width: 37
+                                height: parent.height
+
+                                StyledText {
+                                    anchors.centerIn: parent
+                                    text: "RAM"
+                                    color: root.perfSort === "ram" ? root.fg : root.fgDim
+                                    font.pointSize: 6.8
+                                    font.weight: Font.Bold
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.perfSort = "ram"
+                                }
+                            }
+                        }
                     }
-                    NetLine {
-                        icon: "north"
-                        tint: Colours.palette.m3secondary
-                        speed: NetworkUsage.uploadSpeed
+
+                    // Bouton vitré vers Pulsar / Moniteur système complet
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: pulsarBtnRow.implicitWidth + 14
+                        height: 20
+                        radius: 10
+                        scale: pulsarArea.pressed ? 0.94 : 1
+                        color: Qt.alpha(root.accent, pulsarArea.pressed ? 0.26 : pulsarArea.containsMouse ? 0.2 : 0.12)
+                        border.width: 0.5
+                        border.color: Qt.alpha(root.accent, pulsarArea.containsMouse ? 0.52 : 0.3)
+
+                        Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+                        Behavior on color { ColorAnimation { duration: 150 } }
+                        Behavior on border.color { ColorAnimation { duration: 150 } }
+
+                        Rectangle {
+                            anchors.top: parent.top
+                            anchors.topMargin: 1
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: parent.width - 14
+                            height: 1
+                            radius: 0.5
+                            color: "#ffffff"
+                            opacity: Colours.light ? 0.34 : 0.2
+                        }
+
+                        Row {
+                            id: pulsarBtnRow
+
+                            anchors.centerIn: parent
+                            spacing: 3.5
+
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "Pulsar"
+                                color: root.fg
+                                font.pointSize: 7.2
+                                font.weight: Font.Bold
+                            }
+                            MaterialIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "open_in_new"
+                                color: root.accent
+                                fontStyle: Tokens.font.icon.size(9.5).build()
+                            }
+                        }
+
+                        MouseArea {
+                            id: pulsarArea
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.openMonitorApp()
+                        }
+                    }
+                }
+            }
+
+            // ── Top 3 des applications actives (cartes vitrées cliquables avec jauge de charge en direct) ──
+            Item {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: 22
+                anchors.rightMargin: 22
+                y: 155
+                height: 45
+
+                StyledText {
+                    anchors.centerIn: parent
+                    visible: root.topProcs.length === 0
+                    text: I18n.tr("Analyse…")
+                    color: root.fgDim
+                    font.pointSize: 8
+                    font.weight: Font.Medium
+                }
+
+                Row {
+                    anchors.fill: parent
+                    spacing: 7
+                    visible: root.topProcs.length > 0
+
+                    Repeater {
+                        model: root.topProcs
+
+                        Rectangle {
+                            id: procCard
+
+                            required property var modelData
+                            readonly property real ramShare: Memory.total > 0 ? Math.min(1, modelData.rss / Memory.total) : 0
+                            readonly property real cpuShare: Math.min(1, (modelData.cpu || 0) / 100)
+                            readonly property real ratio: root.perfSort === "ram" ? ramShare : (cpuShare > 0.005 ? cpuShare : ramShare)
+                            readonly property color loadTint: {
+                                if (root.perfSort === "ram")
+                                    return ramShare >= 0.35 ? root.red : ramShare >= 0.18 ? (Colours.light ? "#c77700" : "#ff9f0a") : root.accent;
+                                return modelData.cpu >= 50 ? root.red : modelData.cpu >= 20 ? (Colours.light ? "#c77700" : "#ff9f0a") : root.accent;
+                            }
+
+                            width: Math.floor((parent.width - 14) / 3)
+                            height: parent.height
+                            radius: 12
+                            scale: procArea.pressed ? 0.97 : 1
+                            border.width: 0.5
+                            border.color: Qt.alpha(loadTint, procArea.containsMouse ? 0.45 : 0.2)
+                            gradient: Gradient {
+                                GradientStop { position: 0.0; color: Qt.alpha(procCard.loadTint, procArea.containsMouse ? 0.14 : 0.08) }
+                                GradientStop { position: 1.0; color: Qt.alpha(root.fg, 0.03) }
+                            }
+
+                            Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+                            Behavior on border.color { ColorAnimation { duration: 180 } }
+
+                            // Reflet spéculaire supérieur sur la carte processus
+                            Rectangle {
+                                anchors.top: parent.top
+                                anchors.topMargin: 1
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.leftMargin: 12
+                                anchors.rightMargin: 12
+                                height: 1
+                                radius: 0.5
+                                color: "#ffffff"
+                                opacity: Colours.light ? 0.32 : 0.16
+                            }
+
+                            // Ligne haute : pastille de charge + nom d'appli + métrique principale
+                            Item {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                anchors.leftMargin: 10
+                                anchors.rightMargin: 10
+                                anchors.topMargin: 6
+                                height: 15
+
+                                Rectangle {
+                                    id: procDot
+
+                                    anchors.left: parent.left
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 5.5
+                                    height: 5.5
+                                    radius: 2.75
+                                    color: procCard.loadTint
+                                }
+
+                                StyledText {
+                                    anchors.left: procDot.right
+                                    anchors.leftMargin: 5.5
+                                    anchors.right: procPrimary.left
+                                    anchors.rightMargin: 6
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    elide: Text.ElideRight
+                                    text: procCard.modelData.name
+                                    color: root.fg
+                                    font.pointSize: 8.2
+                                    font.weight: Font.DemiBold
+                                }
+
+                                StyledText {
+                                    id: procPrimary
+
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: root.perfSort === "ram"
+                                        ? root.fmtRamKb(procCard.modelData.rss)
+                                        : `${procCard.modelData.cpu >= 10 ? Math.round(procCard.modelData.cpu) : procCard.modelData.cpu.toFixed(1).replace(".", ",")}%`
+                                    color: procCard.loadTint
+                                    font.pointSize: 8.4
+                                    font.weight: Font.Bold
+                                    font.features: { "tnum": 1 }
+                                }
+                            }
+
+                            // Ligne médiane : nombre de tâches/PID + métrique secondaire
+                            Item {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.leftMargin: 10
+                                anchors.rightMargin: 10
+                                y: 21
+                                height: 12
+
+                                StyledText {
+                                    anchors.left: parent.left
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: procCard.modelData.count > 1 ? `×${procCard.modelData.count}` : `#${procCard.modelData.pid}`
+                                    color: Qt.alpha(root.fg, 0.46)
+                                    font.pointSize: 6.7
+                                    font.weight: Font.Medium
+                                    font.features: { "tnum": 1 }
+                                }
+
+                                StyledText {
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: root.perfSort === "ram"
+                                        ? `${procCard.modelData.cpu >= 10 ? Math.round(procCard.modelData.cpu) : procCard.modelData.cpu.toFixed(1).replace(".", ",")}% CPU`
+                                        : root.fmtRamKb(procCard.modelData.rss)
+                                    color: root.fgDim
+                                    font.pointSize: 6.9
+                                    font.weight: Font.Medium
+                                    font.features: { "tnum": 1 }
+                                }
+                            }
+
+                            // Barre de charge liquide en bas de carte
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                anchors.leftMargin: 10
+                                anchors.rightMargin: 10
+                                anchors.bottomMargin: 5.5
+                                height: 3
+                                radius: 1.5
+                                color: Qt.alpha(root.fg, 0.09)
+
+                                Rectangle {
+                                    anchors.left: parent.left
+                                    anchors.top: parent.top
+                                    anchors.bottom: parent.bottom
+                                    width: Math.max(4, parent.width * Math.max(0.03, procCard.ratio))
+                                    radius: 1.5
+                                    color: procCard.loadTint
+
+                                    Behavior on width { NumberAnimation { duration: 480; easing.type: Easing.OutCubic } }
+                                    Behavior on color { ColorAnimation { duration: 280 } }
+                                }
+                            }
+
+                            MouseArea {
+                                id: procArea
+
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.focusProcessApp(procCard.modelData.key)
+                            }
+                        }
                     }
                 }
             }
@@ -9397,8 +10771,8 @@ Item {
         return `${v.replace(".", ",")} libres`;
     }
 
-    // Cadran chronographe 270° (puits optique interne + couleur qui chauffe avec la charge)
-    component PerfRing: Column {
+    // Cadran chronographe Liquid Glass 270° (puits vitré biseauté, arc lumineux double passe et teinte dynamique)
+    component PerfRing: Rectangle {
         id: ring
 
         property string icon
@@ -9407,10 +10781,31 @@ Item {
         property string centerText
         property real value
         property real shown: value
-        readonly property color tint: shown > 0.85 ? root.red : shown > 0.6 ? (Colours.light ? "#c77700" : "#ff9f0a") : root.accent
+        property bool thermal: false
+        property real rawTemp: 0
+        readonly property color tint: {
+            if (thermal) {
+                if (rawTemp >= 85)
+                    return root.red;
+                if (rawTemp >= 70)
+                    return Colours.light ? "#c77700" : "#ff9f0a";
+                if (rawTemp > 0 && rawTemp < 55)
+                    return Colours.light ? "#0284c7" : "#38bdf8";
+                return root.accent;
+            }
+            return shown > 0.85 ? root.red : shown > 0.6 ? (Colours.light ? "#c77700" : "#ff9f0a") : root.accent;
+        }
 
-        spacing: 2
-        width: 80
+        width: 84
+        height: 98
+        radius: 16
+        scale: ringArea.pressed ? 0.97 : 1
+        border.width: 0.5
+        border.color: Qt.alpha(tint, ringArea.containsMouse ? 0.46 : 0.22)
+        gradient: Gradient {
+            GradientStop { position: 0.0; color: Qt.alpha(ring.tint, Colours.light ? 0.11 : 0.095) }
+            GradientStop { position: 1.0; color: Qt.alpha(root.fg, 0.03) }
+        }
 
         Behavior on shown {
             NumberAnimation {
@@ -9418,110 +10813,165 @@ Item {
                 easing.type: Easing.OutCubic
             }
         }
+        Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+        Behavior on border.color { ColorAnimation { duration: 220 } }
 
-        Item {
+        // Reflet spéculaire supérieur sur la carte jauge
+        Rectangle {
+            anchors.top: parent.top
+            anchors.topMargin: 1
             anchors.horizontalCenter: parent.horizontalCenter
-            width: 56
-            height: 56
+            width: parent.width - 24
+            height: 1
+            radius: 0.5
+            color: "#ffffff"
+            opacity: Colours.light ? 0.34 : 0.18
+        }
 
-            Rectangle {
-                anchors.centerIn: parent
-                width: 40
-                height: 40
-                radius: 20
-                color: Qt.alpha(ring.tint, 0.08)
-                border.width: 0.5
-                border.color: Qt.alpha(ring.tint, 0.24)
-            }
+        Column {
+            anchors.centerIn: parent
+            anchors.verticalCenterOffset: 1
+            spacing: 1
 
-            Shape {
-                anchors.fill: parent
-                preferredRendererType: Shape.CurveRenderer
+            Item {
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: 56
+                height: 54
 
-                ShapePath {
-                    fillColor: "transparent"
-                    strokeColor: Qt.alpha(root.fg, 0.11)
-                    strokeWidth: 4.2
-                    capStyle: ShapePath.RoundCap
+                // Disque cristallin interne
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 39
+                    height: 39
+                    radius: 19.5
+                    color: Qt.alpha(ring.tint, Colours.light ? 0.11 : 0.09)
+                    border.width: 0.5
+                    border.color: Qt.alpha(ring.tint, 0.26)
 
-                    PathAngleArc {
-                        centerX: 28
-                        centerY: 28
-                        radiusX: 24.5
-                        radiusY: 24.5
-                        startAngle: 135
-                        sweepAngle: 270
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.topMargin: 1.5
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: 16
+                        height: 1
+                        radius: 0.5
+                        color: "#ffffff"
+                        opacity: Colours.light ? 0.35 : 0.22
                     }
                 }
-                ShapePath {
-                    fillColor: "transparent"
-                    strokeColor: ring.tint
-                    strokeWidth: 4.2
-                    capStyle: ShapePath.RoundCap
 
-                    Behavior on strokeColor {
-                        ColorAnimation {
-                            duration: 500
+                Shape {
+                    anchors.centerIn: parent
+                    width: 56
+                    height: 56
+                    preferredRendererType: Shape.CurveRenderer
+
+                    // Piste de fond 270°
+                    ShapePath {
+                        fillColor: "transparent"
+                        strokeColor: Qt.alpha(root.fg, 0.11)
+                        strokeWidth: 4.2
+                        capStyle: ShapePath.RoundCap
+
+                        PathAngleArc {
+                            centerX: 28
+                            centerY: 28
+                            radiusX: 24
+                            radiusY: 24
+                            startAngle: 135
+                            sweepAngle: 270
                         }
                     }
+                    // Halo lumineux doux sous l'arc actif
+                    ShapePath {
+                        fillColor: "transparent"
+                        strokeColor: Qt.alpha(ring.tint, 0.22)
+                        strokeWidth: 8.2
+                        capStyle: ShapePath.RoundCap
 
-                    PathAngleArc {
-                        centerX: 28
-                        centerY: 28
-                        radiusX: 24.5
-                        radiusY: 24.5
-                        startAngle: 135
-                        sweepAngle: Math.max(0.01, Math.min(1, ring.shown)) * 270
+                        Behavior on strokeColor { ColorAnimation { duration: 420 } }
+
+                        PathAngleArc {
+                            centerX: 28
+                            centerY: 28
+                            radiusX: 24
+                            radiusY: 24
+                            startAngle: 135
+                            sweepAngle: Math.max(0.01, Math.min(1, ring.shown)) * 270
+                        }
+                    }
+                    // Arc actif net au premier plan
+                    ShapePath {
+                        fillColor: "transparent"
+                        strokeColor: ring.tint
+                        strokeWidth: 4.2
+                        capStyle: ShapePath.RoundCap
+
+                        Behavior on strokeColor { ColorAnimation { duration: 420 } }
+
+                        PathAngleArc {
+                            centerX: 28
+                            centerY: 28
+                            radiusX: 24
+                            radiusY: 24
+                            startAngle: 135
+                            sweepAngle: Math.max(0.01, Math.min(1, ring.shown)) * 270
+                        }
+                    }
+                }
+
+                Column {
+                    anchors.centerIn: parent
+                    spacing: -2
+
+                    MaterialIcon {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: ring.icon
+                        color: ring.tint
+                        fontStyle: Tokens.font.icon.size(10).build()
+                        fill: 1
+                    }
+                    StyledText {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: ring.centerText || Math.round(ring.shown * 100) + "%"
+                        color: root.fg
+                        font.pointSize: 9.8
+                        font.weight: Font.Bold
+                        font.features: { "tnum": 1 }
                     }
                 }
             }
 
-            Column {
-                anchors.centerIn: parent
-                spacing: -2
-
-                MaterialIcon {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: ring.icon
-                    color: ring.tint
-                    fontStyle: Tokens.font.icon.size(10).build()
-                    fill: 1
-                }
-                StyledText {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: ring.centerText || Math.round(ring.shown * 100) + "%"
-                    color: root.fg
-                    font.pointSize: 10
-                    font.weight: Font.Bold
-                    font.features: {
-                        "tnum": 1
-                    }
-                }
+            StyledText {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: ring.label.toUpperCase()
+                color: root.fg
+                font.pointSize: 6.9
+                font.weight: Font.Bold
+                font.letterSpacing: 0.65
+            }
+            StyledText {
+                anchors.horizontalCenter: parent.horizontalCenter
+                topPadding: -2
+                width: Math.min(implicitWidth, ring.width - 8)
+                horizontalAlignment: Text.AlignHCenter
+                elide: Text.ElideRight
+                text: ring.sub
+                visible: text !== ""
+                color: root.fgDim
+                font.pointSize: 6.8
+                font.weight: Font.Medium
+                font.features: { "tnum": 1 }
             }
         }
 
-        StyledText {
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: ring.label.toUpperCase()
-            color: root.fg
-            font.pointSize: 7.2
-            font.weight: Font.Bold
-            font.letterSpacing: 0.6
-        }
-        StyledText {
-            anchors.horizontalCenter: parent.horizontalCenter
-            topPadding: -3
-            width: Math.min(implicitWidth, ring.width)
-            horizontalAlignment: Text.AlignHCenter
-            elide: Text.ElideRight
-            text: ring.sub
-            visible: text !== ""
-            color: root.fgDim
-            font.pointSize: 7
-            font.weight: Font.Medium
-            font.features: {
-                "tnum": 1
-            }
+        MouseArea {
+            id: ringArea
+
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.openMonitorApp()
         }
     }
 
@@ -9535,7 +10985,7 @@ Item {
         property real shown: speed
         property bool big
 
-        spacing: 4
+        spacing: 3.5
 
         Behavior on shown {
             NumberAnimation {
@@ -9548,17 +10998,17 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             text: nl.icon
             color: nl.tint
-            fontStyle: Tokens.font.icon.size(nl.big ? 12 : 10).build()
+            fontStyle: Tokens.font.icon.size(nl.big ? 11.5 : 9.5).build()
         }
         StyledText {
             anchors.verticalCenter: parent.verticalCenter
             text: {
                 const f = NetworkUsage.formatBytes(nl.shown);
                 const unit = f.unit.replace("KB/s", "Ko/s").replace("MB/s", "Mo/s").replace("GB/s", "Go/s").replace("B/s", "o/s");
-                return `${f.value.toFixed(f.value < 10 ? 1 : 0)} ${unit}`;
+                return `${f.value.toFixed(f.value < 10 ? 1 : 0).replace(".", ",")} ${unit}`;
             }
             color: nl.big ? root.fg : root.fgDim
-            font.pointSize: nl.big ? 12 : 9
+            font.pointSize: nl.big ? 10.6 : 8.4
             font.weight: nl.big ? Font.Bold : Font.DemiBold
             font.features: {
                 "tnum": 1

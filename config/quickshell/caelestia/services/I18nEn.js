@@ -1240,8 +1240,14 @@ var strings = {
     "à l'instant": "just now",
     "↑↓ parcourir  ·  Entrée copier  ·  Ctrl+P épingler  ·  Suppr effacer  ·  Tab filtre": "↑↓ browse  ·  Enter copy  ·  Ctrl+P pin  ·  Del delete  ·  Tab filter",
     "⇪ Verrouillage majuscule activé": "⇪ Caps Lock is on",
+    "Analyse…": "Scanning…",
+    "Disque": "Disk",
     "Icône météo teintée et température en direct à côté de l'heure": "Tinted weather icon and live temperature beside the clock",
     "Météo dans l'île au repos": "Weather in idle island",
+    "Météo indisponible": "Weather unavailable",
+    "Processus": "Processes",
+    "Ress. %1": "Feels %1",
+    "charge %1": "load %1",
     "🔒 Note chiffrée\nOuvre-la dans AetherNotes pour la lire.": "🔒 Encrypted note\nOpen it in AetherNotes to read."
 };
 
