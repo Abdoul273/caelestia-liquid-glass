@@ -1253,6 +1253,14 @@ var strings = {
     "Coupé": "Muted",
     "Désactiver": "Disable",
     "depuis %1": "since %1",
+    "+5 min": "+5 min",
+    "CAPTURE EN PAUSE": "RECORDING PAUSED",
+    "CHRONOMÈTRE · %1": "STOPWATCH · %1",
+    "EN DIRECT": "LIVE",
+    "POMODORO · #%1": "POMODORO · #%1",
+    "TÉLÉCHARGEMENT": "DOWNLOAD",
+    "Vidéos": "Videos",
+    "fin %1": "ends %1",
     "🔒 Note chiffrée\nOuvre-la dans AetherNotes pour la lire.": "🔒 Encrypted note\nOpen it in AetherNotes to read."
 };
 

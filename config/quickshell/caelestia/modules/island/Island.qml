@@ -1093,12 +1093,16 @@ Item {
         saveClock();
     }
 
-    function addMinute(): void {
-        if (clockKind !== "timer")
+    function addMinutes(m: int): void {
+        if (clockKind !== "timer" || m <= 0)
             return;
-        clockEnd += 60000;
-        clockTotal += 60;
+        clockEnd += m * 60000;
+        clockTotal += m * 60;
         saveClock();
+    }
+
+    function addMinute(): void {
+        addMinutes(1);
     }
 
     function timerFinished(): void {
@@ -1631,7 +1635,7 @@ Item {
         case "center":
             return Qt.size(500, Math.min(640, Math.max(210, 128 + centerList.contentHeight)));
         case "recordFull":
-            return Qt.size(pageWidth, 86);
+            return Qt.size(pageWidth, 112);
         case "caffeine":
             return Qt.size(pageWidth, 134);
         case "count":
@@ -1649,8 +1653,7 @@ Item {
         case "ws":
             return Qt.size(Math.max(250, 150 + wsLast * 18), 44);
         case "clock":
-            // Page de même largeur que les autres, élargie pour lire le libellé en entier (au-delà « … »)
-            return Qt.size(pageWidth, 118 + (clockTitleMetrics.advanceWidth > pageWidth - 250 ? 16 : 0) + shelfExtra);
+            return Qt.size(pageWidth, 134 + shelfExtra);
         case "clockMini":
             return Qt.size((clockLabel ? 290 : 230) + actsInset, 40);
         case "agentsMini":
@@ -1680,7 +1683,7 @@ Item {
         case "transfer":
             return Qt.size(Math.min(330, 170 + transferNameMetrics.advanceWidth) + actsInset, 40);
         case "transferFull":
-            return Qt.size(pageWidth, 112);
+            return Qt.size(pageWidth, 134);
         case "taskDue":
             return Qt.size(460, 104);
         case "fileDone":
@@ -4605,172 +4608,384 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
             }
         }
 
-        // ── téléchargement / copie (île ouverte) ──
+        // ── téléchargement / copie / synchro Drive (console Liquid Glass) ──
         Face {
+            id: transferFace
+
+            readonly property real hoverX: Math.max(0, Math.min(width, islandHover.point.position.x - (root.width - width) / 2))
+            readonly property bool isCopy: root.transfer?.kind === "copy"
+            readonly property bool isUpload: root.transfer?.kind === "upload"
+            readonly property bool isPaused: !!(root.transfer?.paused)
+            readonly property color trTint: isPaused ? "#ff9f0a" : isUpload ? root.green : isCopy ? "#818cf8" : (Colours.light ? "#0284c7" : "#38bdf8")
+            readonly property color trTintDeep: isPaused ? "#d97706" : isUpload ? "#10b981" : isCopy ? "#6366f1" : "#0a84ff"
+            readonly property string trEta: root.transferEta(root.transfer)
+
             active: root.mode === "transferFull"
             slide: root.pageSlide("transferFull")
 
+            // Aura douce derrière l'emblème de transfert
             Rectangle {
-                id: trBadge
-
-                anchors.left: parent.left
-                anchors.leftMargin: 26
-                anchors.top: parent.top
-                anchors.topMargin: 18
-                width: 46
-                height: 46
-                radius: 14
-                color: Qt.alpha("#0a84ff", 0.12)
-                border.width: 0.5
-                border.color: Qt.alpha("#0a84ff", 0.32)
-
-                Shape {
-                    anchors.centerIn: parent
-                    width: 36
-                    height: 36
-                    preferredRendererType: Shape.CurveRenderer
-
-                    ShapePath {
-                        strokeWidth: 2.2
-                        strokeColor: Qt.alpha("#0a84ff", 0.2)
-                        fillColor: "transparent"
-
-                        PathAngleArc {
-                            centerX: 18
-                            centerY: 18
-                            radiusX: 15
-                            radiusY: 15
-                            startAngle: 135
-                            sweepAngle: 270
-                        }
-                    }
-
-                    ShapePath {
-                        strokeWidth: 2.4
-                        strokeColor: "#38bdf8"
-                        fillColor: "transparent"
-                        capStyle: ShapePath.RoundCap
-
-                        PathAngleArc {
-                            centerX: 18
-                            centerY: 18
-                            radiusX: 15
-                            radiusY: 15
-                            startAngle: 135
-                            sweepAngle: root.transferProgress >= 0 ? 270 * Math.max(0.04, root.transferProgress) : 90
-                        }
-                    }
-                }
-
-                MaterialIcon {
-                    anchors.centerIn: parent
-                    text: root.transfer?.kind === "copy" ? "content_copy" : root.transfer?.kind === "upload" ? "cloud_upload" : "download"
-                    color: "#38bdf8"
-                    fontStyle: Tokens.font.icon.size(17).build()
-                    fill: 1
+                x: 12
+                y: 10
+                width: 240
+                height: 64
+                radius: 32
+                opacity: Colours.light ? 0.34 : 0.58
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.3; color: Qt.alpha(transferFace.trTint, 0.16) }
+                    GradientStop { position: 0.72; color: Qt.alpha(transferFace.trTint, 0.05) }
+                    GradientStop { position: 1.0; color: "transparent" }
                 }
             }
 
-            Column {
-                anchors.left: trBadge.right
-                anchors.leftMargin: 14
-                anchors.right: trButtons.left
-                anchors.rightMargin: 12
-                anchors.verticalCenter: trBadge.verticalCenter
-                spacing: 1
-
-                Row {
-                    spacing: 6
-
-                    StyledText {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: root.transfer?.kind === "copy" ? I18n.tr("COPIE SYSTÈME") : root.transfer?.kind === "upload" ? I18n.tr("SYNCHRO DRIVE") : I18n.tr("TRANSFERT")
-                        color: "#38bdf8"
-                        font.pointSize: 7.2
-                        font.weight: Font.Bold
-                        font.letterSpacing: 0.7
-                    }
-
-                    StyledText {
-                        anchors.verticalCenter: parent.verticalCenter
-                        visible: root.transferProgress >= 0
-                        text: `${Math.round(root.transferProgress * 100)}%`
-                        color: root.fgDim
-                        font.pointSize: 7.5
-                        font.weight: Font.Bold
-                        font.features: {
-                            "tnum": 1
-                        }
-                    }
-                }
-
-                StyledText {
-                    width: parent.width
-                    elide: Text.ElideMiddle
-                    text: root.transfer?.name ?? ""
-                    color: root.fg
-                    font.pointSize: 11
-                    font.weight: Font.Bold
-                }
-                StyledText {
-                    width: parent.width
-                    elide: Text.ElideRight
-                    text: {
-                        const t = root.transfer;
-                        if (!t)
-                            return "";
-                        if (t.paused)
-                            return t.total > 0 ? I18n.tr("En pause · %1 sur %2").arg(root.fmtBytes(t.done)).arg(root.fmtBytes(t.total)) : I18n.tr("Envoi sur Drive en pause");
-                        const parts = t.kind === "upload" ? [t.count ? I18n.tr("Fichier %1").arg(t.count) : I18n.tr("Drive")] : [];
-                        parts.push(t.total > 0 ? I18n.tr("%1 / %2").arg(root.fmtBytes(t.done)).arg(root.fmtBytes(t.total)) : root.fmtBytes(t.done));
-                        if (t.speed > 0)
-                            parts.push(`${root.fmtBytes(t.speed)}/s`);
-                        const eta = root.transferEta(t);
-                        if (eta)
-                            parts.push(I18n.tr("reste %1").arg(eta));
-                        if (root.transfers.length > 1)
-                            parts.push(I18n.tr("+%1").arg(root.transfers.length - 1));
-                        return parts.join(" · ");
-                    }
-                    color: root.fgDim
-                    font.pointSize: 8.8
-                    font.features: {
-                        "tnum": 1
-                    }
-                }
-            }
-
-            Row {
-                id: trButtons
-
-                anchors.right: parent.right
-                anchors.rightMargin: 24
-                anchors.verticalCenter: trBadge.verticalCenter
-                spacing: 8
-
-                ShotButton {
-                    visible: root.transfer?.kind === "upload"
-                    icon: root.transfer?.paused ? "play_arrow" : "pause"
-                    tip: root.transfer?.paused ? I18n.tr("Reprendre la sauvegarde") : I18n.tr("Mettre la sauvegarde en pause")
-                    onClicked: Quickshell.execDetached([`${Quickshell.env("HOME")}/.local/bin/drive-sync`, root.transfer?.paused ? "resume" : "pause"])
-                }
-                ShotButton {
-                    icon: "folder_open"
-                    tip: I18n.tr("Ouvrir le dossier")
-                    onClicked: Quickshell.execDetached(["xdg-open", root.transfer?.dir ?? Quickshell.env("HOME")])
-                }
-            }
-
-            // Barre de progression optique biseautée
+            // Caustique optique inférieure + point lumineux sous le curseur
             Rectangle {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.leftMargin: 26
-                anchors.rightMargin: 26
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: 20
-                height: 6
-                radius: 3
+                anchors.bottomMargin: 1.5
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.max(120, parent.width - 72)
+                height: 1
+                opacity: root.hovered ? 0.38 : 0.18
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.25; color: Qt.alpha("#ffffff", Colours.light ? 0.45 : 0.6) }
+                    GradientStop { position: 0.5; color: Qt.alpha(transferFace.trTint, 0.92) }
+                    GradientStop { position: 0.75; color: Qt.alpha("#ffffff", Colours.light ? 0.45 : 0.6) }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+            }
+            Rectangle {
+                x: Math.max(32, Math.min(transferFace.width - width - 32, transferFace.hoverX - width / 2))
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 1.5
+                width: 84
+                height: 1.5
+                radius: 0.75
+                opacity: root.hovered ? 0.65 : 0
+                visible: opacity > 0.01
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.5; color: "#ffffff" }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+                Behavior on x { NumberAnimation { duration: 95; easing.type: Easing.OutCubic } }
+                Behavior on opacity { NumberAnimation { duration: 180 } }
+            }
+
+            // ── Rangée haute : Emblème chronographe + badges + nom fichier + dock actions ──
+            Item {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: 22
+                anchors.rightMargin: 22
+                y: 16
+                height: 54
+
+                Rectangle {
+                    id: trBadge
+
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 54
+                    height: 54
+                    radius: 16
+                    border.width: 0.5
+                    border.color: Qt.alpha(transferFace.trTint, 0.36)
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: Qt.alpha(transferFace.trTint, Colours.light ? 0.15 : 0.14) }
+                        GradientStop { position: 1.0; color: Qt.alpha(root.fg, 0.035) }
+                    }
+
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.topMargin: 1
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: 28
+                        height: 1
+                        radius: 0.5
+                        color: "#ffffff"
+                        opacity: Colours.light ? 0.34 : 0.2
+                    }
+
+                    Shape {
+                        anchors.centerIn: parent
+                        width: 44
+                        height: 44
+                        preferredRendererType: Shape.CurveRenderer
+
+                        ShapePath {
+                            strokeWidth: 2.6
+                            strokeColor: Qt.alpha(root.fg, 0.12)
+                            fillColor: "transparent"
+                            capStyle: ShapePath.RoundCap
+                            PathAngleArc {
+                                centerX: 22; centerY: 22
+                                radiusX: 18; radiusY: 18
+                                startAngle: 135; sweepAngle: 270
+                            }
+                        }
+                        ShapePath {
+                            strokeWidth: 6.2
+                            strokeColor: Qt.alpha(transferFace.trTint, 0.24)
+                            fillColor: "transparent"
+                            capStyle: ShapePath.RoundCap
+                            PathAngleArc {
+                                centerX: 22; centerY: 22
+                                radiusX: 18; radiusY: 18
+                                startAngle: 135; sweepAngle: root.transferProgress >= 0 ? 270 * Math.max(0.04, root.transferProgress) : 95
+                            }
+                        }
+                        ShapePath {
+                            strokeWidth: 2.8
+                            strokeColor: transferFace.trTint
+                            fillColor: "transparent"
+                            capStyle: ShapePath.RoundCap
+                            PathAngleArc {
+                                centerX: 22; centerY: 22
+                                radiusX: 18; radiusY: 18
+                                startAngle: 135; sweepAngle: root.transferProgress >= 0 ? 270 * Math.max(0.04, root.transferProgress) : 95
+                            }
+                        }
+                    }
+
+                    MaterialIcon {
+                        anchors.centerIn: parent
+                        text: transferFace.isCopy ? "content_copy" : transferFace.isUpload ? "cloud_upload" : "download"
+                        color: transferFace.trTint
+                        fontStyle: Tokens.font.icon.size(18).build()
+                        fill: 1
+                    }
+                }
+
+                Column {
+                    anchors.left: trBadge.right
+                    anchors.leftMargin: 14
+                    anchors.right: trButtons.left
+                    anchors.rightMargin: 12
+                    anchors.verticalCenter: trBadge.verticalCenter
+                    spacing: 3
+
+                    Row {
+                        spacing: 6
+
+                        Rectangle {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: trTagRow.implicitWidth + 12
+                            height: 17
+                            radius: 8.5
+                            color: Qt.alpha(transferFace.trTint, 0.15)
+                            border.width: 0.5
+                            border.color: Qt.alpha(transferFace.trTint, 0.36)
+
+                            Row {
+                                id: trTagRow
+
+                                anchors.centerIn: parent
+                                spacing: 4
+
+                                Rectangle {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 5
+                                    height: 5
+                                    radius: 2.5
+                                    color: transferFace.trTint
+                                }
+                                StyledText {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: transferFace.isPaused
+                                        ? I18n.tr("EN PAUSE")
+                                        : transferFace.isCopy
+                                            ? I18n.tr("COPIE SYSTÈME")
+                                            : transferFace.isUpload
+                                                ? I18n.tr("SYNCHRO DRIVE")
+                                                : I18n.tr("TÉLÉCHARGEMENT")
+                                    color: transferFace.trTint
+                                    font.pointSize: 6.4
+                                    font.weight: Font.Bold
+                                    font.letterSpacing: 0.65
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: root.transferProgress >= 0
+                            width: trPctTxt.implicitWidth + 10
+                            height: 17
+                            radius: 8.5
+                            color: Qt.alpha(root.fg, 0.07)
+                            border.width: 0.5
+                            border.color: Qt.alpha(root.fg, 0.14)
+
+                            StyledText {
+                                id: trPctTxt
+
+                                anchors.centerIn: parent
+                                text: `${Math.round(root.transferProgress * 100)}%`
+                                color: root.fg
+                                font.pointSize: 7.4
+                                font.weight: Font.Bold
+                                font.features: { "tnum": 1 }
+                            }
+                        }
+
+                        Rectangle {
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: root.transfers.length > 1
+                            width: trMoreTxt.implicitWidth + 10
+                            height: 17
+                            radius: 8.5
+                            color: Qt.alpha(root.fg, 0.06)
+                            border.width: 0.5
+                            border.color: Qt.alpha(root.fg, 0.13)
+
+                            StyledText {
+                                id: trMoreTxt
+
+                                anchors.centerIn: parent
+                                text: I18n.tr("+%1").arg(root.transfers.length - 1)
+                                color: root.fgDim
+                                font.pointSize: 7.2
+                                font.weight: Font.Bold
+                                font.features: { "tnum": 1 }
+                            }
+                        }
+                    }
+
+                    StyledText {
+                        width: parent.width
+                        elide: Text.ElideMiddle
+                        text: root.transfer?.name ?? ""
+                        color: root.fg
+                        font.pointSize: 11.5
+                        font.weight: Font.Bold
+                    }
+                }
+
+                // Dock d'actions vitré (Pause/Reprendre Drive · Dossier)
+                Row {
+                    id: trButtons
+
+                    anchors.right: parent.right
+                    anchors.verticalCenter: trBadge.verticalCenter
+                    spacing: 7
+
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: transferFace.isUpload
+                        width: 34
+                        height: 34
+                        radius: 17
+                        scale: trPauseArea.pressed ? 0.92 : 1
+                        color: Qt.alpha(transferFace.trTint, trPauseArea.pressed ? 0.28 : trPauseArea.containsMouse ? 0.2 : 0.13)
+                        border.width: 0.5
+                        border.color: Qt.alpha(transferFace.trTint, trPauseArea.containsMouse ? 0.5 : 0.34)
+
+                        Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        Rectangle {
+                            anchors.top: parent.top
+                            anchors.topMargin: 1
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: 16
+                            height: 1
+                            radius: 0.5
+                            color: "#ffffff"
+                            opacity: Colours.light ? 0.34 : 0.2
+                        }
+
+                        MaterialIcon {
+                            anchors.centerIn: parent
+                            text: transferFace.isPaused ? "play_arrow" : "pause"
+                            color: transferFace.trTint
+                            fontStyle: Tokens.font.icon.size(16).build()
+                            fill: 1
+                        }
+
+                        MouseArea {
+                            id: trPauseArea
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: Quickshell.execDetached([`${Quickshell.env("HOME")}/.local/bin/drive-sync`, transferFace.isPaused ? "resume" : "pause"])
+                        }
+                    }
+
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: trDirRow.implicitWidth + 18
+                        height: 34
+                        radius: 17
+                        scale: trDirArea.pressed ? 0.94 : 1
+                        color: Qt.alpha(root.fg, trDirArea.pressed ? 0.18 : trDirArea.containsMouse ? 0.13 : 0.07)
+                        border.width: 0.5
+                        border.color: Qt.alpha(root.fg, trDirArea.containsMouse ? 0.3 : 0.15)
+
+                        Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        Rectangle {
+                            anchors.top: parent.top
+                            anchors.topMargin: 1
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: Math.max(14, parent.width - 18)
+                            height: 1
+                            radius: 0.5
+                            color: "#ffffff"
+                            opacity: Colours.light ? 0.32 : 0.18
+                        }
+
+                        Row {
+                            id: trDirRow
+
+                            anchors.centerIn: parent
+                            spacing: 5
+
+                            MaterialIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "folder_open"
+                                color: transferFace.trTint
+                                fontStyle: Tokens.font.icon.size(14).build()
+                                fill: 1
+                            }
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: I18n.tr("Dossier")
+                                color: root.fg
+                                font.pointSize: 8.2
+                                font.weight: Font.Bold
+                            }
+                        }
+
+                        MouseArea {
+                            id: trDirArea
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: Quickshell.execDetached(["xdg-open", root.transfer?.dir ?? Quickshell.env("HOME")])
+                        }
+                    }
+                }
+            }
+
+            // ── Barre de progression liquide biseautée ──
+            Rectangle {
+                id: trBarTrack
+
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: 22
+                anchors.rightMargin: 22
+                y: 78
+                height: 7
+                radius: 3.5
                 color: Qt.alpha(root.fg, 0.08)
                 border.width: 0.5
                 border.color: Qt.alpha(root.fg, 0.14)
@@ -4780,12 +4995,26 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
                     visible: root.transferProgress >= 0
                     width: parent.width * Math.max(0, root.transferProgress)
                     height: parent.height
-                    radius: 3
-
+                    radius: 3.5
                     gradient: Gradient {
                         orientation: Gradient.Horizontal
-                        GradientStop { position: 0.0; color: "#0a84ff" }
-                        GradientStop { position: 1.0; color: "#38bdf8" }
+                        GradientStop { position: 0.0; color: transferFace.trTintDeep }
+                        GradientStop { position: 1.0; color: transferFace.trTint }
+                    }
+
+                    // Reflet lumineux au bout de la jauge
+                    Rectangle {
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: parent.width > 12
+                        width: 10
+                        height: parent.height
+                        radius: 3.5
+                        gradient: Gradient {
+                            orientation: Gradient.Horizontal
+                            GradientStop { position: 0.0; color: "transparent" }
+                            GradientStop { position: 1.0; color: Qt.alpha("#ffffff", 0.55) }
+                        }
                     }
 
                     Behavior on width {
@@ -4795,28 +5024,143 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
                         }
                     }
                 }
+
                 Rectangle {
                     id: trWave
 
                     visible: root.transferProgress < 0
                     width: parent.width * 0.3
                     height: parent.height
-                    radius: 3
-
+                    radius: 3.5
                     gradient: Gradient {
                         orientation: Gradient.Horizontal
                         GradientStop { position: 0.0; color: "transparent" }
-                        GradientStop { position: 0.5; color: "#38bdf8" }
+                        GradientStop { position: 0.5; color: transferFace.trTint }
                         GradientStop { position: 1.0; color: "transparent" }
                     }
 
                     NumberAnimation on x {
-                        running: root.mode === "transferFull" && root.transferProgress < 0 && !root.transfer?.paused
+                        running: root.mode === "transferFull" && root.transferProgress < 0 && !transferFace.isPaused
                         from: -trWave.width
                         to: trWave.parent.width
                         duration: 1300
                         loops: Animation.Infinite
                         easing.type: Easing.InOutQuad
+                    }
+                }
+            }
+
+            // ── Rangée basse : Télémétrie (Volume transféré · Débit temps réel · ETA) ──
+            Item {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: 22
+                anchors.rightMargin: 22
+                y: 91
+                height: 22
+
+                Row {
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 6
+
+                    // Pilule volume transféré (ou numéro de fichier Drive)
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: trSizeTxt.implicitWidth + 14
+                        height: 20
+                        radius: 10
+                        color: Qt.alpha(root.fg, 0.06)
+                        border.width: 0.5
+                        border.color: Qt.alpha(root.fg, 0.13)
+
+                        StyledText {
+                            id: trSizeTxt
+
+                            anchors.centerIn: parent
+                            text: {
+                                const t = root.transfer;
+                                if (!t)
+                                    return "";
+                                const prefix = transferFace.isUpload && t.count ? `${I18n.tr("Fichier %1").arg(t.count)} · ` : "";
+                                return prefix + (t.total > 0 ? I18n.tr("%1 / %2").arg(root.fmtBytes(t.done)).arg(root.fmtBytes(t.total)) : root.fmtBytes(t.done));
+                            }
+                            color: root.fg
+                            font.pointSize: 7.4
+                            font.weight: Font.DemiBold
+                            font.features: { "tnum": 1 }
+                        }
+                    }
+
+                    // Pilule débit en direct
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: !transferFace.isPaused && (root.transfer?.speed ?? 0) > 0
+                        width: trSpdRow.implicitWidth + 14
+                        height: 20
+                        radius: 10
+                        color: Qt.alpha(transferFace.trTint, 0.12)
+                        border.width: 0.5
+                        border.color: Qt.alpha(transferFace.trTint, 0.3)
+
+                        Row {
+                            id: trSpdRow
+
+                            anchors.centerIn: parent
+                            spacing: 4
+
+                            MaterialIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "speed"
+                                color: transferFace.trTint
+                                fontStyle: Tokens.font.icon.size(10.5).build()
+                                fill: 1
+                            }
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: `${root.fmtBytes(root.transfer?.speed ?? 0)}/s`
+                                color: transferFace.trTint
+                                font.pointSize: 7.4
+                                font.weight: Font.Bold
+                                font.features: { "tnum": 1 }
+                            }
+                        }
+                    }
+                }
+
+                // Droite : Pilule ETA / état en pause
+                Rectangle {
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: transferFace.isPaused || transferFace.trEta !== ""
+                    width: trEtaRow.implicitWidth + 14
+                    height: 20
+                    radius: 10
+                    color: transferFace.isPaused ? Qt.alpha("#ff9f0a", 0.14) : Qt.alpha(root.fg, 0.06)
+                    border.width: 0.5
+                    border.color: transferFace.isPaused ? Qt.alpha("#ff9f0a", 0.34) : Qt.alpha(root.fg, 0.13)
+
+                    Row {
+                        id: trEtaRow
+
+                        anchors.centerIn: parent
+                        spacing: 4
+
+                        MaterialIcon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: transferFace.isPaused ? "pause_circle" : "schedule"
+                            color: transferFace.isPaused ? "#ff9f0a" : root.fgDim
+                            fontStyle: Tokens.font.icon.size(10.5).build()
+                            fill: 1
+                        }
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: transferFace.isPaused ? I18n.tr("En pause") : I18n.tr("reste %1").arg(transferFace.trEta)
+                            color: transferFace.isPaused ? "#ff9f0a" : root.fgDim
+                            font.pointSize: 7.4
+                            font.weight: Font.DemiBold
+                            font.features: { "tnum": 1 }
+                        }
                     }
                 }
             }
@@ -7270,168 +7614,618 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
             }
         }
 
-        // ── minuteur / chronomètre au survol ──
+        // ── minuteur / chronomètre / pomodoro (cadran horloger Liquid Glass) ──
         Face {
             id: clockFace
 
-            readonly property color clockTone: root.pomoOn && root.pomoPhase === "rest" ? root.green : "#ff9f0a"
+            readonly property real hoverX: Math.max(0, Math.min(width, islandHover.point.position.x - (root.width - width) / 2))
+            readonly property bool isStopwatch: root.clockKind === "stopwatch"
+            readonly property bool isPaused: root.clockPaused > 0
+            readonly property color clockTone: root.pomoOn && root.pomoPhase === "rest"
+                ? root.green
+                : isStopwatch
+                    ? (Colours.light ? "#0284c7" : "#38bdf8")
+                    : (Colours.light ? "#c77700" : "#ff9f0a")
             readonly property real clockRatio: root.clockTotal > 0 ? Math.max(0, Math.min(1, root.clockValue / root.clockTotal)) : ((root.clockValue % 60000) / 60000)
 
             active: root.mode === "clock"
             slide: root.pageSlide("clock")
 
-            // Cadran chronographe vectoriel 270° à gauche
+            // Aura douce derrière le cadran horloger
             Rectangle {
-                id: clockDial
-
-                anchors.left: parent.left
-                anchors.leftMargin: 26
-                y: 22
-                width: 52
-                height: 52
-                radius: 16
-                color: Qt.alpha(clockFace.clockTone, 0.11)
-                border.width: 0.5
-                border.color: Qt.alpha(clockFace.clockTone, 0.32)
-
-                Shape {
-                    anchors.centerIn: parent
-                    width: 40
-                    height: 40
-                    preferredRendererType: Shape.CurveRenderer
-
-                    ShapePath {
-                        strokeWidth: 2.6
-                        strokeColor: Qt.alpha(clockFace.clockTone, 0.2)
-                        fillColor: "transparent"
-                        capStyle: ShapePath.RoundCap
-
-                        PathAngleArc {
-                            centerX: 20
-                            centerY: 20
-                            radiusX: 16.5
-                            radiusY: 16.5
-                            startAngle: 135
-                            sweepAngle: 270
-                        }
-                    }
-
-                    ShapePath {
-                        strokeWidth: 2.8
-                        strokeColor: clockFace.clockTone
-                        fillColor: "transparent"
-                        capStyle: ShapePath.RoundCap
-
-                        PathAngleArc {
-                            centerX: 20
-                            centerY: 20
-                            radiusX: 16.5
-                            radiusY: 16.5
-                            startAngle: 135
-                            sweepAngle: Math.max(4, 270 * clockFace.clockRatio)
-                        }
-                    }
-                }
-
-                MaterialIcon {
-                    anchors.centerIn: parent
-                    text: root.pomoOn ? "timelapse" : root.clockKind === "timer" ? "timer" : "timer_play"
-                    color: clockFace.clockTone
-                    fontStyle: Tokens.font.icon.size(18).build()
-                    fill: 1
-                    opacity: root.clockPaused > 0 ? 0.5 : 1
+                x: 12
+                y: 10
+                width: 240
+                height: 66
+                radius: 33
+                opacity: Colours.light ? 0.34 : 0.6
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.3; color: Qt.alpha(clockFace.clockTone, 0.16) }
+                    GradientStop { position: 0.72; color: Qt.alpha(clockFace.clockTone, 0.05) }
+                    GradientStop { position: 1.0; color: "transparent" }
                 }
             }
 
-            Column {
-                anchors.left: clockDial.right
-                anchors.leftMargin: 14
-                anchors.right: clockButtons.left
-                anchors.rightMargin: 16
-                anchors.verticalCenter: clockDial.verticalCenter
-                spacing: 0
-
-                // Libellé entier : sur deux lignes s'il ne tient pas sur une (au-delà « … »)
-                StyledText {
-                    id: clockTitle
-
-                    width: parent.width
-                    wrapMode: Text.Wrap
-                    maximumLineCount: 2
-                    elide: Text.ElideRight
-                    text: {
-                        if (root.pomoOn)
-                            return I18n.tr("POMODORO · %1 · SESSION %2").arg(root.clockLabel.toUpperCase()).arg(root.pomoRound);
-                        if (root.clockKind === "timer")
-                            return root.clockLabel ? I18n.tr("MINUTEUR · %1").arg(root.clockLabel.toUpperCase()) : I18n.tr("MINUTEUR");
-                        return root.laps.length > 0 ? I18n.tr("CHRONOMÈTRE · %1 TOURS").arg(root.laps.length) : I18n.tr("CHRONOMÈTRE");
-                    }
-                    color: clockFace.clockTone
-                    font.pointSize: 7.5
-                    font.weight: Font.Bold
-                    font.letterSpacing: 0.7
-                }
-                StyledText {
-                    text: root.fmtClock(root.clockValue)
-                    color: root.fg
-                    opacity: root.clockPaused > 0 ? 0.6 : 1
-                    font.pointSize: 27
-                    font.weight: Font.Bold
-                    font.features: {
-                        "tnum": 1
-                    }
-                }
-            }
-
-            Row {
-                id: clockButtons
-
-                anchors.right: parent.right
-                anchors.rightMargin: 26
-                anchors.verticalCenter: clockDial.verticalCenter
-                spacing: 8
-
-                ShotButton {
-                    visible: root.clockKind === "timer"
-                    icon: "exposure_plus_1"
-                    onClicked: root.addMinute()
-                }
-                ShotButton {
-                    visible: root.clockKind === "stopwatch"
-                    icon: "flag"
-                    onClicked: root.addLap()
-                }
-                ShotButton {
-                    icon: root.clockPaused > 0 ? "play_arrow" : "pause"
-                    onClicked: root.togglePause()
-                }
-                ShotButton {
-                    icon: "stop"
-                    onClicked: root.stopClock()
-                }
-                ShotButton {
-                    icon: "open_in_new"
-                    onClicked: root.openClockApp()
-                }
-            }
-
-            // Piste linéaire horlogère en bas du cadran
+            // Caustique optique inférieure + point lumineux sous le curseur
             Rectangle {
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 1.5
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.max(120, parent.width - 72)
+                height: 1
+                opacity: root.hovered ? 0.38 : 0.18
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.25; color: Qt.alpha("#ffffff", Colours.light ? 0.45 : 0.6) }
+                    GradientStop { position: 0.5; color: Qt.alpha(clockFace.clockTone, 0.92) }
+                    GradientStop { position: 0.75; color: Qt.alpha("#ffffff", Colours.light ? 0.45 : 0.6) }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+            }
+            Rectangle {
+                x: Math.max(32, Math.min(clockFace.width - width - 32, clockFace.hoverX - width / 2))
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 1.5
+                width: 84
+                height: 1.5
+                radius: 0.75
+                opacity: root.hovered ? 0.65 : 0
+                visible: opacity > 0.01
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.5; color: "#ffffff" }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+                Behavior on x { NumberAnimation { duration: 95; easing.type: Easing.OutCubic } }
+                Behavior on opacity { NumberAnimation { duration: 180 } }
+            }
+
+            // ── Rangée haute : Cadran chronographe 56×56 + badges + grand temps + dock contrôles ──
+            Item {
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.leftMargin: 26
-                anchors.rightMargin: 26
-                y: 86
-                height: 4
-                radius: 2
-                color: Qt.alpha(root.fg, 0.08)
-                clip: true
+                anchors.leftMargin: 22
+                anchors.rightMargin: 22
+                y: 14
+                height: 60
 
                 Rectangle {
-                    width: parent.width * clockFace.clockRatio
-                    height: parent.height
-                    radius: 2
-                    color: clockFace.clockTone
+                    id: clockDial
+
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 56
+                    height: 56
+                    radius: 17
+                    border.width: 0.5
+                    border.color: Qt.alpha(clockFace.clockTone, 0.38)
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: Qt.alpha(clockFace.clockTone, Colours.light ? 0.15 : 0.14) }
+                        GradientStop { position: 1.0; color: Qt.alpha(root.fg, 0.035) }
+                    }
+
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.topMargin: 1
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: 30
+                        height: 1
+                        radius: 0.5
+                        color: "#ffffff"
+                        opacity: Colours.light ? 0.35 : 0.2
+                    }
+
+                    Shape {
+                        anchors.centerIn: parent
+                        width: 46
+                        height: 46
+                        preferredRendererType: Shape.CurveRenderer
+
+                        ShapePath {
+                            strokeWidth: 2.6
+                            strokeColor: Qt.alpha(root.fg, 0.12)
+                            fillColor: "transparent"
+                            capStyle: ShapePath.RoundCap
+                            PathAngleArc {
+                                centerX: 23; centerY: 23
+                                radiusX: 19; radiusY: 19
+                                startAngle: 135; sweepAngle: 270
+                            }
+                        }
+                        ShapePath {
+                            strokeWidth: 6.4
+                            strokeColor: Qt.alpha(clockFace.clockTone, 0.24)
+                            fillColor: "transparent"
+                            capStyle: ShapePath.RoundCap
+                            PathAngleArc {
+                                centerX: 23; centerY: 23
+                                radiusX: 19; radiusY: 19
+                                startAngle: 135; sweepAngle: Math.max(4, 270 * clockFace.clockRatio)
+                            }
+                        }
+                        ShapePath {
+                            strokeWidth: 2.8
+                            strokeColor: clockFace.clockTone
+                            fillColor: "transparent"
+                            capStyle: ShapePath.RoundCap
+                            PathAngleArc {
+                                centerX: 23; centerY: 23
+                                radiusX: 19; radiusY: 19
+                                startAngle: 135; sweepAngle: Math.max(4, 270 * clockFace.clockRatio)
+                            }
+                        }
+                    }
+
+                    MaterialIcon {
+                        anchors.centerIn: parent
+                        text: root.pomoOn ? "timelapse" : clockFace.isStopwatch ? "timer_play" : "timer"
+                        color: clockFace.clockTone
+                        fontStyle: Tokens.font.icon.size(19).build()
+                        fill: 1
+                        opacity: clockFace.isPaused ? 0.48 : 1
+                    }
+                }
+
+                Column {
+                    anchors.left: clockDial.right
+                    anchors.leftMargin: 14
+                    anchors.right: clockButtons.left
+                    anchors.rightMargin: 12
+                    anchors.verticalCenter: clockDial.verticalCenter
+                    spacing: 1
+
+                    Row {
+                        width: parent.width
+                        spacing: 6
+
+                        Rectangle {
+                            id: clockModePill
+
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: Math.min(parent.width, clockModeRow.implicitWidth + 12)
+                            height: 17
+                            radius: 8.5
+                            color: Qt.alpha(clockFace.clockTone, 0.15)
+                            border.width: 0.5
+                            border.color: Qt.alpha(clockFace.clockTone, 0.36)
+
+                            Row {
+                                id: clockModeRow
+
+                                anchors.centerIn: parent
+                                spacing: 4
+
+                                Rectangle {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 5
+                                    height: 5
+                                    radius: 2.5
+                                    color: clockFace.clockTone
+                                    opacity: clockFace.isPaused ? 0.45 : 1
+                                }
+                                StyledText {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: {
+                                        if (clockFace.isPaused)
+                                            return I18n.tr("EN PAUSE");
+                                        if (root.pomoOn)
+                                            return I18n.tr("POMODORO · #%1").arg(root.pomoRound);
+                                        if (clockFace.isStopwatch)
+                                            return root.laps.length > 0 ? I18n.tr("CHRONOMÈTRE · %1").arg(root.laps.length) : I18n.tr("CHRONOMÈTRE");
+                                        return I18n.tr("MINUTEUR");
+                                    }
+                                    color: clockFace.clockTone
+                                    font.pointSize: 6.4
+                                    font.weight: Font.Bold
+                                    font.letterSpacing: 0.65
+                                }
+                            }
+                        }
+
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: Math.max(0, parent.width - clockModePill.width - 6)
+                            elide: Text.ElideRight
+                            visible: text !== ""
+                            text: {
+                                if (root.clockLabel)
+                                    return root.clockLabel;
+                                if (!clockFace.isStopwatch && !clockFace.isPaused && root.clockEnd > 0)
+                                    return I18n.tr("fin %1").arg(Qt.formatTime(new Date(root.clockEnd), "HH:mm"));
+                                return "";
+                            }
+                            color: root.fgDim
+                            font.pointSize: 7.5
+                            font.weight: Font.DemiBold
+                            font.features: { "tnum": 1 }
+                        }
+                    }
+
+                    StyledText {
+                        text: root.fmtClock(root.clockValue)
+                        color: root.fg
+                        opacity: clockFace.isPaused ? 0.58 : 1
+                        font.pointSize: 25
+                        font.weight: Font.Bold
+                        font.features: { "tnum": 1 }
+                    }
+                }
+
+                // Dock de commandes horlogères (Pause/Reprendre · Stop · App Horloge)
+                Row {
+                    id: clockButtons
+
+                    anchors.right: parent.right
+                    anchors.verticalCenter: clockDial.verticalCenter
+                    spacing: 7
+
+                    // Pilule héroïque Pause / Reprendre
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: clkPlayRow.implicitWidth + 20
+                        height: 36
+                        radius: 18
+                        scale: clkPlayArea.pressed ? 0.94 : 1
+                        color: clockFace.isPaused
+                            ? (clkPlayArea.pressed ? Qt.darker(clockFace.clockTone, 1.15) : clockFace.clockTone)
+                            : Qt.alpha(clockFace.clockTone, clkPlayArea.pressed ? 0.28 : clkPlayArea.containsMouse ? 0.22 : 0.14)
+                        border.width: 0.5
+                        border.color: clockFace.isPaused ? Qt.alpha("#ffffff", 0.3) : Qt.alpha(clockFace.clockTone, clkPlayArea.containsMouse ? 0.55 : 0.36)
+
+                        Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        Rectangle {
+                            anchors.top: parent.top
+                            anchors.topMargin: 1
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: Math.max(16, parent.width - 20)
+                            height: 1
+                            radius: 0.5
+                            color: "#ffffff"
+                            opacity: clockFace.isPaused ? 0.35 : (Colours.light ? 0.34 : 0.2)
+                        }
+
+                        Row {
+                            id: clkPlayRow
+
+                            anchors.centerIn: parent
+                            spacing: 4.5
+
+                            MaterialIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: clockFace.isPaused ? "play_arrow" : "pause"
+                                color: clockFace.isPaused ? "#ffffff" : clockFace.clockTone
+                                fontStyle: Tokens.font.icon.size(15.5).build()
+                                fill: 1
+                            }
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: clockFace.isPaused ? I18n.tr("Reprendre") : I18n.tr("Pause")
+                                color: clockFace.isPaused ? "#ffffff" : root.fg
+                                font.pointSize: 8.2
+                                font.weight: Font.Bold
+                            }
+                        }
+
+                        MouseArea {
+                            id: clkPlayArea
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.togglePause()
+                        }
+                    }
+
+                    // Bouton Stop rouge translucide
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 36
+                        height: 36
+                        radius: 18
+                        scale: clkStopArea.pressed ? 0.92 : 1
+                        color: Qt.alpha(root.red, clkStopArea.pressed ? 0.28 : clkStopArea.containsMouse ? 0.22 : 0.14)
+                        border.width: 0.5
+                        border.color: Qt.alpha(root.red, clkStopArea.containsMouse ? 0.52 : 0.34)
+
+                        Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        Rectangle {
+                            anchors.top: parent.top
+                            anchors.topMargin: 1
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: 18
+                            height: 1
+                            radius: 0.5
+                            color: "#ffffff"
+                            opacity: Colours.light ? 0.32 : 0.18
+                        }
+
+                        MaterialIcon {
+                            anchors.centerIn: parent
+                            text: "stop"
+                            color: root.red
+                            fontStyle: Tokens.font.icon.size(16).build()
+                            fill: 1
+                        }
+
+                        MouseArea {
+                            id: clkStopArea
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.stopClock()
+                        }
+                    }
+
+                    // Ouvrir l'application Horloge
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 34
+                        height: 34
+                        radius: 17
+                        scale: clkAppArea.pressed ? 0.92 : 1
+                        color: Qt.alpha(root.fg, clkAppArea.pressed ? 0.18 : clkAppArea.containsMouse ? 0.13 : 0.065)
+                        border.width: 0.5
+                        border.color: Qt.alpha(root.fg, clkAppArea.containsMouse ? 0.28 : 0.14)
+
+                        Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        MaterialIcon {
+                            anchors.centerIn: parent
+                            text: "open_in_new"
+                            color: root.fgDim
+                            fontStyle: Tokens.font.icon.size(14.5).build()
+                        }
+
+                        MouseArea {
+                            id: clkAppArea
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.openClockApp()
+                        }
+                    }
+                }
+            }
+
+            // Séparateur horizontal effilé
+            Rectangle {
+                x: 24
+                y: 80
+                width: parent.width - 48
+                height: 1
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.2; color: Qt.alpha(root.fg, 0.13) }
+                    GradientStop { position: 0.8; color: Qt.alpha(root.fg, 0.13) }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+            }
+
+            // ── Rangée basse : Piste horlogère liquide + actions rapides (+1 min / +5 min ou Tour + dernier tour) ──
+            Item {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: 22
+                anchors.rightMargin: 22
+                y: 88
+                height: 24
+
+                // Piste de progression liquide à gauche
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: clkQuickRow.left
+                    anchors.rightMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    height: 6
+                    radius: 3
+                    color: Qt.alpha(root.fg, 0.08)
+                    border.width: 0.5
+                    border.color: Qt.alpha(root.fg, 0.14)
+                    clip: true
+
+                    Rectangle {
+                        width: parent.width * clockFace.clockRatio
+                        height: parent.height
+                        radius: 3
+                        color: clockFace.clockTone
+
+                        Rectangle {
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: parent.width > 10
+                            width: 10
+                            height: parent.height
+                            radius: 3
+                            gradient: Gradient {
+                                orientation: Gradient.Horizontal
+                                GradientStop { position: 0.0; color: "transparent" }
+                                GradientStop { position: 1.0; color: Qt.alpha("#ffffff", 0.55) }
+                            }
+                        }
+                    }
+                }
+
+                // Droite : boutons rapides contextuels
+                Row {
+                    id: clkQuickRow
+
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 6
+
+                    // Heure de fin quand un libellé occupe déjà la ligne haute (minuteur/pomodoro)
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: !clockFace.isStopwatch && !clockFace.isPaused && root.clockLabel !== "" && root.clockEnd > 0
+                        width: clkEndTxt.implicitWidth + 12
+                        height: 22
+                        radius: 11
+                        color: Qt.alpha(root.fg, 0.06)
+                        border.width: 0.5
+                        border.color: Qt.alpha(root.fg, 0.13)
+
+                        StyledText {
+                            id: clkEndTxt
+
+                            anchors.centerIn: parent
+                            text: I18n.tr("fin %1").arg(Qt.formatTime(new Date(root.clockEnd), "HH:mm"))
+                            color: root.fgDim
+                            font.pointSize: 7.4
+                            font.weight: Font.DemiBold
+                            font.features: { "tnum": 1 }
+                        }
+                    }
+
+                    // +1 min (Minuteur / Pomodoro)
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: !clockFace.isStopwatch
+                        width: plus1Txt.implicitWidth + 16
+                        height: 22
+                        radius: 11
+                        scale: plus1Area.pressed ? 0.94 : 1
+                        color: Qt.alpha(clockFace.clockTone, plus1Area.pressed ? 0.26 : plus1Area.containsMouse ? 0.19 : 0.12)
+                        border.width: 0.5
+                        border.color: Qt.alpha(clockFace.clockTone, plus1Area.containsMouse ? 0.48 : 0.3)
+
+                        Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+
+                        StyledText {
+                            id: plus1Txt
+
+                            anchors.centerIn: parent
+                            text: I18n.tr("+1 min")
+                            color: root.fg
+                            font.pointSize: 7.6
+                            font.weight: Font.Bold
+                            font.features: { "tnum": 1 }
+                        }
+
+                        MouseArea {
+                            id: plus1Area
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.addMinutes(1)
+                        }
+                    }
+
+                    // +5 min (Minuteur / Pomodoro)
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: !clockFace.isStopwatch
+                        width: plus5Txt.implicitWidth + 16
+                        height: 22
+                        radius: 11
+                        scale: plus5Area.pressed ? 0.94 : 1
+                        color: Qt.alpha(root.fg, plus5Area.pressed ? 0.16 : plus5Area.containsMouse ? 0.11 : 0.06)
+                        border.width: 0.5
+                        border.color: Qt.alpha(root.fg, plus5Area.containsMouse ? 0.28 : 0.14)
+
+                        Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+
+                        StyledText {
+                            id: plus5Txt
+
+                            anchors.centerIn: parent
+                            text: I18n.tr("+5 min")
+                            color: root.fg
+                            font.pointSize: 7.6
+                            font.weight: Font.Bold
+                            font.features: { "tnum": 1 }
+                        }
+
+                        MouseArea {
+                            id: plus5Area
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.addMinutes(5)
+                        }
+                    }
+
+                    // Dernier tour enregistré (Chronomètre)
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: clockFace.isStopwatch && root.laps.length > 0
+                        width: lastLapTxt.implicitWidth + 12
+                        height: 22
+                        radius: 11
+                        color: Qt.alpha(root.fg, 0.06)
+                        border.width: 0.5
+                        border.color: Qt.alpha(root.fg, 0.13)
+
+                        StyledText {
+                            id: lastLapTxt
+
+                            anchors.centerIn: parent
+                            text: root.laps.length > 0 ? `#${root.laps.length} · ${root.fmtClock(root.laps[root.laps.length - 1])}` : ""
+                            color: root.fgDim
+                            font.pointSize: 7.4
+                            font.weight: Font.DemiBold
+                            font.features: { "tnum": 1 }
+                        }
+                    }
+
+                    // Bouton Tour (Chronomètre)
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: clockFace.isStopwatch
+                        width: lapRow.implicitWidth + 16
+                        height: 22
+                        radius: 11
+                        scale: lapArea.pressed ? 0.94 : 1
+                        color: Qt.alpha(clockFace.clockTone, lapArea.pressed ? 0.26 : lapArea.containsMouse ? 0.19 : 0.12)
+                        border.width: 0.5
+                        border.color: Qt.alpha(clockFace.clockTone, lapArea.containsMouse ? 0.48 : 0.3)
+
+                        Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+
+                        Row {
+                            id: lapRow
+
+                            anchors.centerIn: parent
+                            spacing: 4
+
+                            MaterialIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "flag"
+                                color: clockFace.clockTone
+                                fontStyle: Tokens.font.icon.size(11).build()
+                                fill: 1
+                            }
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: I18n.tr("Tour")
+                                color: root.fg
+                                font.pointSize: 7.6
+                                font.weight: Font.Bold
+                            }
+                        }
+
+                        MouseArea {
+                            id: lapArea
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.addLap()
+                        }
+                    }
                 }
             }
         }
@@ -8823,122 +9617,386 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
             }
         }
 
-        // ── enregistrement, vue ouverte : chrono + pause / arrêter ──
+        // ── enregistrement d'écran (console studio Liquid Glass) : emblème REC, chrono, ondes, pause et arrêt ──
         Face {
+            id: recordFace
+
+            readonly property real hoverX: Math.max(0, Math.min(width, islandHover.point.position.x - (root.width - width) / 2))
+            readonly property color recTint: Recorder.paused ? "#ff9f0a" : root.red
+
             active: root.mode === "recordFull"
             slide: root.pageSlide("recordFull")
 
+            // Aura studio rouge (ou ambre en pause) derrière l'emblème
+            Rectangle {
+                x: 12
+                y: 12
+                width: 240
+                height: 68
+                radius: 34
+                opacity: Colours.light ? 0.35 : 0.62
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.3; color: Qt.alpha(recordFace.recTint, 0.16) }
+                    GradientStop { position: 0.72; color: Qt.alpha(recordFace.recTint, 0.05) }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+            }
+
+            // Caustique optique inférieure + point lumineux sous le curseur
+            Rectangle {
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 1.5
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.max(120, parent.width - 72)
+                height: 1
+                opacity: root.hovered ? 0.4 : 0.2
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.25; color: Qt.alpha("#ffffff", Colours.light ? 0.45 : 0.6) }
+                    GradientStop { position: 0.5; color: Qt.alpha(recordFace.recTint, 0.92) }
+                    GradientStop { position: 0.75; color: Qt.alpha("#ffffff", Colours.light ? 0.45 : 0.6) }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+            }
+            Rectangle {
+                x: Math.max(32, Math.min(recordFace.width - width - 32, recordFace.hoverX - width / 2))
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 1.5
+                width: 84
+                height: 1.5
+                radius: 0.75
+                opacity: root.hovered ? 0.65 : 0
+                visible: opacity > 0.01
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.5; color: "#ffffff" }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+                Behavior on x { NumberAnimation { duration: 95; easing.type: Easing.OutCubic } }
+                Behavior on opacity { NumberAnimation { duration: 180 } }
+            }
+
+            // Emblème studio 56×56 avec double halo REC
             Rectangle {
                 id: recBadge
 
                 anchors.left: parent.left
-                anchors.leftMargin: 24
-                anchors.verticalCenter: parent.verticalCenter
-                width: 44
-                height: 44
-                radius: 13
-                color: Qt.alpha(root.red, Recorder.paused ? 0.08 : 0.14)
+                anchors.leftMargin: 22
+                y: 20
+                width: 56
+                height: 56
+                radius: 17
                 border.width: 0.5
-                border.color: Qt.alpha(root.red, Recorder.paused ? 0.22 : 0.38)
-
-                Rectangle {
-                    anchors.centerIn: parent
-                    width: 24
-                    height: 24
-                    radius: 12
-                    color: "transparent"
-                    border.width: 1.5
-                    border.color: Qt.alpha(root.red, Recorder.paused ? 0.25 : 0.45)
+                border.color: Qt.alpha(recordFace.recTint, Recorder.paused ? 0.34 : 0.44)
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: Qt.alpha(recordFace.recTint, Colours.light ? 0.16 : 0.16) }
+                    GradientStop { position: 1.0; color: Qt.alpha(root.fg, 0.035) }
                 }
 
                 Rectangle {
-                    id: recFullDot
+                    anchors.top: parent.top
+                    anchors.topMargin: 1
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: 30
+                    height: 1
+                    radius: 0.5
+                    color: "#ffffff"
+                    opacity: Colours.light ? 0.35 : 0.22
+                }
 
+                // Anneau optique externe (respire doucement uniquement vue ouverte & active)
+                Rectangle {
                     anchors.centerIn: parent
-                    width: 11
-                    height: 11
-                    radius: Recorder.paused ? 3 : 5.5
-                    color: root.red
-
-                    Behavior on radius {
-                        NumberAnimation {
-                            duration: 200
-                        }
-                    }
+                    width: 34
+                    height: 34
+                    radius: 17
+                    color: "transparent"
+                    border.width: 1.8
+                    border.color: Qt.alpha(recordFace.recTint, Recorder.paused ? 0.35 : 0.58)
 
                     SequentialAnimation on opacity {
                         running: root.mode === "recordFull" && !Recorder.paused
                         loops: Animation.Infinite
-                        NumberAnimation {
-                            to: 0.32
-                            duration: 700
-                        }
-                        NumberAnimation {
-                            to: 1
-                            duration: 700
-                        }
+                        NumberAnimation { to: 0.38; duration: 800; easing.type: Easing.InOutSine }
+                        NumberAnimation { to: 1.0; duration: 800; easing.type: Easing.InOutSine }
                     }
+                }
+
+                // Point REC vif (ou icône pause ambre)
+                Rectangle {
+                    id: recFullDot
+
+                    anchors.centerIn: parent
+                    visible: !Recorder.paused
+                    width: 13
+                    height: 13
+                    radius: 6.5
+                    color: root.red
+
+                    SequentialAnimation on opacity {
+                        running: root.mode === "recordFull" && !Recorder.paused
+                        loops: Animation.Infinite
+                        NumberAnimation { to: 0.35; duration: 700; easing.type: Easing.InOutSine }
+                        NumberAnimation { to: 1.0; duration: 700; easing.type: Easing.InOutSine }
+                    }
+                }
+
+                MaterialIcon {
+                    anchors.centerIn: parent
+                    visible: Recorder.paused
+                    text: "pause"
+                    color: "#ff9f0a"
+                    fontStyle: Tokens.font.icon.size(19).build()
+                    fill: 1
                 }
             }
 
+            // Centre : Pastilles statut + raccourci Vidéos · Grand chronomètre + micro-barres studio
             Column {
                 anchors.left: recBadge.right
                 anchors.leftMargin: 14
+                anchors.right: recButtons.left
+                anchors.rightMargin: 12
                 anchors.verticalCenter: recBadge.verticalCenter
-                spacing: 1
+                spacing: 3
 
-                StyledText {
-                    text: (Recorder.paused ? I18n.tr("Capture en pause") : I18n.tr("Enregistrement studio")).toUpperCase()
-                    color: Recorder.paused ? root.fgDim : root.red
-                    font.pointSize: 7.2
-                    font.weight: Font.Bold
-                    font.letterSpacing: 0.7
+                Row {
+                    spacing: 6
+
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: recTagRow.implicitWidth + 12
+                        height: 17
+                        radius: 8.5
+                        color: Qt.alpha(recordFace.recTint, 0.16)
+                        border.width: 0.5
+                        border.color: Qt.alpha(recordFace.recTint, 0.38)
+
+                        Row {
+                            id: recTagRow
+
+                            anchors.centerIn: parent
+                            spacing: 4
+
+                            Rectangle {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 5
+                                height: 5
+                                radius: 2.5
+                                color: recordFace.recTint
+                            }
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: Recorder.paused ? I18n.tr("CAPTURE EN PAUSE") : I18n.tr("EN DIRECT")
+                                color: recordFace.recTint
+                                font.pointSize: 6.5
+                                font.weight: Font.Bold
+                                font.letterSpacing: 0.65
+                            }
+                        }
+                    }
+
+                    // Micro-pilule cliquable ouvrant le dossier d'enregistrements
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: recDirRow.implicitWidth + 12
+                        height: 17
+                        radius: 8.5
+                        scale: recDirArea.pressed ? 0.94 : 1
+                        color: Qt.alpha(root.fg, recDirArea.containsMouse ? 0.12 : 0.065)
+                        border.width: 0.5
+                        border.color: Qt.alpha(root.fg, recDirArea.containsMouse ? 0.28 : 0.14)
+
+                        Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+
+                        Row {
+                            id: recDirRow
+
+                            anchors.centerIn: parent
+                            spacing: 3.5
+
+                            MaterialIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "movie"
+                                color: root.fgDim
+                                fontStyle: Tokens.font.icon.size(9.5).build()
+                                fill: 1
+                            }
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: I18n.tr("Vidéos")
+                                color: root.fgDim
+                                font.pointSize: 6.8
+                                font.weight: Font.DemiBold
+                            }
+                        }
+
+                        MouseArea {
+                            id: recDirArea
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: Quickshell.execDetached(["sh", "-c", "d=\"$(xdg-user-dir VIDEOS 2>/dev/null || echo \"$HOME/Videos\")\"; [ -d \"$d/ENREGISTREMENTS ECRAN\" ] && xdg-open \"$d/ENREGISTREMENTS ECRAN\" || xdg-open \"$d\""])
+                        }
+                    }
                 }
-                StyledText {
-                    text: root.fmtTime(Recorder.elapsed)
-                    color: root.fg
-                    font.pointSize: 19
-                    font.weight: Font.Bold
-                    font.features: {
-                        "tnum": 1
+
+                Row {
+                    spacing: 10
+
+                    StyledText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: root.fmtTime(Recorder.elapsed)
+                        color: root.fg
+                        opacity: Recorder.paused ? 0.6 : 1
+                        font.pointSize: 22
+                        font.weight: Font.Bold
+                        font.features: { "tnum": 1 }
+                    }
+
+                    // Micro-barres studio rythmées sur les secondes (zéro boucle 60 FPS)
+                    Row {
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2.5
+                        height: 12
+
+                        Repeater {
+                            model: 5
+
+                            Rectangle {
+                                required property int index
+                                readonly property real baseH: [5, 10, 12, 8, 6][index]
+
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 2.2
+                                height: Recorder.paused ? 3 : Math.max(3, baseH * (0.5 + 0.5 * Math.abs(Math.sin(Recorder.elapsed * 1.3 + index * 1.15))))
+                                radius: 1.1
+                                color: Recorder.paused ? Qt.alpha("#ff9f0a", 0.5) : recordFace.recTint
+
+                                Behavior on height { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+                            }
+                        }
                     }
                 }
             }
 
+            // Droite : Dock studio (Pause/Reprendre · Pilule héroïque rouge Arrêter)
             Row {
+                id: recButtons
+
                 anchors.right: parent.right
                 anchors.rightMargin: 22
                 anchors.verticalCenter: recBadge.verticalCenter
                 spacing: 8
 
-                ShotButton {
-                    icon: Recorder.paused ? "play_arrow" : "pause"
-                    onClicked: Recorder.togglePause()
-                }
                 Rectangle {
-                    width: 40
-                    height: 40
-                    radius: 20
-                    color: "transparent"
-                    // Verre liquide (iOS 27) sous le contenu
-                    GlassControl {
-                        anchors.fill: parent
-                        radius: parent.radius
-                        bevel: parent.height > 60 ? 16 : 0
-                        tintColour: stopRecArea.containsMouse ? Qt.lighter("#ff453a", 1.1) : "#ff453a"
-                        visible: tintColour.a > 0.01
-                        pressed: stopRecArea.pressed
-                        hovered: stopRecArea.containsMouse
-                        pointer: stopRecArea.containsMouse ? Qt.point(stopRecArea.mouseX / Math.max(1, width), stopRecArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
-                    }
-                    scale: stopRecArea.pressed ? 0.9 : 1
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: recPauseRow.implicitWidth + 18
+                    height: 36
+                    radius: 18
+                    scale: recPauseArea.pressed ? 0.94 : 1
+                    color: Recorder.paused
+                        ? Qt.alpha("#ff9f0a", recPauseArea.pressed ? 0.28 : recPauseArea.containsMouse ? 0.22 : 0.15)
+                        : Qt.alpha(root.fg, recPauseArea.pressed ? 0.18 : recPauseArea.containsMouse ? 0.13 : 0.07)
+                    border.width: 0.5
+                    border.color: Recorder.paused ? Qt.alpha("#ff9f0a", 0.48) : Qt.alpha(root.fg, recPauseArea.containsMouse ? 0.3 : 0.15)
+
+                    Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+                    Behavior on color { ColorAnimation { duration: 150 } }
 
                     Rectangle {
+                        anchors.top: parent.top
+                        anchors.topMargin: 1
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: Math.max(14, parent.width - 18)
+                        height: 1
+                        radius: 0.5
+                        color: "#ffffff"
+                        opacity: Colours.light ? 0.32 : 0.18
+                    }
+
+                    Row {
+                        id: recPauseRow
+
                         anchors.centerIn: parent
-                        width: 13
-                        height: 13
-                        radius: 3
-                        color: "white"
+                        spacing: 4.5
+
+                        MaterialIcon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: Recorder.paused ? "play_arrow" : "pause"
+                            color: Recorder.paused ? "#ff9f0a" : root.fg
+                            fontStyle: Tokens.font.icon.size(15.5).build()
+                            fill: 1
+                        }
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: Recorder.paused ? I18n.tr("Reprendre") : I18n.tr("Pause")
+                            color: root.fg
+                            font.pointSize: 8.2
+                            font.weight: Font.Bold
+                        }
+                    }
+
+                    MouseArea {
+                        id: recPauseArea
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: Recorder.togglePause()
+                    }
+                }
+
+                // Pilule héroïque rouge Arrêter
+                Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: stopRecRow.implicitWidth + 24
+                    height: 38
+                    radius: 19
+                    scale: stopRecArea.pressed ? 0.93 : 1
+                    color: stopRecArea.pressed ? Qt.darker("#ff453a", 1.15) : stopRecArea.containsMouse ? Qt.lighter("#ff453a", 1.08) : "#ff453a"
+                    border.width: 0.5
+                    border.color: Qt.alpha("#ffffff", 0.3)
+
+                    Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+                    Behavior on color { ColorAnimation { duration: 150 } }
+
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.topMargin: 1
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: parent.width - 22
+                        height: 1
+                        radius: 0.5
+                        color: "#ffffff"
+                        opacity: 0.34
+                    }
+
+                    Row {
+                        id: stopRecRow
+
+                        anchors.centerIn: parent
+                        spacing: 6
+
+                        Rectangle {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 10
+                            height: 10
+                            radius: 2.5
+                            color: "#ffffff"
+                        }
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: I18n.tr("Arrêter")
+                            color: "#ffffff"
+                            font.pointSize: 8.4
+                            font.weight: Font.Bold
+                        }
                     }
 
                     MouseArea {
