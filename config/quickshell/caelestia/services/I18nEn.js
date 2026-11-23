@@ -1248,6 +1248,11 @@ var strings = {
     "Processus": "Processes",
     "Ress. %1": "Feels %1",
     "charge %1": "load %1",
+    "%1 restantes": "%1 left",
+    "Casque": "Headphones",
+    "Coupé": "Muted",
+    "Désactiver": "Disable",
+    "depuis %1": "since %1",
     "🔒 Note chiffrée\nOuvre-la dans AetherNotes pour la lire.": "🔒 Encrypted note\nOpen it in AetherNotes to read."
 };
 

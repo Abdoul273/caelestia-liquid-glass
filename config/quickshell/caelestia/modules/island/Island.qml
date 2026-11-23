@@ -30,8 +30,36 @@ Item {
 
     // ── Sources ──
     readonly property MprisPlayer player: Players.active
+    readonly property int playerCount: Players.list.filter(p => (p?.trackTitle ?? "").length > 0).length
     readonly property bool playing: player?.isPlaying ?? false
     readonly property bool hasMedia: !!player && (player.trackTitle ?? "").length > 0
+    readonly property string playerOutputLabel: {
+        if (Audio.muted)
+            return I18n.tr("Muet");
+        if (root.btConnected.length > 0 && (root.btEarbuds || root.btAudio))
+            return root.btConnected[0].name || I18n.tr("Bluetooth");
+        const desc = Audio.sink?.description ?? "";
+        if (/headphone|headset|ear|casque/i.test(desc))
+            return I18n.tr("Casque");
+        return I18n.tr("Haut-parleurs");
+    }
+    readonly property string playerOutputIcon: {
+        if (Audio.muted)
+            return "volume_off";
+        if (root.btEarbuds)
+            return "earbuds";
+        if (root.btAudio || /headphone|headset|ear|casque/i.test(Audio.sink?.description ?? ""))
+            return "headphones";
+        return "speaker";
+    }
+
+    function cyclePlayer(): void {
+        const list = Players.list.filter(p => (p?.trackTitle ?? "").length > 0);
+        if (list.length <= 1)
+            return;
+        const idx = list.indexOf(root.player);
+        Players.manualActive = list[(idx + 1) % list.length];
+    }
     readonly property var brightMon: Brightness.getMonitorForScreen(screen)
     readonly property real brightness: brightMon?.brightness ?? 0
     // Batterie lue directement dans le noyau (charge_now / charge_full), plus précise et réactive qu'UPower
@@ -1605,7 +1633,7 @@ Item {
         case "recordFull":
             return Qt.size(pageWidth, 86);
         case "caffeine":
-            return Qt.size(pageWidth, 96);
+            return Qt.size(pageWidth, 134);
         case "count":
             return Qt.size(200, 86);
         case "drop":
@@ -1628,7 +1656,7 @@ Item {
         case "agentsMini":
             return Qt.size(330 + actsInset, 40);
         case "agents":
-            return Qt.size(pageWidth, 66 + 52 * Math.min(3, Agents.shown.length));
+            return Qt.size(pageWidth, 76 + 61 * Math.min(3, Agents.shown.length));
         case "perm":
             return Qt.size(Math.max(pageWidth, 600), 148);
         case "agentDone":
@@ -1642,7 +1670,7 @@ Item {
         case "charge":
             return chargePlugged ? Qt.size(464, 88) : Qt.size(410, 74);
         case "player":
-            return Qt.size(pageWidth, (hasLyrics ? 202 : 178) + (shelf.length > 0 ? shelfExtra : 10));
+            return Qt.size(pageWidth, (hasLyrics ? 218 : 188) + (shelf.length > 0 ? shelfExtra : 0));
         case "info":
             return Qt.size(pageWidth, (infoChips.length > 0 ? 108 + infoFlow.implicitHeight + 24 : 116) + shelfExtra);
         case "perf":
@@ -1660,7 +1688,7 @@ Item {
         case "call":
             return Qt.size(Math.min(340, 150 + callTitleMetrics.advanceWidth) + actsInset, 40);
         case "callFull":
-            return Qt.size(pageWidth, 96);
+            return Qt.size(pageWidth, 112);
         case "media":
             return Qt.size((hasLyrics ? 400 : 290) + actsInset, 40);
         default:
@@ -6018,131 +6046,415 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
             }
         }
 
-        // ── caféine : page de l'île ouverte ──
+        // ── caféine : cadran anti-veille Liquid Glass avec chronographe live et sélecteur rapide de durée ──
         Face {
+            id: caffFace
+
+            readonly property real hoverX: Math.max(0, Math.min(width, islandHover.point.position.x - (root.width - width) / 2))
+            readonly property bool timed: IdleInhibitor.until > 0
+            readonly property color caffTint: timed ? (Colours.light ? "#c77700" : "#ff9f0a") : root.accent
+            readonly property real totalSpan: timed ? Math.max(60000, IdleInhibitor.until - (IdleInhibitor.enabledSince ? IdleInhibitor.enabledSince.getTime() : IdleInhibitor.until - 3600000)) : 1
+            readonly property real ratio: timed ? Math.max(0.02, Math.min(1, IdleInhibitor.remaining / totalSpan)) : 1
+
             active: root.mode === "caffeine"
             slide: root.pageSlide("caffeine")
 
+            // Aura douce derrière l'emblème caféine
             Rectangle {
-                id: caffBadge
+                x: 12
+                y: 10
+                width: 210
+                height: 64
+                radius: 32
+                opacity: Colours.light ? 0.35 : 0.6
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.3; color: Qt.alpha(caffFace.caffTint, 0.14) }
+                    GradientStop { position: 0.72; color: Qt.alpha(caffFace.caffTint, 0.05) }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+            }
 
+            // Caustique optique inférieure + point lumineux sous le curseur
+            Rectangle {
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 1.5
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.max(120, parent.width - 72)
+                height: 1
+                opacity: root.hovered ? 0.36 : 0.18
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.25; color: Qt.alpha("#ffffff", Colours.light ? 0.45 : 0.6) }
+                    GradientStop { position: 0.5; color: Qt.alpha(caffFace.caffTint, 0.9) }
+                    GradientStop { position: 0.75; color: Qt.alpha("#ffffff", Colours.light ? 0.45 : 0.6) }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+            }
+            Rectangle {
+                x: Math.max(32, Math.min(caffFace.width - width - 32, caffFace.hoverX - width / 2))
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 1.5
+                width: 84
+                height: 1.5
+                radius: 0.75
+                opacity: root.hovered ? 0.65 : 0
+                visible: opacity > 0.01
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.5; color: "#ffffff" }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+                Behavior on x { NumberAnimation { duration: 95; easing.type: Easing.OutCubic } }
+                Behavior on opacity { NumberAnimation { duration: 180 } }
+            }
+
+            // ── Rangée haute : Emblème chronographe vitré + état + bouton Désactiver ──
+            Item {
                 anchors.left: parent.left
-                anchors.leftMargin: 26
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.verticalCenterOffset: -4
-                width: 48
-                height: 48
-                radius: 14
-                color: Qt.alpha(root.accent, 0.12)
-                border.width: 0.5
-                border.color: Qt.alpha(root.accent, 0.34)
-
-                Shape {
-                    anchors.centerIn: parent
-                    width: 38
-                    height: 38
-                    preferredRendererType: Shape.CurveRenderer
-
-                    ShapePath {
-                        strokeWidth: 2
-                        strokeColor: Qt.alpha(root.accent, 0.22)
-                        fillColor: "transparent"
-
-                        PathAngleArc {
-                            centerX: 19
-                            centerY: 19
-                            radiusX: 15.5
-                            radiusY: 15.5
-                            startAngle: 135
-                            sweepAngle: 270
-                        }
-                    }
-
-                    ShapePath {
-                        strokeWidth: 2.2
-                        strokeColor: root.accent
-                        fillColor: "transparent"
-                        capStyle: ShapePath.RoundCap
-
-                        PathAngleArc {
-                            centerX: 19
-                            centerY: 19
-                            radiusX: 15.5
-                            radiusY: 15.5
-                            startAngle: 135
-                            sweepAngle: 270
-                        }
-                    }
-                }
-
-                MaterialIcon {
-                    anchors.centerIn: parent
-                    text: "coffee"
-                    color: root.accent
-                    fontStyle: Tokens.font.icon.size(18).build()
-                    fill: 1
-                }
-            }
-
-            Column {
-                anchors.left: caffBadge.right
-                anchors.leftMargin: 14
-                anchors.right: caffButtons.left
-                anchors.rightMargin: 12
-                anchors.verticalCenter: caffBadge.verticalCenter
-                spacing: 1
-
-                StyledText {
-                    text: IdleInhibitor.until > 0 ? I18n.tr("MAINTIEN TEMPORISÉ") : I18n.tr("ANTI-VEILLE CONTINU")
-                    color: root.accent
-                    font.pointSize: 7.2
-                    font.weight: Font.Bold
-                    font.letterSpacing: 0.7
-                }
-                StyledText {
-                    width: parent.width
-                    elide: Text.ElideRight
-                    text: I18n.tr("L'écran reste allumé")
-                    color: root.fg
-                    font.pointSize: 11.5
-                    font.weight: Font.Bold
-                }
-                StyledText {
-                    width: parent.width
-                    elide: Text.ElideRight
-                    text: IdleInhibitor.until > 0 ? I18n.tr("Encore %1 · jusqu'à %2").arg(IdleInhibitor.remainingText()).arg(Qt.formatTime(new Date(IdleInhibitor.until), "HH:mm")) : I18n.tr("Sans limite · actif depuis %1").arg(Qt.formatTime(IdleInhibitor.enabledSince, "HH:mm"))
-                    color: root.fgDim
-                    font.pointSize: 8.8
-                    font.features: {
-                        "tnum": 1
-                    }
-                }
-            }
-
-            Row {
-                id: caffButtons
-
                 anchors.right: parent.right
-                anchors.rightMargin: 26
-                anchors.verticalCenter: caffBadge.verticalCenter
-                spacing: 8
+                anchors.leftMargin: 22
+                anchors.rightMargin: 22
+                y: 16
+                height: 54
 
-                ShotButton {
-                    visible: IdleInhibitor.until > 0
-                    icon: "more_time"
-                    tip: I18n.tr("+15 min")
-                    onClicked: IdleInhibitor.extend(15)
+                Rectangle {
+                    id: caffBadge
+
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 52
+                    height: 52
+                    radius: 16
+                    border.width: 0.5
+                    border.color: Qt.alpha(caffFace.caffTint, 0.34)
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: Qt.alpha(caffFace.caffTint, Colours.light ? 0.14 : 0.13) }
+                        GradientStop { position: 1.0; color: Qt.alpha(root.fg, 0.035) }
+                    }
+
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.topMargin: 1
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: 28
+                        height: 1
+                        radius: 0.5
+                        color: "#ffffff"
+                        opacity: Colours.light ? 0.34 : 0.2
+                    }
+
+                    Shape {
+                        anchors.centerIn: parent
+                        width: 42
+                        height: 42
+                        preferredRendererType: Shape.CurveRenderer
+
+                        ShapePath {
+                            strokeWidth: 2.6
+                            strokeColor: Qt.alpha(root.fg, 0.12)
+                            fillColor: "transparent"
+                            capStyle: ShapePath.RoundCap
+                            PathAngleArc {
+                                centerX: 21; centerY: 21
+                                radiusX: 17.5; radiusY: 17.5
+                                startAngle: 135; sweepAngle: 270
+                            }
+                        }
+                        ShapePath {
+                            strokeWidth: 6.2
+                            strokeColor: Qt.alpha(caffFace.caffTint, 0.22)
+                            fillColor: "transparent"
+                            capStyle: ShapePath.RoundCap
+                            PathAngleArc {
+                                centerX: 21; centerY: 21
+                                radiusX: 17.5; radiusY: 17.5
+                                startAngle: 135; sweepAngle: 270 * caffFace.ratio
+                            }
+                        }
+                        ShapePath {
+                            strokeWidth: 2.8
+                            strokeColor: caffFace.caffTint
+                            fillColor: "transparent"
+                            capStyle: ShapePath.RoundCap
+                            PathAngleArc {
+                                centerX: 21; centerY: 21
+                                radiusX: 17.5; radiusY: 17.5
+                                startAngle: 135; sweepAngle: 270 * caffFace.ratio
+                            }
+                        }
+                    }
+
+                    MaterialIcon {
+                        anchors.centerIn: parent
+                        text: "coffee"
+                        color: caffFace.caffTint
+                        fontStyle: Tokens.font.icon.size(18).build()
+                        fill: 1
+                    }
                 }
-                ShotButton {
-                    visible: IdleInhibitor.until > 0
-                    icon: "all_inclusive"
-                    tip: I18n.tr("Sans limite")
-                    onClicked: IdleInhibitor.enableFor(0)
+
+                Column {
+                    anchors.left: caffBadge.right
+                    anchors.leftMargin: 14
+                    anchors.right: caffStopPill.left
+                    anchors.rightMargin: 12
+                    anchors.verticalCenter: caffBadge.verticalCenter
+                    spacing: 2
+
+                    Row {
+                        spacing: 6
+
+                        Rectangle {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: caffTagTxt.implicitWidth + 12
+                            height: 16
+                            radius: 8
+                            color: Qt.alpha(caffFace.caffTint, 0.14)
+                            border.width: 0.5
+                            border.color: Qt.alpha(caffFace.caffTint, 0.34)
+
+                            StyledText {
+                                id: caffTagTxt
+
+                                anchors.centerIn: parent
+                                text: caffFace.timed ? I18n.tr("MAINTIEN TEMPORISÉ") : I18n.tr("ANTI-VEILLE CONTINU")
+                                color: caffFace.caffTint
+                                font.pointSize: 6.6
+                                font.weight: Font.Bold
+                                font.letterSpacing: 0.65
+                            }
+                        }
+
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: caffFace.timed
+                                ? I18n.tr("jusqu'à %1").arg(Qt.formatTime(new Date(IdleInhibitor.until), "HH:mm"))
+                                : I18n.tr("depuis %1").arg(Qt.formatTime(IdleInhibitor.enabledSince, "HH:mm"))
+                            color: root.fgDim
+                            font.pointSize: 7.4
+                            font.weight: Font.DemiBold
+                            font.features: { "tnum": 1 }
+                        }
+                    }
+
+                    StyledText {
+                        width: parent.width
+                        elide: Text.ElideRight
+                        text: caffFace.timed ? I18n.tr("%1 restantes").arg(IdleInhibitor.remainingText()) : I18n.tr("L'écran reste allumé")
+                        color: root.fg
+                        font.pointSize: 12
+                        font.weight: Font.Bold
+                        font.features: { "tnum": 1 }
+                    }
                 }
-                ShotButton {
-                    icon: "stop"
-                    tip: I18n.tr("Arrêter")
-                    onClicked: IdleInhibitor.enabled = false
+
+                // Pilule d'arrêt rapide rouge translucide
+                Rectangle {
+                    id: caffStopPill
+
+                    anchors.right: parent.right
+                    anchors.verticalCenter: caffBadge.verticalCenter
+                    width: caffStopRow.implicitWidth + 22
+                    height: 36
+                    radius: 18
+                    scale: caffStopArea.pressed ? 0.94 : 1
+                    color: Qt.alpha(root.red, caffStopArea.pressed ? 0.28 : caffStopArea.containsMouse ? 0.22 : 0.14)
+                    border.width: 0.5
+                    border.color: Qt.alpha(root.red, caffStopArea.containsMouse ? 0.55 : 0.34)
+
+                    Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                    Behavior on border.color { ColorAnimation { duration: 150 } }
+
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.topMargin: 1
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: parent.width - 20
+                        height: 1
+                        radius: 0.5
+                        color: "#ffffff"
+                        opacity: Colours.light ? 0.32 : 0.18
+                    }
+
+                    Row {
+                        id: caffStopRow
+
+                        anchors.centerIn: parent
+                        spacing: 5
+
+                        MaterialIcon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "stop_circle"
+                            color: root.red
+                            fontStyle: Tokens.font.icon.size(14).build()
+                            fill: 1
+                        }
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: I18n.tr("Désactiver")
+                            color: root.fg
+                            font.pointSize: 8.4
+                            font.weight: Font.Bold
+                        }
+                    }
+
+                    MouseArea {
+                        id: caffStopArea
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: IdleInhibitor.enabled = false
+                    }
+                }
+            }
+
+            // Filet horizontal effilé
+            Rectangle {
+                x: 24
+                y: 77
+                width: parent.width - 48
+                height: 1
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.2; color: Qt.alpha(root.fg, 0.13) }
+                    GradientStop { position: 0.8; color: Qt.alpha(root.fg, 0.13) }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+            }
+
+            // ── Barre rapide de durées : bascule immédiate 15m / 30m / 1h / 2h / ∞ + prolongation +15 min ──
+            Item {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: 22
+                anchors.rightMargin: 22
+                y: 85
+                height: 26
+
+                Row {
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 6
+
+                    Repeater {
+                        model: [
+                            { m: 15, label: "15 min" },
+                            { m: 30, label: "30 min" },
+                            { m: 60, label: "1 h" },
+                            { m: 120, label: "2 h" },
+                            { m: 0, label: "∞" }
+                        ]
+
+                        Rectangle {
+                            id: caffPreset
+
+                            required property var modelData
+                            readonly property bool isCurrent: modelData.m === 0 && !caffFace.timed
+
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: Math.max(40, caffPreTxt.implicitWidth + 18)
+                            height: 24
+                            radius: 12
+                            scale: caffPreArea.pressed ? 0.94 : 1
+                            color: isCurrent
+                                ? Qt.alpha(caffFace.caffTint, 0.2)
+                                : Qt.alpha(root.fg, caffPreArea.pressed ? 0.16 : caffPreArea.containsMouse ? 0.11 : 0.06)
+                            border.width: 0.5
+                            border.color: isCurrent
+                                ? Qt.alpha(caffFace.caffTint, 0.48)
+                                : Qt.alpha(root.fg, caffPreArea.containsMouse ? 0.26 : 0.13)
+
+                            Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+                            Behavior on color { ColorAnimation { duration: 150 } }
+
+                            Rectangle {
+                                anchors.top: parent.top
+                                anchors.topMargin: 1
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                width: parent.width - 14
+                                height: 1
+                                radius: 0.5
+                                color: "#ffffff"
+                                opacity: Colours.light ? 0.3 : 0.16
+                            }
+
+                            StyledText {
+                                id: caffPreTxt
+
+                                anchors.centerIn: parent
+                                text: caffPreset.modelData.label
+                                color: caffPreset.isCurrent ? caffFace.caffTint : root.fg
+                                font.pointSize: caffPreset.modelData.m === 0 ? 10 : 7.8
+                                font.weight: Font.Bold
+                                font.features: { "tnum": 1 }
+                            }
+
+                            MouseArea {
+                                id: caffPreArea
+
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: IdleInhibitor.enableFor(caffPreset.modelData.m)
+                            }
+                        }
+                    }
+                }
+
+                // Bouton +15 min (visible en mode temporisé)
+                Rectangle {
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: caffFace.timed
+                    width: plusCaffRow.implicitWidth + 16
+                    height: 24
+                    radius: 12
+                    scale: plusCaffArea.pressed ? 0.94 : 1
+                    color: Qt.alpha(caffFace.caffTint, plusCaffArea.pressed ? 0.28 : plusCaffArea.containsMouse ? 0.2 : 0.13)
+                    border.width: 0.5
+                    border.color: Qt.alpha(caffFace.caffTint, plusCaffArea.containsMouse ? 0.52 : 0.34)
+
+                    Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+                    Behavior on color { ColorAnimation { duration: 150 } }
+
+                    Row {
+                        id: plusCaffRow
+
+                        anchors.centerIn: parent
+                        spacing: 4
+
+                        MaterialIcon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "more_time"
+                            color: caffFace.caffTint
+                            fontStyle: Tokens.font.icon.size(11.5).build()
+                            fill: 1
+                        }
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: I18n.tr("+15 min")
+                            color: root.fg
+                            font.pointSize: 7.8
+                            font.weight: Font.Bold
+                            font.features: { "tnum": 1 }
+                        }
+                    }
+
+                    MouseArea {
+                        id: plusCaffArea
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: IdleInhibitor.extend(15)
+                    }
                 }
             }
         }
@@ -6286,154 +6598,272 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
             }
         }
 
-        // ── agents IA : page de l'île ouverte (un agent par ligne, clic = son terminal) ──
+        // ── agents IA : cockpit Liquid Glass (Claude Code / Codex, cartes vitrées biseautées, clic = focus terminal) ──
         Face {
+            id: agentsFace
+
+            readonly property real hoverX: Math.max(0, Math.min(width, islandHover.point.position.x - (root.width - width) / 2))
+            readonly property color leadTint: Agents.lead ? Agents.kindColour(Agents.lead.kind) : root.accent
+
             active: root.mode === "agents"
             slide: root.pageSlide("agents")
 
-            Row {
+            // Aura subtile en tête colorée par l'agent actif
+            Rectangle {
+                x: 16
+                y: 8
+                width: 240
+                height: 44
+                radius: 22
+                opacity: Colours.light ? 0.32 : 0.55
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.3; color: Qt.alpha(agentsFace.leadTint, 0.14) }
+                    GradientStop { position: 0.75; color: Qt.alpha(agentsFace.leadTint, 0.05) }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+            }
+
+            // Caustique optique inférieure + point lumineux sous le curseur
+            Rectangle {
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 1.5
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.max(120, parent.width - 72)
+                height: 1
+                opacity: root.hovered ? 0.36 : 0.18
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.25; color: Qt.alpha("#ffffff", Colours.light ? 0.45 : 0.6) }
+                    GradientStop { position: 0.5; color: Qt.alpha(agentsFace.leadTint, 0.9) }
+                    GradientStop { position: 0.75; color: Qt.alpha("#ffffff", Colours.light ? 0.45 : 0.6) }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+            }
+            Rectangle {
+                x: Math.max(32, Math.min(agentsFace.width - width - 32, agentsFace.hoverX - width / 2))
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 1.5
+                width: 84
+                height: 1.5
+                radius: 0.75
+                opacity: root.hovered ? 0.65 : 0
+                visible: opacity > 0.01
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.5; color: "#ffffff" }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+                Behavior on x { NumberAnimation { duration: 95; easing.type: Easing.OutCubic } }
+                Behavior on opacity { NumberAnimation { duration: 180 } }
+            }
+
+            // En-tête Agents IA
+            Item {
                 id: agHead
 
                 anchors.left: parent.left
-                anchors.leftMargin: 26
-                anchors.top: parent.top
-                anchors.topMargin: 16
-                spacing: 8
-
-                Rectangle {
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 24
-                    height: 24
-                    radius: 7
-                    color: Qt.alpha(root.accent, 0.14)
-                    border.width: 0.5
-                    border.color: Qt.alpha(root.accent, 0.34)
-
-                    MaterialIcon {
-                        anchors.centerIn: parent
-                        text: "smart_toy"
-                        color: root.accent
-                        fontStyle: Tokens.font.icon.size(13.5).build()
-                        fill: 1
-                    }
-                }
-
-                StyledText {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: I18n.tr("AGENTS IA")
-                    color: root.fg
-                    font.pointSize: 9.5
-                    font.weight: Font.Bold
-                    font.letterSpacing: 0.7
-                }
-
-                Rectangle {
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: agStatusText.implicitWidth + 12
-                    height: 18
-                    radius: 6
-                    color: Agents.working > 0 ? Qt.alpha(root.accent, 0.14) : Qt.alpha(root.fg, 0.07)
-                    border.width: 0.5
-                    border.color: Agents.working > 0 ? Qt.alpha(root.accent, 0.3) : Qt.alpha(root.fg, 0.14)
-
-                    StyledText {
-                        id: agStatusText
-
-                        anchors.centerIn: parent
-                        text: Agents.working > 0 ? I18n.tr("%1 actif(s)").arg(Agents.working) : I18n.tr("en veille")
-                        color: Agents.working > 0 ? root.accent : root.fgDim
-                        font.pointSize: 8
-                        font.weight: Font.DemiBold
-                        font.features: {
-                            "tnum": 1
-                        }
-                    }
-                }
-            }
-
-            Row {
                 anchors.right: parent.right
+                anchors.leftMargin: 22
                 anchors.rightMargin: 22
-                anchors.verticalCenter: agHead.verticalCenter
-                spacing: 10
+                y: 14
+                height: 26
 
-                StyledText {
+                Row {
+                    anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
-                    visible: Agents.shown.length > 3
-                    text: I18n.tr("+%1").arg(Agents.shown.length - 3)
-                    color: root.fgDim
-                    font.pointSize: 9
-                    font.weight: Font.Bold
-                }
+                    spacing: 8
 
-                // « Nettoyer » : retire d'un coup les agents qui ont fini
-                Rectangle {
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: Agents.doneShown > 0
-                    width: cleanRow.implicitWidth + 18
-                    height: 24
-                    radius: 8
-                    color: "transparent"
-                    border.width: 0.5
-                    border.color: Qt.alpha(root.fg, 0.16)
-                    GlassControl {
-                        anchors.fill: parent
-                        radius: parent.radius
-                        bevel: parent.height > 60 ? 16 : 0
-                        tintColour: Qt.alpha(root.fg, cleanArea.pressed ? 0.2 : cleanArea.containsMouse ? 0.14 : 0.08)
-                        visible: tintColour.a > 0.01
-                        pressed: cleanArea.pressed
-                        hovered: cleanArea.containsMouse
-                        pointer: cleanArea.containsMouse ? Qt.point(cleanArea.mouseX / Math.max(1, width), cleanArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
-                    }
-                    scale: cleanArea.pressed ? 0.94 : 1
-
-                    Behavior on scale {
-                        NumberAnimation {
-                            duration: 120
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 26
+                        height: 26
+                        radius: 9
+                        border.width: 0.5
+                        border.color: Qt.alpha(agentsFace.leadTint, 0.38)
+                        gradient: Gradient {
+                            GradientStop { position: 0.0; color: Qt.alpha(agentsFace.leadTint, 0.18) }
+                            GradientStop { position: 1.0; color: Qt.alpha(root.fg, 0.04) }
                         }
-                    }
 
-                    Row {
-                        id: cleanRow
-
-                        anchors.centerIn: parent
-                        spacing: 4
+                        Rectangle {
+                            anchors.top: parent.top
+                            anchors.topMargin: 1
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: 14
+                            height: 1
+                            radius: 0.5
+                            color: "#ffffff"
+                            opacity: Colours.light ? 0.35 : 0.22
+                        }
 
                         MaterialIcon {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: "cleaning_services"
-                            color: root.fg
-                            fontStyle: Tokens.font.icon.size(11.5).build()
+                            anchors.centerIn: parent
+                            text: "smart_toy"
+                            color: agentsFace.leadTint
+                            fontStyle: Tokens.font.icon.size(14).build()
                             fill: 1
-                        }
-                        StyledText {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: Agents.doneShown > 1 ? I18n.tr("Nettoyer (%1)").arg(Agents.doneShown) : I18n.tr("Nettoyer")
-                            color: root.fg
-                            font.pointSize: 8.5
-                            font.weight: Font.DemiBold
                         }
                     }
 
-                    MouseArea {
-                        id: cleanArea
+                    StyledText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: I18n.tr("AGENTS IA")
+                        color: root.fg
+                        font.pointSize: 8.6
+                        font.weight: Font.Bold
+                        font.letterSpacing: 0.75
+                    }
 
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: Agents.clean()
+                    // Pastille d'état en direct
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: agStatusRow.implicitWidth + 14
+                        height: 19
+                        radius: 9.5
+                        color: Agents.working > 0 ? Qt.alpha(agentsFace.leadTint, 0.14) : Qt.alpha(root.fg, 0.065)
+                        border.width: 0.5
+                        border.color: Agents.working > 0 ? Qt.alpha(agentsFace.leadTint, 0.34) : Qt.alpha(root.fg, 0.14)
+
+                        Row {
+                            id: agStatusRow
+
+                            anchors.centerIn: parent
+                            spacing: 4.5
+
+                            Rectangle {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 5.5
+                                height: 5.5
+                                radius: 2.75
+                                color: Agents.working > 0 ? agentsFace.leadTint : root.green
+                            }
+
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: Agents.working > 0 ? I18n.tr("%1 actif(s)").arg(Agents.working) : I18n.tr("en veille")
+                                color: Agents.working > 0 ? agentsFace.leadTint : root.fgDim
+                                font.pointSize: 7.4
+                                font.weight: Font.Bold
+                                font.features: { "tnum": 1 }
+                            }
+                        }
+                    }
+                }
+
+                Row {
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 7
+
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: Agents.shown.length > 3
+                        width: agMoreTxt.implicitWidth + 12
+                        height: 20
+                        radius: 10
+                        color: Qt.alpha(root.fg, 0.07)
+                        border.width: 0.5
+                        border.color: Qt.alpha(root.fg, 0.14)
+
+                        StyledText {
+                            id: agMoreTxt
+
+                            anchors.centerIn: parent
+                            text: I18n.tr("+%1").arg(Agents.shown.length - 3)
+                            color: root.fgDim
+                            font.pointSize: 7.5
+                            font.weight: Font.Bold
+                            font.features: { "tnum": 1 }
+                        }
+                    }
+
+                    // Pilule vitrée « Nettoyer » : retire les agents terminés
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: Agents.doneShown > 0
+                        width: cleanRow.implicitWidth + 16
+                        height: 22
+                        radius: 11
+                        scale: cleanArea.pressed ? 0.94 : 1
+                        color: Qt.alpha(root.fg, cleanArea.pressed ? 0.18 : cleanArea.containsMouse ? 0.13 : 0.07)
+                        border.width: 0.5
+                        border.color: Qt.alpha(root.fg, cleanArea.containsMouse ? 0.3 : 0.15)
+
+                        Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        Rectangle {
+                            anchors.top: parent.top
+                            anchors.topMargin: 1
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: parent.width - 14
+                            height: 1
+                            radius: 0.5
+                            color: "#ffffff"
+                            opacity: Colours.light ? 0.32 : 0.18
+                        }
+
+                        Row {
+                            id: cleanRow
+
+                            anchors.centerIn: parent
+                            spacing: 4
+
+                            MaterialIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "cleaning_services"
+                                color: root.fgDim
+                                fontStyle: Tokens.font.icon.size(11).build()
+                                fill: 1
+                            }
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: Agents.doneShown > 1 ? I18n.tr("Nettoyer (%1)").arg(Agents.doneShown) : I18n.tr("Nettoyer")
+                                color: root.fg
+                                font.pointSize: 7.6
+                                font.weight: Font.Bold
+                            }
+                        }
+
+                        MouseArea {
+                            id: cleanArea
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: Agents.clean()
+                        }
                     }
                 }
             }
 
+            // Séparateur horizontal effilé
+            Rectangle {
+                x: 24
+                y: 45
+                width: parent.width - 48
+                height: 1
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.2; color: Qt.alpha(root.fg, 0.13) }
+                    GradientStop { position: 0.8; color: Qt.alpha(root.fg, 0.13) }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+            }
+
+            // Cartes d'agents en verre biseauté
             Column {
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.top: agHead.bottom
-                anchors.topMargin: 8
-                anchors.leftMargin: 18
-                anchors.rightMargin: 18
+                y: 52
+                anchors.leftMargin: 20
+                anchors.rightMargin: 20
+                spacing: 5
 
                 Repeater {
                     model: Agents.shown.slice(0, 3)
@@ -6449,112 +6879,45 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
                         readonly property color stateCol: waiting ? "#ff9f0a" : working ? tint : root.green
 
                         width: parent?.width ?? 0
-                        height: 52
+                        height: 56
 
                         Rectangle {
                             anchors.fill: parent
-                            anchors.topMargin: 2.5
-                            anchors.bottomMargin: 2.5
-                            radius: 13
-                            color: Qt.alpha(root.fg, agArea.pressed ? 0.13 : agArea.containsMouse ? 0.08 : 0.04)
+                            radius: 14
+                            scale: agArea.pressed ? 0.985 : 1
                             border.width: 0.5
-                            border.color: Qt.alpha(agRow.stateCol, agArea.containsMouse ? 0.34 : 0.15)
-
-                            Behavior on color {
-                                ColorAnimation {
-                                    duration: 120
-                                }
+                            border.color: Qt.alpha(agRow.stateCol, agArea.containsMouse ? 0.45 : 0.22)
+                            gradient: Gradient {
+                                GradientStop { position: 0.0; color: Qt.alpha(agRow.stateCol, agArea.pressed ? 0.18 : agArea.containsMouse ? 0.13 : 0.085) }
+                                GradientStop { position: 1.0; color: Qt.alpha(root.fg, 0.03) }
                             }
 
-                            // Filet latéral d'état matériel
+                            Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+                            Behavior on border.color { ColorAnimation { duration: 160 } }
+
+                            // Reflet spéculaire supérieur sur la carte agent
+                            Rectangle {
+                                anchors.top: parent.top
+                                anchors.topMargin: 1
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.leftMargin: 14
+                                anchors.rightMargin: 14
+                                height: 1
+                                radius: 0.5
+                                color: "#ffffff"
+                                opacity: Colours.light ? 0.32 : 0.16
+                            }
+
+                            // Épine lumineuse latérale d'état
                             Rectangle {
                                 anchors.left: parent.left
-                                anchors.leftMargin: 5
+                                anchors.leftMargin: 6
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: 2.5
-                                height: 22
-                                radius: 1.25
+                                width: 3
+                                height: 24
+                                radius: 1.5
                                 color: agRow.stateCol
-                            }
-                        }
-
-                        AgentSpinner {
-                            id: agSpin
-
-                            anchors.left: parent.left
-                            anchors.leftMargin: 15
-                            anchors.verticalCenter: parent.verticalCenter
-                            tint: agRow.stateCol
-                            spinning: agRow.working && root.mode === "agents"
-                            done: !agRow.working && !agRow.waiting
-                            letter: agRow.modelData.kind === "codex" ? "X" : "C"
-                        }
-
-                        Column {
-                            anchors.left: agSpin.right
-                            anchors.leftMargin: 12
-                            anchors.right: agTime.left
-                            anchors.rightMargin: 12
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: 1
-
-                            StyledText {
-                                width: parent.width
-                                elide: Text.ElideRight
-                                text: `${agRow.modelData.project}${agRow.modelData.title ? " · " + agRow.modelData.title : ""}`
-                                color: root.fg
-                                font.pointSize: 9.8
-                                font.weight: Font.DemiBold
-                            }
-                            StyledText {
-                                width: parent.width
-                                elide: Text.ElideRight
-                                text: agRow.waiting ? I18n.tr("Attend ta réponse") : agRow.working ? (agRow.modelData.tool || I18n.tr("Réfléchit…")) : (agRow.modelData.reply || I18n.tr("Prêt"))
-                                color: agRow.waiting ? "#ff9f0a" : root.fgDim
-                                font.pointSize: 8.8
-                            }
-                        }
-
-                        // × au survol d'un agent qui a fini : le retirer de la page
-                        IslandButton {
-                            id: agClose
-
-                            anchors.right: parent.right
-                            anchors.rightMargin: 8
-                            anchors.verticalCenter: parent.verticalCenter
-                            z: 1
-                            icon: "close"
-                            visible: agRow.done && rowHover.hovered
-                            onClicked: Agents.dismiss(agRow.modelData)
-                        }
-
-                        HoverHandler {
-                            id: rowHover
-                        }
-
-                        Column {
-                            id: agTime
-
-                            anchors.right: agClose.visible ? agClose.left : parent.right
-                            anchors.rightMargin: agClose.visible ? 6 : 14
-                            anchors.verticalCenter: parent.verticalCenter
-
-                            StyledText {
-                                anchors.right: parent.right
-                                text: Agents.elapsed(agRow.modelData.since)
-                                color: agRow.working ? agRow.tint : root.fgDim
-                                font.pointSize: 9.2
-                                font.weight: Font.Bold
-                                font.features: {
-                                    "tnum": 1
-                                }
-                            }
-                            StyledText {
-                                anchors.right: parent.right
-                                visible: agRow.modelData.files > 0
-                                text: I18n.trn("%n fichier(s)", agRow.modelData.files)
-                                color: root.fgDim
-                                font.pointSize: 7.8
                             }
                         }
 
@@ -6565,6 +6928,159 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
                             hoverEnabled: true
                             cursorShape: agRow.modelData.window ? Qt.PointingHandCursor : Qt.ArrowCursor
                             onClicked: Agents.focus(agRow.modelData)
+                        }
+
+                        AgentSpinner {
+                            id: agSpin
+
+                            anchors.left: parent.left
+                            anchors.leftMargin: 16
+                            anchors.verticalCenter: parent.verticalCenter
+                            size: 30
+                            tint: agRow.stateCol
+                            spinning: agRow.working && root.mode === "agents"
+                            done: agRow.done
+                            letter: agRow.modelData.kind === "codex" ? "X" : "C"
+                        }
+
+                        Column {
+                            anchors.left: agSpin.right
+                            anchors.leftMargin: 12
+                            anchors.right: agRightCol.left
+                            anchors.rightMargin: 10
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 2
+
+                            Row {
+                                width: parent.width
+                                spacing: 6
+
+                                // Micro-badge de type (CLAUDE / CODEX)
+                                Rectangle {
+                                    id: kindPill
+
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: kindTxt.implicitWidth + 10
+                                    height: 15
+                                    radius: 7.5
+                                    color: Qt.alpha(agRow.tint, 0.16)
+                                    border.width: 0.5
+                                    border.color: Qt.alpha(agRow.tint, 0.34)
+
+                                    StyledText {
+                                        id: kindTxt
+
+                                        anchors.centerIn: parent
+                                        text: Agents.kindName(agRow.modelData.kind).toUpperCase()
+                                        color: agRow.tint
+                                        font.pointSize: 6.2
+                                        font.weight: Font.Bold
+                                        font.letterSpacing: 0.55
+                                    }
+                                }
+
+                                StyledText {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: Math.max(40, parent.width - kindPill.width - 6)
+                                    elide: Text.ElideRight
+                                    text: `${agRow.modelData.project}${agRow.modelData.title ? " · " + agRow.modelData.title : ""}`
+                                    color: root.fg
+                                    font.pointSize: 9.4
+                                    font.weight: Font.DemiBold
+                                }
+                            }
+
+                            StyledText {
+                                width: parent.width
+                                elide: Text.ElideRight
+                                text: agRow.waiting ? I18n.tr("Attend ta réponse") : agRow.working ? (agRow.modelData.tool || I18n.tr("Réfléchit…")) : (agRow.modelData.reply || I18n.tr("Prêt"))
+                                color: agRow.waiting ? "#ff9f0a" : root.fgDim
+                                font.pointSize: 8.4
+                            }
+                        }
+
+                        // Colonne droite : pastille durée + fichiers modifiés + × au survol si terminé
+                        Row {
+                            id: agRightCol
+
+                            z: 2
+                            anchors.right: parent.right
+                            anchors.rightMargin: 10
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 6
+
+                            Column {
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: 2
+
+                                Rectangle {
+                                    anchors.right: parent.right
+                                    width: agElapsedTxt.implicitWidth + 12
+                                    height: 18
+                                    radius: 9
+                                    color: agRow.done ? Qt.alpha(root.fg, 0.065) : Qt.alpha(agRow.stateCol, 0.14)
+                                    border.width: 0.5
+                                    border.color: agRow.done ? Qt.alpha(root.fg, 0.13) : Qt.alpha(agRow.stateCol, 0.32)
+
+                                    StyledText {
+                                        id: agElapsedTxt
+
+                                        anchors.centerIn: parent
+                                        text: Agents.elapsed(agRow.modelData.since)
+                                        color: agRow.done ? root.fgDim : agRow.stateCol
+                                        font.pointSize: 7.8
+                                        font.weight: Font.Bold
+                                        font.features: { "tnum": 1 }
+                                    }
+                                }
+
+                                StyledText {
+                                    anchors.right: parent.right
+                                    visible: agRow.modelData.files > 0
+                                    text: I18n.trn("%n fichier(s)", agRow.modelData.files)
+                                    color: root.fgDim
+                                    font.pointSize: 7.2
+                                    font.features: { "tnum": 1 }
+                                }
+                            }
+
+                            // Bouton × concentrique au survol d'un agent terminé
+                            Rectangle {
+                                id: agCloseBtn
+
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: agRow.done && rowHover.hovered
+                                z: 2
+                                width: 24
+                                height: 24
+                                radius: 12
+                                scale: agCloseArea.pressed ? 0.88 : 1
+                                color: Qt.alpha(root.fg, agCloseArea.containsMouse ? 0.18 : 0.1)
+                                border.width: 0.5
+                                border.color: Qt.alpha(root.fg, agCloseArea.containsMouse ? 0.34 : 0.18)
+
+                                Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+
+                                MaterialIcon {
+                                    anchors.centerIn: parent
+                                    text: "close"
+                                    color: root.fg
+                                    fontStyle: Tokens.font.icon.size(12).build()
+                                }
+
+                                MouseArea {
+                                    id: agCloseArea
+
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: Agents.dismiss(agRow.modelData)
+                                }
+                            }
+                        }
+
+                        HoverHandler {
+                            id: rowHover
                         }
                     }
                 }
@@ -8433,64 +8949,136 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
             }
         }
 
-        // ── appel en cours (île ouverte) : qui, depuis quand, micro, retour à l'appel ──
+        // ── appel en cours (console Liquid Glass) : emblème lumineux, chrono, ondes, haut-parleur, micro et focus ──
         Face {
+            id: callFace
+
+            readonly property real hoverX: Math.max(0, Math.min(width, islandHover.point.position.x - (root.width - width) / 2))
+            readonly property color callTint: root.callMuted ? root.red : root.green
+
             active: root.mode === "callFull"
             slide: root.pageSlide("callFull")
 
+            // Aura émeraude (ou rouge si micro coupé) derrière la console d'appel
+            Rectangle {
+                x: 12
+                y: 12
+                width: 240
+                height: 68
+                radius: 34
+                opacity: Colours.light ? 0.35 : 0.62
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.3; color: Qt.alpha(callFace.callTint, 0.16) }
+                    GradientStop { position: 0.72; color: Qt.alpha(callFace.callTint, 0.05) }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+            }
+
+            // Caustique optique inférieure + point lumineux sous le curseur
+            Rectangle {
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 1.5
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.max(120, parent.width - 72)
+                height: 1
+                opacity: root.hovered ? 0.4 : 0.2
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.25; color: Qt.alpha("#ffffff", Colours.light ? 0.45 : 0.6) }
+                    GradientStop { position: 0.5; color: Qt.alpha(callFace.callTint, 0.92) }
+                    GradientStop { position: 0.75; color: Qt.alpha("#ffffff", Colours.light ? 0.45 : 0.6) }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+            }
+            Rectangle {
+                x: Math.max(32, Math.min(callFace.width - width - 32, callFace.hoverX - width / 2))
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 1.5
+                width: 84
+                height: 1.5
+                radius: 0.75
+                opacity: root.hovered ? 0.65 : 0
+                visible: opacity > 0.01
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.5; color: "#ffffff" }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+                Behavior on x { NumberAnimation { duration: 95; easing.type: Easing.OutCubic } }
+                Behavior on opacity { NumberAnimation { duration: 180 } }
+            }
+
+            // Emblème appel Liquid Glass avec arc double passe
             Rectangle {
                 id: callBadge
 
-                readonly property color callTint: root.callMuted ? root.red : root.green
-
                 anchors.left: parent.left
-                anchors.leftMargin: 26
-                anchors.verticalCenter: parent.verticalCenter
-                width: 48
-                height: 48
-                radius: 14
-                color: Qt.alpha(callTint, 0.12)
+                anchors.leftMargin: 22
+                y: 20
+                width: 56
+                height: 56
+                radius: 17
                 border.width: 0.5
-                border.color: Qt.alpha(callTint, 0.34)
+                border.color: Qt.alpha(callFace.callTint, 0.38)
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: Qt.alpha(callFace.callTint, Colours.light ? 0.16 : 0.15) }
+                    GradientStop { position: 1.0; color: Qt.alpha(root.fg, 0.035) }
+                }
 
-                Behavior on color {
-                    ColorAnimation {
-                        duration: 250
-                    }
+                Behavior on border.color { ColorAnimation { duration: 240 } }
+
+                Rectangle {
+                    anchors.top: parent.top
+                    anchors.topMargin: 1
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: 30
+                    height: 1
+                    radius: 0.5
+                    color: "#ffffff"
+                    opacity: Colours.light ? 0.35 : 0.2
                 }
 
                 Shape {
-                    anchors.fill: parent
+                    anchors.centerIn: parent
+                    width: 46
+                    height: 46
                     preferredRendererType: Shape.CurveRenderer
 
                     ShapePath {
                         fillColor: "transparent"
-                        strokeColor: Qt.alpha(root.fg, 0.1)
-                        strokeWidth: 2.6
+                        strokeColor: Qt.alpha(root.fg, 0.11)
+                        strokeWidth: 2.8
                         capStyle: ShapePath.RoundCap
-
                         PathAngleArc {
-                            centerX: 24
-                            centerY: 24
-                            radiusX: 16.5
-                            radiusY: 16.5
-                            startAngle: 135
-                            sweepAngle: 270
+                            centerX: 23; centerY: 23
+                            radiusX: 19; radiusY: 19
+                            startAngle: 135; sweepAngle: 270
                         }
                     }
                     ShapePath {
                         fillColor: "transparent"
-                        strokeColor: callBadge.callTint
-                        strokeWidth: 2.6
+                        strokeColor: Qt.alpha(callFace.callTint, 0.24)
+                        strokeWidth: 6.4
                         capStyle: ShapePath.RoundCap
-
                         PathAngleArc {
-                            centerX: 24
-                            centerY: 24
-                            radiusX: 16.5
-                            radiusY: 16.5
-                            startAngle: 135
-                            sweepAngle: root.callMuted ? 60 : 270
+                            centerX: 23; centerY: 23
+                            radiusX: 19; radiusY: 19
+                            startAngle: 135; sweepAngle: root.callMuted ? 68 : 270
+                        }
+                    }
+                    ShapePath {
+                        fillColor: "transparent"
+                        strokeColor: callFace.callTint
+                        strokeWidth: 2.8
+                        capStyle: ShapePath.RoundCap
+                        PathAngleArc {
+                            centerX: 23; centerY: 23
+                            radiusX: 19; radiusY: 19
+                            startAngle: 135; sweepAngle: root.callMuted ? 68 : 270
                         }
                     }
                 }
@@ -8498,99 +9086,273 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
                 MaterialIcon {
                     anchors.centerIn: parent
                     text: root.camInUse ? "videocam" : "call"
-                    color: callBadge.callTint
-                    fontStyle: Tokens.font.icon.size(17).build()
+                    color: callFace.callTint
+                    fontStyle: Tokens.font.icon.size(19).build()
                     fill: 1
                 }
             }
 
+            // Centre : Pastilles statut + chrono · Titre · Appli & micro-barres d'ondes
             Column {
                 anchors.left: callBadge.right
                 anchors.leftMargin: 14
                 anchors.right: callButtons.left
                 anchors.rightMargin: 12
                 anchors.verticalCenter: callBadge.verticalCenter
-                spacing: 1
+                spacing: 3
 
-                StyledText {
-                    width: parent.width
-                    elide: Text.ElideRight
-                    text: (root.callMuted ? I18n.tr("Micro coupé") : root.camInUse ? I18n.tr("Visioconférence") : I18n.tr("Liaison audio")).toUpperCase()
-                    color: root.callMuted ? root.red : root.green
-                    font.pointSize: 7.2
-                    font.weight: Font.Bold
-                    font.letterSpacing: 0.7
+                Row {
+                    spacing: 6
+
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: callTagRow.implicitWidth + 12
+                        height: 17
+                        radius: 8.5
+                        color: Qt.alpha(callFace.callTint, 0.15)
+                        border.width: 0.5
+                        border.color: Qt.alpha(callFace.callTint, 0.36)
+
+                        Row {
+                            id: callTagRow
+
+                            anchors.centerIn: parent
+                            spacing: 4
+
+                            Rectangle {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 5
+                                height: 5
+                                radius: 2.5
+                                color: callFace.callTint
+                            }
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: (root.callMuted ? I18n.tr("Micro coupé") : root.camInUse ? I18n.tr("Visioconférence") : I18n.tr("Liaison audio")).toUpperCase()
+                                color: callFace.callTint
+                                font.pointSize: 6.5
+                                font.weight: Font.Bold
+                                font.letterSpacing: 0.65
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: callDurTxt.implicitWidth + 12
+                        height: 17
+                        radius: 8.5
+                        color: Qt.alpha(root.fg, 0.07)
+                        border.width: 0.5
+                        border.color: Qt.alpha(root.fg, 0.14)
+
+                        StyledText {
+                            id: callDurTxt
+
+                            anchors.centerIn: parent
+                            text: root.fmtLong(root.callElapsed)
+                            color: root.fg
+                            font.pointSize: 7.4
+                            font.weight: Font.Bold
+                            font.features: { "tnum": 1 }
+                        }
+                    }
                 }
+
                 StyledText {
                     width: parent.width
                     elide: Text.ElideRight
                     text: root.callTitle
                     color: root.fg
-                    font.pointSize: 11.5
+                    font.pointSize: 12
                     font.weight: Font.Bold
                 }
-                StyledText {
-                    width: parent.width
-                    elide: Text.ElideRight
-                    text: `${root.fmtLong(root.callElapsed)}${root.callWindow && root.callAppName && !root.callTitle.includes(root.callAppName) ? " · " + root.callAppName : ""}`
-                    color: root.fgDim
-                    font.pointSize: 8.8
-                    font.features: {
-                        "tnum": 1
+
+                Row {
+                    spacing: 8
+
+                    // Micro-barres vocales (actives uniquement appel ouvert & micro ouvert)
+                    Row {
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+                        height: 10
+
+                        Repeater {
+                            model: 5
+
+                            Rectangle {
+                                required property int index
+                                readonly property real baseH: [4, 8, 10, 7, 5][index]
+
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 2
+                                height: root.callMuted ? 3 : Math.max(3, baseH * (0.55 + 0.45 * Math.abs(Math.sin(root.callElapsed * 1.4 + index * 1.1))))
+                                radius: 1
+                                color: root.callMuted ? Qt.alpha(root.red, 0.5) : callFace.callTint
+
+                                Behavior on height { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+                            }
+                        }
+                    }
+
+                    StyledText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: root.callAppName !== ""
+                        text: root.callAppName
+                        color: root.fgDim
+                        font.pointSize: 8.2
+                        font.weight: Font.Medium
                     }
                 }
             }
 
+            // Droite : Dock d'actions d'appel vitré (Aller à l'appel · Haut-parleur · Pilule Micro)
             Row {
                 id: callButtons
 
                 anchors.right: parent.right
-                anchors.rightMargin: 26
+                anchors.rightMargin: 22
                 anchors.verticalCenter: callBadge.verticalCenter
-                spacing: 10
+                spacing: 8
 
-                ShotButton {
-                    visible: root.callWindow !== null
-                    icon: "open_in_new"
-                    tip: I18n.tr("Aller à l'appel")
-                    onClicked: root.focusCall()
-                }
-                // Micro : rouge quand il est coupé
+                // Retour à la fenêtre d'appel
                 Rectangle {
-                    width: 40
-                    height: 40
-                    radius: 20
-                    color: "transparent"
-                    // Verre liquide (iOS 27) sous le contenu
-                    GlassControl {
-                        anchors.fill: parent
-                        radius: parent.radius
-                        bevel: parent.height > 60 ? 16 : 0
-                        tintColour: root.callMuted ? root.red : Qt.alpha(Colours.palette.m3onSurface, callMicArea.pressed ? 0.24 : callMicArea.containsMouse ? 0.17 : 0.1)
-                        visible: tintColour.a > 0.01
-                        pressed: callMicArea.pressed
-                        hovered: callMicArea.containsMouse
-                        pointer: callMicArea.containsMouse ? Qt.point(callMicArea.mouseX / Math.max(1, width), callMicArea.mouseY / Math.max(1, height)) : Qt.point(-1, -1)
-                    }
-                    scale: callMicArea.pressed ? 0.9 : 1
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: root.callWindow !== null
+                    width: 36
+                    height: 36
+                    radius: 18
+                    scale: callOpenArea.pressed ? 0.92 : 1
+                    color: Qt.alpha(root.fg, callOpenArea.pressed ? 0.18 : callOpenArea.containsMouse ? 0.13 : 0.07)
+                    border.width: 0.5
+                    border.color: Qt.alpha(root.fg, callOpenArea.containsMouse ? 0.3 : 0.15)
 
-                    Behavior on color {
-                        ColorAnimation {
-                            duration: 200
-                        }
-                    }
-                    Behavior on scale {
-                        NumberAnimation {
-                            duration: 120
-                        }
+                    Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+                    Behavior on color { ColorAnimation { duration: 150 } }
+
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.topMargin: 1
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: 18
+                        height: 1
+                        radius: 0.5
+                        color: "#ffffff"
+                        opacity: Colours.light ? 0.32 : 0.18
                     }
 
                     MaterialIcon {
                         anchors.centerIn: parent
-                        text: root.callMuted ? "mic_off" : "mic"
-                        color: root.callMuted ? "white" : root.fg
-                        fontStyle: Tokens.font.icon.size(17).build()
+                        text: "open_in_new"
+                        color: root.fg
+                        fontStyle: Tokens.font.icon.size(15).build()
+                    }
+
+                    MouseArea {
+                        id: callOpenArea
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.focusCall()
+                    }
+                }
+
+                // Sourdine haut-parleur rapide
+                Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 36
+                    height: 36
+                    radius: 18
+                    scale: callSpkArea.pressed ? 0.92 : 1
+                    color: Audio.muted
+                        ? Qt.alpha(root.red, callSpkArea.containsMouse ? 0.24 : 0.16)
+                        : Qt.alpha(root.fg, callSpkArea.pressed ? 0.18 : callSpkArea.containsMouse ? 0.13 : 0.07)
+                    border.width: 0.5
+                    border.color: Audio.muted ? Qt.alpha(root.red, 0.45) : Qt.alpha(root.fg, callSpkArea.containsMouse ? 0.3 : 0.15)
+
+                    Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+                    Behavior on color { ColorAnimation { duration: 150 } }
+
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.topMargin: 1
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: 18
+                        height: 1
+                        radius: 0.5
+                        color: "#ffffff"
+                        opacity: Colours.light ? 0.32 : 0.18
+                    }
+
+                    MaterialIcon {
+                        anchors.centerIn: parent
+                        text: Audio.muted ? "volume_off" : "volume_up"
+                        color: Audio.muted ? root.red : root.fg
+                        fontStyle: Tokens.font.icon.size(15.5).build()
                         fill: 1
+                    }
+
+                    MouseArea {
+                        id: callSpkArea
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (Audio.sink?.ready && Audio.sink?.audio)
+                                Audio.sink.audio.muted = !Audio.sink.audio.muted;
+                        }
+                    }
+                }
+
+                // Pilule héroïque Micro (rouge vif si coupé, verre émeraude si actif)
+                Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: callMicRow.implicitWidth + 24
+                    height: 38
+                    radius: 19
+                    scale: callMicArea.pressed ? 0.93 : 1
+                    color: root.callMuted
+                        ? (callMicArea.pressed ? Qt.darker(root.red, 1.15) : root.red)
+                        : Qt.alpha(root.green, callMicArea.pressed ? 0.26 : callMicArea.containsMouse ? 0.2 : 0.14)
+                    border.width: 0.5
+                    border.color: root.callMuted ? Qt.alpha("#ffffff", 0.3) : Qt.alpha(root.green, callMicArea.containsMouse ? 0.55 : 0.36)
+
+                    Behavior on color { ColorAnimation { duration: 180 } }
+                    Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.topMargin: 1
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: parent.width - 22
+                        height: 1
+                        radius: 0.5
+                        color: "#ffffff"
+                        opacity: root.callMuted ? 0.32 : (Colours.light ? 0.34 : 0.2)
+                    }
+
+                    Row {
+                        id: callMicRow
+
+                        anchors.centerIn: parent
+                        spacing: 5
+
+                        MaterialIcon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: root.callMuted ? "mic_off" : "mic"
+                            color: root.callMuted ? "#ffffff" : root.green
+                            fontStyle: Tokens.font.icon.size(15.5).build()
+                            fill: 1
+                        }
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: root.callMuted ? I18n.tr("Coupé") : I18n.tr("Micro")
+                            color: root.callMuted ? "#ffffff" : root.fg
+                            font.pointSize: 8.4
+                            font.weight: Font.Bold
+                        }
                     }
 
                     MouseArea {
@@ -10455,13 +11217,11 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
             }
         }
 
-        // ── lecteur complet ──
+        // ── lecteur média Liquid Glass : pochette réactive, sélecteur source, puits spectre Cava, paroles vitrées, waveform + dock audio complet ──
         Face {
             id: playerFace
 
-            active: root.mode === "player"
-            slide: root.pageSlide("player")
-
+            readonly property real hoverX: Math.max(0, Math.min(width, islandHover.point.position.x - (root.width - width) / 2))
             readonly property real rawBass: {
                 if (!root.playing || Audio.cava.values.length === 0)
                     return 0;
@@ -10472,11 +11232,70 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
                 return Math.min(1, s / n);
             }
             property real bassLevel: rawBass
+
+            active: root.mode === "player"
+            slide: root.pageSlide("player")
+
             Behavior on bassLevel {
                 NumberAnimation {
                     duration: 85
                     easing.type: Easing.OutQuad
                 }
+            }
+
+            // Horizon atmosphérique réactif aux basses derrière la tête du lecteur
+            Rectangle {
+                x: 14
+                y: 10
+                width: 280
+                height: 78
+                radius: 39
+                opacity: root.playing ? (0.14 + playerFace.bassLevel * 0.24) : 0.08
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.28; color: Qt.alpha(root.accent, 0.36) }
+                    GradientStop { position: 0.65; color: Qt.alpha("#38bdf8", 0.18) }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+
+                Behavior on opacity { NumberAnimation { duration: 200 } }
+            }
+
+            // Caustique optique inférieure + point lumineux sous le curseur
+            Rectangle {
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 1.5
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.max(120, parent.width - 72)
+                height: 1
+                opacity: root.hovered ? 0.38 : 0.2
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.25; color: Qt.alpha("#ffffff", Colours.light ? 0.45 : 0.6) }
+                    GradientStop { position: 0.5; color: Qt.alpha(root.accent, 0.92) }
+                    GradientStop { position: 0.75; color: Qt.alpha("#ffffff", Colours.light ? 0.45 : 0.6) }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+            }
+            Rectangle {
+                x: Math.max(32, Math.min(playerFace.width - width - 32, playerFace.hoverX - width / 2))
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 1.5
+                width: 84
+                height: 1.5
+                radius: 0.75
+                opacity: root.hovered ? 0.65 : 0
+                visible: opacity > 0.01
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.5; color: "#ffffff" }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+                Behavior on x { NumberAnimation { duration: 95; easing.type: Easing.OutCubic } }
+                Behavior on opacity { NumberAnimation { duration: 180 } }
             }
 
             // Halo liquide réactif aux basses derrière la pochette
@@ -10486,27 +11305,26 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
                 height: bigCover.height + 12
                 radius: bigCover.radius + 5
                 scale: 1 + playerFace.bassLevel * 0.14
-                opacity: root.playing ? 0.18 + playerFace.bassLevel * 0.48 : 0
+                opacity: root.playing ? 0.2 + playerFace.bassLevel * 0.48 : 0
                 gradient: Gradient {
                     orientation: Gradient.Horizontal
-                    GradientStop { position: 0.0; color: Qt.alpha(root.accent, 0.65) }
-                    GradientStop { position: 0.5; color: Qt.alpha("#38bdf8", 0.55) }
-                    GradientStop { position: 1.0; color: Qt.alpha(root.green, 0.5) }
+                    GradientStop { position: 0.0; color: Qt.alpha(root.accent, 0.7) }
+                    GradientStop { position: 0.5; color: Qt.alpha("#38bdf8", 0.58) }
+                    GradientStop { position: 1.0; color: Qt.alpha(root.green, 0.48) }
                 }
                 border.width: 1
                 border.color: Qt.alpha("#ffffff", 0.22 + playerFace.bassLevel * 0.35)
-                Behavior on opacity {
-                    NumberAnimation { duration: 180 }
-                }
+                Behavior on opacity { NumberAnimation { duration: 180 } }
             }
 
+            // Pochette sculptée avec reflet biseauté et micro-pastille de pause
             Cover {
                 id: bigCover
 
-                x: 26
-                y: 26
+                x: 22
+                y: 18
                 size: 66
-                radius: 15
+                radius: 16
                 scale: 1 + playerFace.bassLevel * 0.035
 
                 Rectangle {
@@ -10514,33 +11332,111 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
                     radius: parent.radius
                     color: "transparent"
                     border.width: 1
-                    border.color: Qt.alpha("#ffffff", 0.18 + playerFace.bassLevel * 0.25)
+                    border.color: Qt.alpha("#ffffff", 0.2 + playerFace.bassLevel * 0.24)
+                }
+
+                Rectangle {
+                    anchors.top: parent.top
+                    anchors.topMargin: 1
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: 34
+                    height: 1
+                    radius: 0.5
+                    color: "#ffffff"
+                    opacity: 0.32
+                }
+
+                // Micro pastille pause si en pause
+                Rectangle {
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    anchors.margins: 4
+                    visible: !root.playing
+                    width: 18
+                    height: 18
+                    radius: 9
+                    color: Qt.alpha("#000000", 0.58)
+                    border.width: 0.5
+                    border.color: Qt.alpha("#ffffff", 0.28)
+
+                    MaterialIcon {
+                        anchors.centerIn: parent
+                        text: "pause"
+                        color: "#ffffff"
+                        fontStyle: Tokens.font.icon.size(10.5).build()
+                        fill: 1
+                    }
                 }
             }
 
+            // Centre : Pilule source cliquable (bascule entre lecteurs si > 1) · Titre · Artiste
             Column {
                 anchors.left: bigCover.right
                 anchors.leftMargin: 14
-                anchors.right: bigBars.left
+                anchors.right: bigBarsWell.left
                 anchors.rightMargin: 12
                 anchors.verticalCenter: bigCover.verticalCenter
-                spacing: 1
+                spacing: 2
 
-                StyledText {
-                    width: parent.width
-                    elide: Text.ElideRight
-                    text: (Players.getIdentity(root.player) || I18n.tr("Audio")).toUpperCase()
-                    color: root.accent
-                    font.pointSize: 7
-                    font.weight: Font.Bold
-                    font.letterSpacing: 0.7
+                Rectangle {
+                    width: Math.min(parent.width, srcPillRow.implicitWidth + 14)
+                    height: 17
+                    radius: 8.5
+                    scale: srcArea.pressed ? 0.94 : 1
+                    color: Qt.alpha(root.accent, srcArea.containsMouse && root.playerCount > 1 ? 0.22 : 0.13)
+                    border.width: 0.5
+                    border.color: Qt.alpha(root.accent, srcArea.containsMouse && root.playerCount > 1 ? 0.48 : 0.3)
+
+                    Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+                    Behavior on color { ColorAnimation { duration: 150 } }
+
+                    Row {
+                        id: srcPillRow
+
+                        anchors.centerIn: parent
+                        spacing: 4
+
+                        MaterialIcon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "music_note"
+                            color: root.accent
+                            fontStyle: Tokens.font.icon.size(9.5).build()
+                            fill: 1
+                        }
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: (Players.getIdentity(root.player) || I18n.tr("Audio")).toUpperCase()
+                            color: root.accent
+                            font.pointSize: 6.6
+                            font.weight: Font.Bold
+                            font.letterSpacing: 0.65
+                        }
+                        MaterialIcon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: root.playerCount > 1
+                            text: "swap_horiz"
+                            color: root.fgDim
+                            fontStyle: Tokens.font.icon.size(10).build()
+                        }
+                    }
+
+                    MouseArea {
+                        id: srcArea
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        enabled: root.playerCount > 1
+                        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        onClicked: root.cyclePlayer()
+                    }
                 }
+
                 StyledText {
                     width: parent.width
                     elide: Text.ElideRight
                     text: root.player?.trackTitle ?? ""
                     color: root.fg
-                    font.pointSize: 11.2
+                    font.pointSize: 12
                     font.weight: Font.Bold
                 }
                 StyledText {
@@ -10549,33 +11445,92 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
                     text: root.player?.trackArtist || Players.getIdentity(root.player)
                     color: root.fgDim
                     font.pointSize: 8.8
+                    font.weight: Font.Medium
                 }
             }
 
-            LyricLine {
+            // Puits vitré du spectre audio Cava (6 bandes)
+            Rectangle {
+                id: bigBarsWell
+
+                anchors.right: parent.right
+                anchors.rightMargin: 22
+                anchors.verticalCenter: bigCover.verticalCenter
+                width: 56
+                height: 44
+                radius: 14
+                border.width: 0.5
+                border.color: Qt.alpha(root.accent, root.playing ? 0.3 : 0.14)
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: Qt.alpha(root.accent, root.playing ? 0.11 : 0.05) }
+                    GradientStop { position: 1.0; color: Qt.alpha(root.fg, 0.03) }
+                }
+
+                Rectangle {
+                    anchors.top: parent.top
+                    anchors.topMargin: 1
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: 28
+                    height: 1
+                    radius: 0.5
+                    color: "#ffffff"
+                    opacity: Colours.light ? 0.34 : 0.18
+                }
+
+                Bars {
+                    id: bigBars
+
+                    anchors.centerIn: parent
+                    count: 6
+                    barWidth: 3.2
+                    maxHeight: 24
+                }
+            }
+
+            // Ruban vitré des paroles synchronisées en direct
+            Rectangle {
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.leftMargin: 26
-                anchors.rightMargin: 26
-                y: 102
+                anchors.leftMargin: 22
+                anchors.rightMargin: 22
+                y: 92
+                height: 28
+                radius: 11
                 visible: root.hasLyrics
-                line: root.lyricLine
-                lineColor: root.accent
-                size: 10.5
-                bold: true
+                border.width: 0.5
+                border.color: Qt.alpha(root.accent, 0.24)
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: Qt.alpha(root.accent, Colours.light ? 0.1 : 0.09) }
+                    GradientStop { position: 1.0; color: Qt.alpha(root.fg, 0.03) }
+                }
+
+                Rectangle {
+                    anchors.top: parent.top
+                    anchors.topMargin: 1
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 16
+                    anchors.rightMargin: 16
+                    height: 1
+                    radius: 0.5
+                    color: "#ffffff"
+                    opacity: Colours.light ? 0.3 : 0.16
+                }
+
+                LyricLine {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 14
+                    anchors.rightMargin: 14
+                    anchors.verticalCenter: parent.verticalCenter
+                    line: root.lyricLine
+                    lineColor: root.accent
+                    size: 10
+                    bold: true
+                }
             }
 
-            Bars {
-                id: bigBars
-
-                anchors.right: parent.right
-                anchors.rightMargin: 28
-                anchors.verticalCenter: bigCover.verticalCenter
-                count: 6
-                barWidth: 3.2
-                maxHeight: 24
-            }
-
+            // Barre de progression waveform Cava 28 bandes avec aperçu temps au survol
             Item {
                 id: progress
 
@@ -10586,10 +11541,10 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
 
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.leftMargin: 26
-                anchors.rightMargin: 26
-                y: root.hasLyrics ? 130 : 104
-                height: 18
+                anchors.leftMargin: 22
+                anchors.rightMargin: 22
+                y: root.hasLyrics ? 127 : 96
+                height: 20
 
                 StyledText {
                     id: posText
@@ -10597,12 +11552,13 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
                     width: 36
-                    text: root.fmtTime(progress.pos)
-                    color: root.fgDim
-                    font.pointSize: 7.5
-                    font.features: {
-                        "tnum": 1
-                    }
+                    text: seekTrack.hoverRatio >= 0 && progress.known
+                        ? root.fmtTime(seekTrack.hoverRatio * progress.len)
+                        : root.fmtTime(progress.pos)
+                    color: seekTrack.hoverRatio >= 0 && progress.known ? root.accent : root.fgDim
+                    font.pointSize: 7.6
+                    font.weight: seekTrack.hoverRatio >= 0 ? Font.Bold : Font.Medium
+                    font.features: { "tnum": 1 }
                 }
 
                 Item {
@@ -10616,7 +11572,7 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
                     anchors.leftMargin: 6
                     anchors.rightMargin: 6
                     anchors.verticalCenter: parent.verticalCenter
-                    height: 16
+                    height: 18
 
                     Row {
                         anchors.centerIn: parent
@@ -10643,7 +11599,7 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
 
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: Math.max(2, (seekTrack.width - (seekTrack.barCount - 1) * 2) / seekTrack.barCount)
-                                height: Math.max(3, Math.round((seekArea.containsMouse ? 15 : 13) * amp))
+                                height: Math.max(3, Math.round((seekArea.containsMouse ? 16 : 13) * amp))
                                 radius: width / 2
                                 color: played ? root.accent : (seekTrack.hoverRatio >= 0 && barRatio <= seekTrack.hoverRatio ? Qt.alpha(root.fg, 0.35) : root.fgFaint)
 
@@ -10674,18 +11630,14 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
                         x: Math.max(0, Math.min(seekTrack.width - width, progress.playRatio * seekTrack.width - width / 2))
                         anchors.verticalCenter: parent.verticalCenter
                         width: seekArea.containsMouse ? 5 : 3.5
-                        height: seekArea.containsMouse ? 16 : 12
+                        height: seekArea.containsMouse ? 17 : 13
                         radius: width / 2
                         color: "#ffffff"
                         border.width: 1
-                        border.color: Qt.alpha(root.accent, 0.65)
+                        border.color: Qt.alpha(root.accent, 0.7)
 
-                        Behavior on width {
-                            NumberAnimation { duration: 120 }
-                        }
-                        Behavior on height {
-                            NumberAnimation { duration: 120 }
-                        }
+                        Behavior on width { NumberAnimation { duration: 120 } }
+                        Behavior on height { NumberAnimation { duration: 120 } }
                     }
 
                     MouseArea {
@@ -10718,33 +11670,251 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
                     horizontalAlignment: Text.AlignRight
                     text: progress.known ? root.fmtTime(progress.len) : ""
                     color: root.fgDim
-                    font.pointSize: 7.5
-                    font.features: {
-                        "tnum": 1
-                    }
+                    font.pointSize: 7.6
+                    font.features: { "tnum": 1 }
                 }
             }
 
-            Row {
-                anchors.horizontalCenter: parent.horizontalCenter
-                y: root.hasLyrics ? 154 : 128
-                spacing: 28
+            // ── Dock de transport & audio : Sortie audio à gauche · Transport sculpté au centre · Volume à droite ──
+            Item {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: 22
+                anchors.rightMargin: 22
+                y: root.hasLyrics ? 154 : 124
+                height: 40
 
-                IslandButton {
-                    icon: "skip_previous"
-                    enabled: root.player?.canGoPrevious ?? false
-                    onClicked: root.player?.previous()
+                // Gauche : Pilule sortie audio (clic = basculer de sortie)
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.min(144, outPillRow.implicitWidth + 18)
+                    height: 28
+                    radius: 14
+                    scale: outArea.pressed ? 0.94 : 1
+                    color: Qt.alpha(root.btConnected.length > 0 && !Audio.muted ? root.green : root.fg, outArea.pressed ? 0.18 : outArea.containsMouse ? 0.13 : 0.065)
+                    border.width: 0.5
+                    border.color: Qt.alpha(root.btConnected.length > 0 && !Audio.muted ? root.green : root.fg, outArea.containsMouse ? 0.36 : 0.15)
+
+                    Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+                    Behavior on color { ColorAnimation { duration: 150 } }
+
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.topMargin: 1
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: Math.max(14, parent.width - 20)
+                        height: 1
+                        radius: 0.5
+                        color: "#ffffff"
+                        opacity: Colours.light ? 0.32 : 0.16
+                    }
+
+                    Row {
+                        id: outPillRow
+
+                        anchors.centerIn: parent
+                        spacing: 5
+
+                        MaterialIcon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: root.playerOutputIcon
+                            color: Audio.muted ? root.red : (root.btConnected.length > 0 ? root.green : root.fgDim)
+                            fontStyle: Tokens.font.icon.size(12.5).build()
+                            fill: 1
+                        }
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: Math.min(implicitWidth, 102)
+                            elide: Text.ElideRight
+                            text: root.playerOutputLabel
+                            color: root.fg
+                            font.pointSize: 7.6
+                            font.weight: Font.DemiBold
+                        }
+                    }
+
+                    MouseArea {
+                        id: outArea
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: Audio.cycleNextAudioOutput()
+                    }
                 }
-                IslandButton {
-                    icon: root.playing ? "pause" : "play_arrow"
-                    big: true
-                    enabled: root.player?.canTogglePlaying ?? false
-                    onClicked: root.player?.togglePlaying()
+
+                // Centre : Capsule de transport vitrée avec bouton Lecture/Pause lumineux
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 144
+                    height: 40
+                    radius: 20
+                    color: Qt.alpha(root.fg, 0.055)
+                    border.width: 0.5
+                    border.color: Qt.alpha(root.fg, 0.13)
+
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.topMargin: 1
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: 96
+                        height: 1
+                        radius: 0.5
+                        color: "#ffffff"
+                        opacity: Colours.light ? 0.32 : 0.16
+                    }
+
+                    Row {
+                        anchors.centerIn: parent
+                        spacing: 14
+
+                        IslandButton {
+                            anchors.verticalCenter: parent.verticalCenter
+                            icon: "skip_previous"
+                            enabled: root.player?.canGoPrevious ?? false
+                            onClicked: root.player?.previous()
+                        }
+
+                        // Bouton central Lecture / Pause en lentille accentuée
+                        Rectangle {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 34
+                            height: 34
+                            radius: 17
+                            opacity: (root.player?.canTogglePlaying ?? false) ? 1 : 0.35
+                            scale: playBtnArea.pressed ? 0.9 : (playBtnArea.containsMouse ? 1.05 : 1)
+                            border.width: 0.5
+                            border.color: Qt.alpha(root.accent, 0.6)
+                            gradient: Gradient {
+                                GradientStop { position: 0.0; color: Qt.alpha(root.accent, playBtnArea.pressed ? 0.42 : 0.3) }
+                                GradientStop { position: 1.0; color: Qt.alpha(root.accent, 0.16) }
+                            }
+
+                            Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutBack } }
+
+                            Rectangle {
+                                anchors.top: parent.top
+                                anchors.topMargin: 1.5
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                width: 16
+                                height: 1
+                                radius: 0.5
+                                color: "#ffffff"
+                                opacity: 0.42
+                            }
+
+                            MaterialIcon {
+                                anchors.centerIn: parent
+                                text: root.playing ? "pause" : "play_arrow"
+                                color: root.fg
+                                fontStyle: Tokens.font.icon.size(19).build()
+                                fill: 1
+                            }
+
+                            MouseArea {
+                                id: playBtnArea
+
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                enabled: root.player?.canTogglePlaying ?? false
+                                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                onClicked: root.player?.togglePlaying()
+                            }
+                        }
+
+                        IslandButton {
+                            anchors.verticalCenter: parent.verticalCenter
+                            icon: "skip_next"
+                            enabled: root.player?.canGoNext ?? false
+                            onClicked: root.player?.next()
+                        }
+                    }
                 }
-                IslandButton {
-                    icon: "skip_next"
-                    enabled: root.player?.canGoNext ?? false
-                    onClicked: root.player?.next()
+
+                // Droite : Capsule volume en direct (clic = muet, molette = volume via Island)
+                Rectangle {
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: volPillRow.implicitWidth + 18
+                    height: 28
+                    radius: 14
+                    scale: volPillArea.pressed ? 0.94 : 1
+                    color: Audio.muted
+                        ? Qt.alpha(root.red, volPillArea.containsMouse ? 0.24 : 0.15)
+                        : Qt.alpha(root.fg, volPillArea.pressed ? 0.18 : volPillArea.containsMouse ? 0.13 : 0.065)
+                    border.width: 0.5
+                    border.color: Audio.muted ? Qt.alpha(root.red, 0.45) : Qt.alpha(root.fg, volPillArea.containsMouse ? 0.3 : 0.15)
+
+                    Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+                    Behavior on color { ColorAnimation { duration: 150 } }
+
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.topMargin: 1
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: Math.max(14, parent.width - 20)
+                        height: 1
+                        radius: 0.5
+                        color: "#ffffff"
+                        opacity: Colours.light ? 0.32 : 0.16
+                    }
+
+                    Row {
+                        id: volPillRow
+
+                        anchors.centerIn: parent
+                        spacing: 5
+
+                        MaterialIcon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: Audio.muted || Audio.volume <= 0 ? "volume_off" : Audio.volume < 0.5 ? "volume_down" : "volume_up"
+                            color: Audio.muted ? root.red : root.accent
+                            fontStyle: Tokens.font.icon.size(12.5).build()
+                            fill: 1
+                        }
+
+                        // Mini barre de volume intégrée
+                        Rectangle {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 28
+                            height: 3.5
+                            radius: 1.75
+                            color: Qt.alpha(root.fg, 0.12)
+
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                width: Audio.muted ? 0 : Math.max(2, parent.width * Math.min(1, Audio.volume))
+                                radius: 1.75
+                                color: root.accent
+
+                                Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                            }
+                        }
+
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: Audio.muted ? "0%" : `${Math.round(Audio.volume * 100)}%`
+                            color: Audio.muted ? root.red : root.fg
+                            font.pointSize: 7.5
+                            font.weight: Font.Bold
+                            font.features: { "tnum": 1 }
+                        }
+                    }
+
+                    MouseArea {
+                        id: volPillArea
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (Audio.sink?.ready && Audio.sink?.audio)
+                                Audio.sink.audio.muted = !Audio.sink.audio.muted;
+                        }
+                    }
                 }
             }
         }
@@ -11739,14 +12909,28 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
         property bool spinning
         property bool done
         property string letter
+        property real size: 24
 
-        width: 24
-        height: 24
+        width: size
+        height: size
 
         Rectangle {
             anchors.fill: parent
             radius: width / 2
-            color: Qt.alpha(spin.tint, 0.18)
+            color: Qt.alpha(spin.tint, 0.16)
+            border.width: 0.5
+            border.color: Qt.alpha(spin.tint, 0.34)
+
+            Rectangle {
+                anchors.top: parent.top
+                anchors.topMargin: 1.5
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: parent.width * 0.45
+                height: 1
+                radius: 0.5
+                color: "#ffffff"
+                opacity: Colours.light ? 0.35 : 0.24
+            }
         }
 
         Shape {
@@ -11755,18 +12939,33 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
             preferredRendererType: Shape.CurveRenderer
 
             ShapePath {
+                strokeWidth: 5.2
+                strokeColor: Qt.alpha(spin.tint, 0.24)
+                fillColor: "transparent"
+                capStyle: ShapePath.RoundCap
+
+                PathAngleArc {
+                    centerX: spin.size / 2
+                    centerY: spin.size / 2
+                    radiusX: spin.size / 2 - 2
+                    radiusY: spin.size / 2 - 2
+                    startAngle: -90
+                    sweepAngle: spin.spinning ? 120 : 360
+                }
+            }
+            ShapePath {
                 strokeWidth: 2.5
                 strokeColor: spin.tint
                 fillColor: "transparent"
                 capStyle: ShapePath.RoundCap
 
                 PathAngleArc {
-                    centerX: 12
-                    centerY: 12
-                    radiusX: 10.5
-                    radiusY: 10.5
+                    centerX: spin.size / 2
+                    centerY: spin.size / 2
+                    radiusX: spin.size / 2 - 2
+                    radiusY: spin.size / 2 - 2
                     startAngle: -90
-                    sweepAngle: spin.spinning ? 110 : 360
+                    sweepAngle: spin.spinning ? 120 : 360
                 }
             }
 
@@ -11784,7 +12983,7 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
             visible: !spin.done
             text: spin.letter || "✦"
             color: spin.tint
-            font.pointSize: spin.letter ? 8.5 : 9
+            font.pointSize: spin.letter ? (spin.size >= 28 ? 9.6 : 8.5) : 9
             font.weight: Font.Black
         }
 
@@ -11793,7 +12992,7 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
             visible: spin.done
             text: "check"
             color: spin.tint
-            fontStyle: Tokens.font.icon.size(14).build()
+            fontStyle: Tokens.font.icon.size(spin.size >= 28 ? 16 : 14).build()
             fill: 1
         }
     }
