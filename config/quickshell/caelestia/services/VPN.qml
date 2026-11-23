@@ -49,7 +49,9 @@ Singleton {
         const sel = root.selectedProvider;
         if (sel.length === 0)
             return "wireguard";
-        const match = GlobalConfig.utilities.vpn.provider.find(p => typeof p === "object" && p.id === sel);
+        const raw = GlobalConfig.utilities.vpn.provider;
+        const list = raw?.values ?? raw ?? [];
+        const match = list.find(p => typeof p === "object" && p.id === sel);
         return match || "wireguard";
     }
 
@@ -98,7 +100,8 @@ Singleton {
     // Normalised, plain-data view of the configured providers. Re-evaluated
     // whenever the config changes; syncProviders() folds it into `providers`.
     readonly property var providerConfigs: {
-        const list = GlobalConfig.utilities.vpn.provider;
+        const raw = GlobalConfig.utilities.vpn.provider;
+        const list = raw?.values ?? raw ?? [];
         const out = [];
         for (let i = 0; i < list.length; i++) {
             const p = list[i];
@@ -548,7 +551,8 @@ Singleton {
     // and fold any legacy per-provider `enabled` flag into the single selection.
     // Runs once at startup and rewrites the config only if something changed.
     function migrateProviders(): void {
-        const list = GlobalConfig.utilities.vpn.provider;
+        const raw = GlobalConfig.utilities.vpn.provider;
+        const list = raw?.values ?? raw ?? [];
         const result = [];
         let selectedId = root.selectedProvider;
         let changed = false;

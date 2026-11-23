@@ -10,8 +10,8 @@ import Quickshell.Services.Pipewire
 import Quickshell.Services.Mpris
 import Quickshell.Services.UPower
 import Caelestia
+import Caelestia.Components
 import Caelestia.Config
-import Caelestia.Internal
 import Caelestia.Services
 import qs.components
 import qs.components.effects
@@ -2598,6 +2598,9 @@ Item {
     ServiceRef {
         service: root.paged ? Storage : null
     }
+    ServiceRef {
+        service: root.paged && !("refCount" in NetworkUsage) ? NetworkUsage : null
+    }
     // Fréquence moyenne CPU (GHz), ventilateur (tr/min), charge et top processus temps réel (actifs uniquement sur la page Perf)
     property real cpuGhz
     property int fanRpm: -1
@@ -2794,15 +2797,16 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
         }
     }
 
-    // NetworkUsage est un singleton QML (compteur de références simple) ;
+    // NetworkUsage : ServiceRef (2.5.0 C++) ou compteur refCount (singleton QML) ;
     // préchauffage d'un relevé de processus dès l'ouverture de l'île pour un % CPU instantané
     onPagedChanged: {
-        NetworkUsage.refCount += paged ? 1 : -1;
+        if ("refCount" in NetworkUsage)
+            NetworkUsage.refCount += paged ? 1 : -1;
         if (paged && !sensorProc.running)
             sensorProc.running = true;
     }
     Component.onDestruction: {
-        if (paged)
+        if (paged && "refCount" in NetworkUsage)
             NetworkUsage.refCount--;
     }
 
@@ -11927,9 +11931,12 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
     function kibText(used: real, total: real): string {
         if (!(total > 0))
             return "";
-        const f = UsageFmt.formatKib(used, total);
-        const unit = f.unit.replace("GiB", "Go").replace("MiB", "Mo").replace("TiB", "To");
-        return `${+f.value.toFixed(1)}/${Math.round(f.total)} ${unit}`;
+        const gibTot = total / 1048576;
+        if (gibTot >= 1024)
+            return `${+(used / 1073741824).toFixed(1)}/${Math.round(gibTot / 1024)} To`;
+        if (gibTot >= 1)
+            return `${+(used / 1048576).toFixed(1)}/${Math.round(gibTot)} Go`;
+        return `${Math.round(used / 1024)}/${Math.round(total / 1024)} Mo`;
     }
 
     // Espace libre lisible : « 46,9 Go libres »
@@ -12173,9 +12180,20 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
         StyledText {
             anchors.verticalCenter: parent.verticalCenter
             text: {
-                const f = NetworkUsage.formatBytes(nl.shown);
-                const unit = f.unit.replace("KB/s", "Ko/s").replace("MB/s", "Mo/s").replace("GB/s", "Go/s").replace("B/s", "o/s");
-                return `${f.value.toFixed(f.value < 10 ? 1 : 0).replace(".", ",")} ${unit}`;
+                const b = Math.max(0, Number(nl.shown) || 0);
+                let v = b;
+                let unit = "o/s";
+                if (b >= 1073741824) {
+                    v = b / 1073741824;
+                    unit = "Go/s";
+                } else if (b >= 1048576) {
+                    v = b / 1048576;
+                    unit = "Mo/s";
+                } else if (b >= 1024) {
+                    v = b / 1024;
+                    unit = "Ko/s";
+                }
+                return `${v.toFixed(v < 10 && unit !== "o/s" ? 1 : 0).replace(".", ",")} ${unit}`;
             }
             color: nl.big ? root.fg : root.fgDim
             font.pointSize: nl.big ? 10.6 : 8.4

@@ -6,7 +6,7 @@ import Quickshell.Hyprland
 import Quickshell.Io
 import Caelestia
 import Caelestia.Config
-import Caelestia.Internal
+import Caelestia.Services
 import qs.components.misc
 
 Singleton {
