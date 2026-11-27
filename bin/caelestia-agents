@@ -1962,7 +1962,11 @@ def close_agent_window(agent):
     return closed
 
 
-# ───────────────────────── Mémoire & Pont ANO-GPT ─────────────────────────
+# ───────────────────────── Hyprland, Shell & Pont ANO-GPT complet ─────────────────────────
+
+SHELL_NAME = "ano-shell" if "ano-shell" in str(PERMS) else "caelestia"
+SHELL_CFG_DIR = HOME / ".config" / SHELL_NAME
+SCHEMA_CACHE = HOME / ".cache" / SHELL_NAME / "ano-tools-schema.json"
 
 ANO_TOOLS = {
     "open_app": ("actions.open_app", "open_app"),
@@ -1970,9 +1974,14 @@ ANO_TOOLS = {
     "shell_exec": ("actions.shell_exec", "shell_exec"),
     "computer_settings": ("actions.computer_settings", "computer_settings"),
     "computer_control": ("actions.computer_control", "computer_control"),
+    "desktop_control": ("actions.desktop", "desktop_control"),
     "browser_control": ("actions.browser_control", "browser_control"),
     "file_controller": ("actions.file_controller", "file_controller"),
+    "file_processor": ("actions.file_processor", "file_processor"),
+    "search_personal_docs": ("core.personal_rag", "search_personal_docs"),
+    "second_brain": ("actions.second_brain", "second_brain_action"),
     "hypr_orchestrator": ("actions.hypr_orchestrator", "hypr_orchestrator_control"),
+    "media_control": ("actions.media_control", "media_control"),
     "devsecops": ("actions.devsecops", "devsecops_control"),
     "web_search": ("actions.web_search", "web_search"),
     "weather_report": ("actions.weather_report", "weather_action"),
@@ -1982,8 +1991,11 @@ ANO_TOOLS = {
     "youtube_video": ("actions.youtube_video", "youtube_video"),
     "music_control": ("actions.music", "music_control"),
     "download_music": ("actions.download_music", "download_music"),
+    "music_recognition": ("actions.music_recognition", "music_recognition"),
     "capture_control": ("actions.capture", "capture_control"),
+    "screen_process": ("actions.screen_processor", "screen_process"),
     "find_nearby": ("actions.find_nearby", "find_nearby"),
+    "navigate": ("actions.navigation", "navigation_action"),
     "email_control": ("actions.email", "email_control"),
     "calendar_control": ("actions.calendar", "calendar_control"),
     "contacts_control": ("actions.contacts", "contacts_control"),
@@ -1991,7 +2003,414 @@ ANO_TOOLS = {
     "cloud_integrations_control": ("actions.cloud_integrations", "cloud_integrations_control"),
     "send_message": ("actions.send_message", "send_message"),
     "prayer_control": ("actions.prayer", "prayer_control"),
+    "generate_document": ("actions.document_generation", "generate_document"),
+    "generate_image": ("actions.image_generation", "generate_image"),
+    "tiktok_tracker": ("actions.tiktok_tracker", "tiktok_tracker"),
+    "tiktok_coach": ("actions.tiktok_coach", "tiktok_coach"),
+    "agent_process_monitor": ("actions.agent_process_monitor", "agent_process_monitor"),
+    "live_auto_debug": ("actions.auto_debug", "auto_debug_action"),
+    "code_helper": ("actions.code_helper", "code_helper"),
+    "dev_agent": ("actions.dev_agent", "dev_agent"),
+    "self_repair": ("actions.self_repair", "self_repair"),
+    "sparring_partner": ("actions.sparring_partner", "sparring_partner"),
+    "capability_guide": ("actions.capability_guide", "capability_guide"),
 }
+
+ANO_RELAYED = {"phone_call", "phone_hangup", "phone_contacts", "phone_sms"}
+
+ANO_PARAM_ALIASES = {
+    "hypr_orchestrator": {"command": "action", "app": "target", "ws": "workspace"},
+    "computer_control": {"command": "action", "ws": "workspace", "app": "title"},
+    "desktop_control": {"command": "action", "ws": "value", "workspace": "value", "app": "value"},
+    "open_app": {"app": "app_name", "name": "app_name", "ws": "workspace"},
+    "close_app": {"app": "app_name", "name": "app_name", "ws": "workspace"},
+    "computer_settings": {"setting": "action", "command": "action"},
+}
+
+ANO_CORE_TOOLS = (
+    "open_app",
+    "close_app",
+    "computer_settings",
+    "computer_control",
+    "system_state",
+    "web_search",
+    "weather_report",
+    "reminder",
+    "music_control",
+    "browser_control",
+    "file_controller",
+    "hypr_orchestrator",
+)
+
+ANO_PACKS = (
+    (r"\b(youtube|clip|video|telecharge|shazam|qui chante|media|lecteur)\b", ("youtube_video", "download_music", "music_recognition", "media_control")),
+    (r"\b(mail|email|gmail|courriel|agenda|calendrier|reunion|contact|whatsapp|telegram|discord|message|notion|figma|document|rapport|lettre|cv)\b", ("email_control", "calendar_control", "contacts_control", "send_message", "cloud_integrations_control", "generate_document")),
+    (r"\b(fichier|dossier|pdf|doc|document|notes|cerveau|second.?brain|recherche.*doc|resume.*fichier)\b", ("file_processor", "search_personal_docs", "second_brain")),
+    (r"\b(ecran|capture|screenshot|vois|regarde|image|dessine|genere.*image)\b", ("capture_control", "screen_process", "generate_image")),
+    (r"\b(github|git|repo|depot|pr|issue|docker|secu|scan|debug|bug|erreur|code|repare|systeme|cpu|ram)\b", ("github_control", "devsecops", "live_auto_debug", "self_repair", "system_status", "agent_process_monitor")),
+    (r"\b(proche|pharmacie|restaurant|hopital|itineraire|gps|route|trajet|priere|salat|adhan)\b", ("find_nearby", "navigate", "prayer_control")),
+    (r"\b(tiktok|viral|vues|abonnes|coach)\b", ("tiktok_tracker", "tiktok_coach")),
+    (r"\b(appelle|appel|telephone|raccroche|sms)\b", ("phone_call", "phone_hangup", "phone_contacts", "phone_sms")),
+)
+
+_ORDINAL_WS = {
+    "un": "1", "premier": "1", "premiere": "1", "1er": "1",
+    "deux": "2", "deuxieme": "2", "second": "2", "seconde": "2", "2e": "2", "2eme": "2",
+    "trois": "3", "troisieme": "3", "3e": "3", "3eme": "3",
+    "quatre": "4", "quatrieme": "4", "4e": "4", "4eme": "4",
+    "cinq": "5", "cinquieme": "5", "5e": "5", "5eme": "5",
+    "six": "6", "sixieme": "6", "6e": "6", "6eme": "6",
+    "sept": "7", "septieme": "7", "huit": "8", "huitieme": "8",
+    "neuf": "9", "neuvieme": "9", "dix": "10", "dixieme": "10",
+    "suivant": "+1", "droite": "+1", "next": "+1",
+    "precedent": "-1", "gauche": "-1", "prev": "-1",
+    "dernier": "previous", "retour": "previous", "vide": "empty",
+}
+
+_FAIL_PATTERNS = (
+    "erreur ", "erreur:", "échec", "echec", "aucune fenêtre ne correspond",
+    "aucune fenetre ne correspond", "introuvable", "invalide", "impossible de ",
+    "non confirmé", "non confirme", "indisponible", "non supporté", "non supporte",
+    "refusé", "refuse", "manquant", "aucune action d'orchestration", "outil ano-gpt inconnu",
+    "relais téléphone", "commande bloquée",
+)
+
+_DANGEROUS_SHELL_RE = re.compile(
+    r"(rm\s+-[a-zA-Z]*r[a-zA-Z]*f?\s+/(\s|$|\*)|mkfs\.|dd\s+if=.*of=/dev/|:\(\)\s*\{|chmod\s+-R\s+777\s+/|>\s*/dev/sd[a-z])"
+)
+
+
+def _fold_text(text):
+    import unicodedata
+
+    raw = unicodedata.normalize("NFKD", str(text or "").casefold())
+    return "".join(c for c in raw if not unicodedata.combining(c))
+
+
+def _looks_like_failure(text):
+    low = _fold_text(text)
+    if not low:
+        return False
+    if "0 erreur" in low or "sans erreur" in low:
+        return False
+    return any(_fold_text(p) in low for p in _FAIL_PATTERNS)
+
+
+def _hypr_env():
+    env = dict(os.environ)
+    rd = env.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+    env["XDG_RUNTIME_DIR"] = rd
+    if not env.get("HYPRLAND_INSTANCE_SIGNATURE"):
+        hdir = Path(rd) / "hypr"
+        if hdir.is_dir():
+            insts = sorted((d for d in hdir.iterdir() if d.is_dir()), key=lambda d: d.stat().st_mtime, reverse=True)
+            if insts:
+                env["HYPRLAND_INSTANCE_SIGNATURE"] = insts[0].name
+    return env
+
+
+def _hypr_json(cmd):
+    try:
+        r = subprocess.run(["hyprctl", "-j", *cmd.split()], capture_output=True, text=True, timeout=2, check=False, env=_hypr_env())
+        if r.returncode == 0 and r.stdout.strip():
+            return json.loads(r.stdout)
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        pass
+    return None
+
+
+def _hypr_dispatch(lua_cmd="", legacy_cmd=""):
+    env = _hypr_env()
+    for payload in (lua_cmd, legacy_cmd):
+        if not payload:
+            continue
+        try:
+            r = subprocess.run(["hyprctl", "dispatch", payload], capture_output=True, text=True, timeout=2.5, check=False, env=env)
+            out = (r.stdout + " " + r.stderr).strip().lower()
+            if r.returncode == 0 and "unknown" not in out and "invalid" not in out and "error" not in out:
+                return True, (r.stdout.strip() or "ok")
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+    return False, "Échec hyprctl dispatch"
+
+
+def _norm_ws(ws):
+    raw = _fold_text(ws).replace("bureau", "").replace("workspace", "").replace("ws", "").strip()
+    if raw in _ORDINAL_WS:
+        return _ORDINAL_WS[raw]
+    m = re.search(r"([+-]?\d+)", raw)
+    if m:
+        return m.group(1)
+    if raw in ("previous", "empty", "special"):
+        return raw
+    return raw
+
+
+def tool_hypr_workspace(action="switch", workspace=""):
+    """Navigation et inspection natives des bureaux Hyprland (Lua >= 0.55 + repli legacy + vérification réelle)."""
+    act = _fold_text(action or "switch")
+    if act in ("list", "status", "info", "current"):
+        active = _hypr_json("activeworkspace") or {}
+        wss = _hypr_json("workspaces") or []
+        lines = [f"Bureau actif : {active.get('id', '?')} ({active.get('windows', 0)} fenêtre(s))"]
+        for w in sorted(wss, key=lambda x: x.get("id", 0)):
+            lines.append(f"• Bureau {w.get('id')} ({w.get('name', w.get('id'))}) : {w.get('windows', 0)} fenêtre(s)")
+        return True, "\n".join(lines)
+
+    ws = _norm_ws(workspace)
+    if not ws:
+        return False, "Numéro ou nom de bureau manquant."
+
+    if ws == "special" or ws.startswith("special:"):
+        name = ws.split(":", 1)[1] if ":" in ws else ""
+        lua = f'hl.dsp.toggle_special_workspace({{ name = "{name}" }})' if name else "hl.dsp.toggle_special_workspace()"
+        ok, msg = _hypr_dispatch(lua, f"togglespecialworkspace {name}".strip())
+        return ok, f"Bureau spécial basculé ({msg})." if ok else f"Échec bureau spécial ({msg})."
+
+    ok, msg = _hypr_dispatch(f'hl.dsp.focus({{ workspace = "{ws}" }})', f"workspace {ws}")
+    if not ok:
+        return False, f"Impossible de passer au bureau {ws} ({msg})."
+
+    time.sleep(0.08)
+    cur = _hypr_json("activeworkspace") or {}
+    cur_id = cur.get("id")
+    if ws.isdigit() and cur_id is not None and str(cur_id) != ws:
+        # Second essai syntaxe legacy directe
+        _hypr_dispatch("", f"workspace {ws}")
+        time.sleep(0.08)
+        cur = _hypr_json("activeworkspace") or {}
+        cur_id = cur.get("id")
+        if str(cur_id) != ws:
+            return False, f"Changement vers le bureau {ws} non confirmé (bureau actif : {cur_id})."
+    return True, f"Bureau actif confirmé : {cur_id if cur_id is not None else ws}."
+
+
+def _find_hypr_window(target):
+    clients = _hypr_json("clients") or []
+    q = (target or "").strip().lower()
+    if not q or q in ("active", "actuelle", "courante", "cette fenetre", "cette fenêtre", "fenetre", "fenêtre"):
+        act = _hypr_json("activewindow") or {}
+        if act.get("address"):
+            return act
+        return clients[0] if clients else None
+    if q.startswith("0x") or q.startswith("address:"):
+        addr = q.replace("address:", "")
+        return next((c for c in clients if (c.get("address") or "").lower() == addr), None)
+    for c in clients:
+        if q in (c.get("class") or "").lower() or q in (c.get("initialClass") or "").lower():
+            return c
+    for c in clients:
+        if q in (c.get("title") or "").lower() or q in (c.get("initialTitle") or "").lower():
+            return c
+    return None
+
+
+def tool_hypr_windows(action="list", target="", workspace="", follow=False):
+    """Gestion native complète des fenêtres Hyprland (list, focus, move_to_workspace, close, fullscreen, toggle_floating, organize)."""
+    act = _fold_text(action or "list")
+    if act in ("list", "status"):
+        clients = _hypr_json("clients") or []
+        if not clients:
+            return True, "Aucune fenêtre ouverte sous Hyprland."
+        lines = [
+            f"• [{c.get('address')}] {c.get('class', '?')} — « {clip(c.get('title') or '', 45)} » (bureau {(c.get('workspace') or {}).get('id', '?')})"
+            for c in clients
+        ]
+        return True, "\n".join(lines[:30])
+
+    if act in ("organize", "reorganize", "range"):
+        return call_ano_action("hypr_orchestrator", {"action": "organize"})
+
+    win = _find_hypr_window(target)
+    if not win or not win.get("address"):
+        return False, f"Aucune fenêtre ne correspond à « {target or 'active'} »."
+    addr = win["address"]
+    sel = f"address:{addr}"
+    label = f"{win.get('class', '?')} ({clip(win.get('title') or '', 32)})"
+
+    if act in ("focus", "switch", "show"):
+        ok, _ = _hypr_dispatch(f'hl.dsp.focus({{ window = "{sel}" }})', f"focuswindow {sel}")
+        return ok, f"Focus sur {label}." if ok else f"Impossible de mettre le focus sur {label}."
+
+    if act in ("move", "move_to_workspace", "send"):
+        ws = _norm_ws(workspace)
+        if not ws:
+            return False, "Numéro de bureau cible manquant pour déplacer la fenêtre."
+        fl = "true" if follow else "false"
+        leg = f"movetoworkspace {ws},{sel}" if follow else f"movetoworkspacesilent {ws},{sel}"
+        ok, _ = _hypr_dispatch(f'hl.dsp.window.move({{ workspace = "{ws}", window = "{sel}", follow = {fl} }})', leg)
+        if not ok:
+            return False, f"Échec du déplacement de {label} vers le bureau {ws}."
+        time.sleep(0.1)
+        fresh = next((c for c in (_hypr_json("clients") or []) if c.get("address") == addr), None)
+        new_ws = (fresh or {}).get("workspace", {}).get("id")
+        if ws.isdigit() and str(new_ws) != ws:
+            return False, f"Déplacement non confirmé ({label} est toujours sur le bureau {new_ws})."
+        return True, f"{label} déplacée sur le bureau {new_ws or ws}."
+
+    if act in ("close", "kill"):
+        ok, _ = _hypr_dispatch(f'hl.dsp.window.kill({{ window = "{sel}" }})', f"closewindow {sel}")
+        return ok, f"Fenêtre {label} fermée." if ok else f"Impossible de fermer {label}."
+
+    if act in ("fullscreen", "maximize"):
+        _hypr_dispatch(f'hl.dsp.focus({{ window = "{sel}" }})', f"focuswindow {sel}")
+        ok, _ = _hypr_dispatch('hl.dsp.window.fullscreen({ mode = 0 })', "fullscreen 0")
+        return ok, f"Plein écran basculé sur {label}." if ok else f"Échec plein écran sur {label}."
+
+    if act in ("float", "floating", "toggle_floating"):
+        ok, _ = _hypr_dispatch(f'hl.dsp.window.toggle_floating({{ window = "{sel}" }})', f"togglefloating {sel}")
+        return ok, f"Mode flottant basculé sur {label}." if ok else f"Échec mode flottant sur {label}."
+
+    return False, f"Action fenêtre inconnue : {action}"
+
+
+def tool_shell_control(action="", value="", extra=""):
+    """Pilote directement le shell Caelestia / Ano Shell (IPC Quickshell, verre, thème, concentration, minuteur…)."""
+    act = _fold_text(action)
+    val = str(value or "").strip()
+    ext = str(extra or "").strip()
+
+    def _qs(*args):
+        try:
+            r = subprocess.run(["qs", "-c", SHELL_NAME, "ipc", "call", *args], capture_output=True, text=True, timeout=4, check=False)
+            out = (r.stdout + " " + r.stderr).strip()
+            return r.returncode == 0, out or "OK"
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return False, str(exc)[:140]
+
+    def _global(name):
+        return _hypr_dispatch(f'hl.dsp.global("{SHELL_NAME}:{name}")', f"global {SHELL_NAME}:{name}")
+
+    if act == "lock":
+        ok, out = _qs("lock", "lock")
+        return ok, "Écran verrouillé." if ok else f"Échec verrouillage : {out}"
+    if act in ("control_center", "cc"):
+        ok, _ = _global("controlCenter")
+        return ok, "Centre de contrôle basculé." if ok else "Échec ouverture Centre de contrôle."
+    if act in ("settings", "nexus", "parametres"):
+        ok, out = _qs("nexus", "open")
+        if not ok:
+            ok, out = _global("nexus")
+        return ok, "Paramètres ouverts." if ok else f"Échec Paramètres : {out}"
+    if act in ("mission_control", "missioncontrol"):
+        ok, out = _qs("missioncontrol", "toggle")
+        return ok, "Mission Control basculé." if ok else f"Échec Mission Control : {out}"
+    if act in ("spotlight", "launcher"):
+        ok, _ = _global("spotlight")
+        return ok, "Spotlight basculé." if ok else "Échec Spotlight."
+    if act in ("clock", "horloge"):
+        ok, _ = _global("clock")
+        return ok, "Horloge basculée." if ok else "Échec Horloge."
+    if act in ("earbuds", "ecouteurs"):
+        ok, _ = _global("earbuds")
+        return ok, "Panneau Écouteurs 3D basculé." if ok else "Échec Écouteurs 3D."
+    if act in ("notes", "quicknotes"):
+        ok, _ = _global("quicknotes")
+        return ok, "Notes rapides basculées." if ok else "Échec Notes rapides."
+    if act in ("tasks", "quicktasks", "taches"):
+        ok, _ = _global("quicktasks")
+        return ok, "Tâches rapides basculées." if ok else "Échec Tâches rapides."
+    if act in ("close_agentos", "agentos_close"):
+        ok, out = _qs("agentos", "close")
+        return ok, "Fenêtre Agent OS fermée." if ok else f"Échec fermeture Agent OS : {out}"
+    if act in ("screenshot", "capture"):
+        ok, _ = _global("screenshot")
+        return ok, "Outil de capture lancé." if ok else "Échec capture."
+    if act in ("timer", "minuteur"):
+        sub = _fold_text(val)
+        if sub in ("stop", "cancel", "arrete", "annule"):
+            ok, out = _qs("island", "stopAll")
+            return ok, "Minuteur arrêté." if ok else f"Échec arrêt minuteur : {out}"
+        if sub in ("pause", "resume", "reprendre"):
+            ok, out = _qs("island", "pause")
+            return ok, "Minuteur mis en pause/repris." if ok else f"Échec pause minuteur : {out}"
+        m = re.search(r"(\d+)", val)
+        secs = int(m.group(1)) * (1 if "sec" in sub or sub.endswith("s") else 60) if m else 300
+        label = ext or "Minuteur"
+        ok, out = _qs("island", "timer", str(secs), label)
+        return ok, f"Minuteur « {label} » lancé ({secs} s)." if ok else f"Échec minuteur : {out}"
+    if act in ("focus_mode", "focus", "dnd", "concentration"):
+        sub = _fold_text(val) or "toggle"
+        if sub in ("stop", "off", "desactive"):
+            ok, out = _qs("focus", "stop")
+        elif sub in ("dnd", "work", "sleep"):
+            mins = ext if ext.isdigit() else "60"
+            ok, out = _qs("focus", "start", sub, mins)
+        else:
+            ok, out = _qs("focus", "toggle")
+        return ok, f"Mode concentration mis à jour ({out})." if ok else f"Échec mode concentration : {out}"
+    if act in ("glass", "liquid_glass", "verre"):
+        gfile = SHELL_CFG_DIR / "glass.json"
+        try:
+            cfg = json.loads(gfile.read_text(encoding="utf-8")) if gfile.is_file() else {}
+        except (OSError, ValueError):
+            cfg = {}
+        key = _fold_text(val)
+        if key in ("shell", "style") and ext in ("ios", "classic", "off"):
+            cfg["shell"] = ext
+        elif key in ("performance", "perf", "profil") and ext in ("ultra", "eco", "auto"):
+            cfg["performance"] = ext
+        elif key == "gtk" and ext in ("nautilus", "complet", "off"):
+            cfg["gtk"] = ext
+        elif key in ("density", "densite", "intensite"):
+            try:
+                cfg["density"] = max(0.0, min(1.0, float(ext.replace(",", "."))))
+            except ValueError:
+                return False, f"Densité invalide : {ext}"
+        elif key in ("ios", "classic", "off"):
+            cfg["shell"] = key
+        elif key in ("ultra", "eco", "auto"):
+            cfg["performance"] = key
+        else:
+            return False, f"Réglage verre non reconnu ({val} / {ext}). Utilise shell|performance|gtk|density."
+        try:
+            gfile.parent.mkdir(parents=True, exist_ok=True)
+            gfile.write_text(json.dumps(cfg, indent=4, ensure_ascii=False) + "\n", encoding="utf-8")
+            return True, f"Liquid Glass mis à jour ({json.dumps(cfg, ensure_ascii=False)})."
+        except OSError as exc:
+            return False, str(exc)[:140]
+    if act in ("theme", "mode"):
+        mode = "light" if _fold_text(val) in ("light", "clair", "jour") else "dark"
+        cli = "ano-shell" if SHELL_NAME == "ano-shell" else "caelestia"
+        try:
+            r = subprocess.run([cli, "scheme", "set", "-m", mode], capture_output=True, text=True, timeout=6, check=False)
+            return r.returncode == 0, f"Thème {mode} appliqué." if r.returncode == 0 else clip(r.stderr or r.stdout, 140)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return False, str(exc)[:140]
+    if act in ("wallpaper", "fond"):
+        cli = "ano-shell" if SHELL_NAME == "ano-shell" else "caelestia"
+        args = [cli, "wallpaper", "-r"] if not val or _fold_text(val) in ("random", "aleatoire", "suivant") else [cli, "wallpaper", "-f", val]
+        try:
+            r = subprocess.run(args, capture_output=True, text=True, timeout=8, check=False)
+            return r.returncode == 0, "Fond d'écran changé." if r.returncode == 0 else clip(r.stderr or r.stdout, 140)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return False, str(exc)[:140]
+    return False, f"Action shell inconnue : {action}"
+
+
+def tool_run_shell(command, cwd="", timeout=15):
+    """Exécute une commande shell sûre sur le PC et retourne la sortie réelle (code de retour + stdout/stderr)."""
+    cmd = str(command or "").strip()
+    if not cmd:
+        return False, "Commande vide."
+    if _DANGEROUS_SHELL_RE.search(cmd):
+        return False, "Commande bloquée par sécurité (destructive sur le système)."
+    work = str(cwd or "") if (cwd and os.path.isdir(str(cwd))) else str(HOME)
+    t = max(2, min(30, int(timeout or 15)))
+    try:
+        r = subprocess.run(["bash", "-lc", cmd], cwd=work, capture_output=True, text=True, timeout=t, check=False, env=_hypr_env())
+        out = (r.stdout or "").strip()
+        err = (r.stderr or "").strip()
+        combined = out if out else err
+        if out and err and r.returncode != 0:
+            combined = f"{out}\n[stderr] {err}"
+        if r.returncode == 0:
+            return True, clip(combined or "Commande exécutée (code 0).", 900)
+        return False, clip(f"Code {r.returncode}: {combined or 'échec'}", 600)
+    except subprocess.TimeoutExpired:
+        return False, f"Commande interrompue après {t}s."
+    except OSError as exc:
+        return False, str(exc)[:180]
 
 
 def load_ano_long_term_summary():
@@ -2073,7 +2492,6 @@ def ano_memory_search(query):
     if mdb.is_file():
         try:
             con = sqlite3.connect(f"file:{mdb}?mode=ro", uri=True, timeout=0.5)
-            # Lecture robuste quelle que soit la colonne texte de memories
             cols = [c[0] for c in con.execute("SELECT * FROM memories LIMIT 0").description]
             text_col = next((c for c in ("content", "text", "summary", "value", "fact") if c in cols), None)
             if text_col:
@@ -2089,6 +2507,16 @@ def ano_memory_search(query):
     return "\n".join(hits[:10]) if hits else f"Aucun souvenir trouvé pour « {q} »."
 
 
+def _normalize_ano_params(tool_name, params):
+    clean = {k: v for k, v in (params or {}).items() if not str(k).startswith("_") and v is not None}
+    aliases = ANO_PARAM_ALIASES.get(tool_name)
+    if aliases:
+        for old_k, new_k in aliases.items():
+            if old_k in clean and new_k not in clean:
+                clean[new_k] = clean.pop(old_k)
+    return clean
+
+
 def call_ano_action(tool_name, params):
     """Exécute n'importe quelle action d'ANO-GPT (~/OUTILS/ANO-GPT/actions/*) en chargement paresseux."""
     import contextlib
@@ -2097,15 +2525,30 @@ def call_ano_action(tool_name, params):
     import io
     import warnings
 
-    if tool_name not in ANO_TOOLS:
-        return False, f"Outil ANO-GPT inconnu : {tool_name}"
     if not ANO_DIR.is_dir():
         return False, "Dépôt ANO-GPT introuvable"
 
-    mod_name, fn_name = ANO_TOOLS[tool_name]
-    prev_cwd = os.getcwd()
     if str(ANO_DIR) not in sys.path:
         sys.path.insert(0, str(ANO_DIR))
+
+    clean_params = _normalize_ano_params(tool_name, params)
+
+    # Relais téléphone (ANO-Remote) si ANO-GPT tourne
+    if tool_name in ANO_RELAYED:
+        try:
+            from core.tool_bridge import call_app
+
+            res = call_app(tool_name, clean_params, timeout=45)
+            txt = clip(str(res or ""), 500)
+            return (not _looks_like_failure(txt)), (txt or "Commande téléphone envoyée.")
+        except Exception as exc:  # noqa: BLE001
+            return False, clip(f"Relais téléphone indisponible (ANO-GPT éteint ?) : {exc}", 220)
+
+    if tool_name not in ANO_TOOLS:
+        return False, f"Outil ANO-GPT inconnu : {tool_name}"
+
+    mod_name, fn_name = ANO_TOOLS[tool_name]
+    prev_cwd = os.getcwd()
 
     class _NoopUI:
         current_file = None
@@ -2126,7 +2569,6 @@ def call_ano_action(tool_name, params):
         with contextlib.redirect_stdout(buf):
             mod = importlib.import_module(mod_name)
             fn = getattr(mod, fn_name)
-            clean_params = {k: v for k, v in (params or {}).items() if not str(k).startswith("_")}
             if tool_name == "system_status":
                 res = fn()
             elif tool_name == "system_state":
@@ -2143,12 +2585,14 @@ def call_ano_action(tool_name, params):
                 }
                 sig = inspect.signature(fn)
                 takes_all = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
-                kwargs = {k: v for k, v in offer.items() if takes_all or k in sig.parameters}
-                if "parameters" not in sig.parameters and not takes_all:
-                    kwargs = {}
+                if "parameters" in sig.parameters or takes_all:
+                    kwargs = {k: v for k, v in offer.items() if takes_all or k in sig.parameters}
+                else:
+                    kwargs = {k: v for k, v in clean_params.items() if k in sig.parameters}
                 res = fn(**kwargs)
         txt = str(res) if res not in (None, "") else (buf.getvalue().strip() or "Action exécutée.")
-        return True, clip(txt, 500)
+        txt = clip(txt, 750)
+        return (not _looks_like_failure(txt)), txt
     except Exception as exc:  # noqa: BLE001 — ne jamais planter Agent OS
         return False, clip(f"Erreur {tool_name}: {exc}", 240)
     finally:
@@ -2156,6 +2600,291 @@ def call_ano_action(tool_name, params):
             os.chdir(prev_cwd)
         except OSError:
             pass
+
+
+def _sanitize_schema(node, depth=0):
+    """Nettoie un schéma JSON ANO-GPT pour l'API REST Gemini Function Calling (zéro HTTP 400)."""
+    if not isinstance(node, dict) or depth > 5:
+        return {"type": "STRING"}
+    t = str(node.get("type") or "STRING").upper()
+    if t not in ("OBJECT", "STRING", "INTEGER", "NUMBER", "BOOLEAN", "ARRAY"):
+        t = "STRING"
+    out = {"type": t}
+    if node.get("description"):
+        out["description"] = clip(node["description"], 180)
+    if isinstance(node.get("enum"), list) and node["enum"] and t == "STRING":
+        out["enum"] = [str(x) for x in node["enum"][:24]]
+    if t == "ARRAY":
+        out["items"] = _sanitize_schema(node.get("items") or {"type": "STRING"}, depth + 1)
+    elif t == "OBJECT":
+        props = node.get("properties")
+        if isinstance(props, dict) and props:
+            clean_props = {str(k): _sanitize_schema(v, depth + 1) for k, v in list(props.items())[:20]}
+            out["properties"] = clean_props
+            req = [str(r) for r in (node.get("required") or []) if str(r) in clean_props]
+            if req:
+                out["required"] = req
+        else:
+            # Gemini REST refuse un OBJECT sans properties
+            out["type"] = "STRING"
+    return out
+
+
+def _load_ano_declarations_cache():
+    """Charge les vrais schémas ANO-GPT depuis un cache JSON (~1 ms), reconstruit si tool_declarations.py change."""
+    src = ANO_DIR / "core/tool_declarations.py"
+    if not src.is_file():
+        return {}
+    mtime = int(src.stat().st_mtime)
+    if SCHEMA_CACHE.is_file():
+        try:
+            cached = json.loads(SCHEMA_CACHE.read_text(encoding="utf-8"))
+            if isinstance(cached, dict) and cached.get("mtime") == mtime and isinstance(cached.get("decls"), dict):
+                return cached["decls"]
+        except (OSError, ValueError):
+            pass
+
+    if str(ANO_DIR) not in sys.path:
+        sys.path.insert(0, str(ANO_DIR))
+    try:
+        from core.tool_declarations import TOOL_DECLARATIONS
+    except Exception:  # noqa: BLE001
+        return {}
+
+    decls = {}
+    supported = set(ANO_TOOLS) | set(ANO_RELAYED)
+    for d in TOOL_DECLARATIONS:
+        name = str(d.get("name") or "")
+        if name not in supported:
+            continue
+        entry = {
+            "name": name,
+            "description": clip(d.get("description") or name, 320),
+        }
+        raw_params = d.get("parameters")
+        if isinstance(raw_params, dict) and isinstance(raw_params.get("properties"), dict) and raw_params["properties"]:
+            clean_p = _sanitize_schema(raw_params)
+            if clean_p.get("type") == "OBJECT" and clean_p.get("properties"):
+                entry["parameters"] = clean_p
+        decls[name] = entry
+
+    try:
+        SCHEMA_CACHE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = SCHEMA_CACHE.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"mtime": mtime, "decls": decls}, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(SCHEMA_CACHE)
+    except OSError:
+        pass
+    return decls
+
+
+def _native_tool_declarations():
+    """Déclarations natives Katana AI : flotte d'agents, Hyprland natif, shell Caelestia/Ano, commande shell et mémoire."""
+    return [
+        {
+            "name": "hypr_workspace",
+            "description": "Navigue vers un bureau/workspace Hyprland (1..10, +1, -1, previous, empty, special) ou liste les bureaux existants. À UTILISER EN PRIORITÉ pour 'va sur le bureau 2', 'passe au bureau suivant', 'bureau spécial'.",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {
+                    "action": {"type": "STRING", "enum": ["switch", "list"], "description": "switch pour changer de bureau, list pour lister les bureaux"},
+                    "workspace": {"type": "STRING", "description": "Numéro ou cible : '1', '2', '+1', '-1', 'previous', 'empty', 'special'"},
+                },
+                "required": ["action"],
+            },
+        },
+        {
+            "name": "hypr_windows",
+            "description": "Contrôle natif des fenêtres Hyprland : lister, focus, déplacer une fenêtre vers un bureau, fermer, plein écran, flottant, ou organiser tous les bureaux.",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {
+                    "action": {"type": "STRING", "enum": ["list", "focus", "move_to_workspace", "close", "fullscreen", "toggle_floating", "organize"]},
+                    "target": {"type": "STRING", "description": "Nom, classe, titre ou adresse 0x… de la fenêtre (vide = fenêtre active)"},
+                    "workspace": {"type": "STRING", "description": "Bureau cible pour move_to_workspace (ex. '2')"},
+                    "follow": {"type": "BOOLEAN", "description": "true pour suivre la fenêtre sur le bureau cible"},
+                },
+                "required": ["action"],
+            },
+        },
+        {
+            "name": "shell_control",
+            "description": "Pilote le bureau Caelestia / Ano Shell : verrouiller, ouvrir Paramètres, Centre de contrôle, Mission Control, Spotlight, Horloge, Écouteurs 3D, Notes/Tâches, minuteur, mode concentration, Liquid Glass, thème clair/sombre, fond d'écran, capture ou fermer Agent OS.",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {
+                    "action": {
+                        "type": "STRING",
+                        "enum": [
+                            "lock", "control_center", "settings", "mission_control", "spotlight",
+                            "clock", "earbuds", "notes", "tasks", "close_agentos", "screenshot",
+                            "timer", "focus_mode", "glass", "theme", "wallpaper",
+                        ],
+                    },
+                    "value": {"type": "STRING", "description": "Paramètre principal (ex. '5 min' ou 'stop' pour timer, 'dnd'/'work'/'sleep'/'stop' pour focus_mode, 'dark'/'light' pour theme, 'shell'/'performance'/'density'/'gtk' pour glass, 'random' pour wallpaper)"},
+                    "extra": {"type": "STRING", "description": "Paramètre secondaire (ex. libellé du minuteur, durée focus en minutes, valeur glass 'ios'|'classic'|'off'|'eco'|'ultra'|'auto'|'0.6')"},
+                },
+                "required": ["action"],
+            },
+        },
+        {
+            "name": "run_shell",
+            "description": "Exécute une commande bash sûre sur Arch Linux / Hyprland et retourne stdout/stderr. Utilise-la pour toute action système avancée (réglages précis, git, services systemd, pacman -Q, scripts, fichiers, etc.) quand aucun outil dédié ne suffit.",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {
+                    "command": {"type": "STRING", "description": "Commande bash exacte à exécuter"},
+                    "cwd": {"type": "STRING", "description": "Dossier de travail optionnel"},
+                },
+                "required": ["command"],
+            },
+        },
+        {
+            "name": "agent_dispatch",
+            "description": "Lance un nouvel agent IA dans un projet. RÈGLE STRICTE : si l'utilisateur demande juste d'ouvrir/lancer l'agent sans tâche précise, laisse prompt VIDE ('').",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {
+                    "kind": {"type": "STRING", "enum": ["agy", "claude", "codex", "copilot", "opencode", "antigravity", "gemini", "aider"]},
+                    "cwd": {"type": "STRING", "description": "Chemin du dossier projet"},
+                    "prompt": {"type": "STRING", "description": "Tâche précise à exécuter (CHAÎNE VIDE si simple lancement)"},
+                },
+                "required": ["kind"],
+            },
+        },
+        {
+            "name": "agent_send",
+            "description": "Envoie une consigne ou commande (ex. '/set model ...') directement dans la session active d'un agent IA en cours.",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {
+                    "agent_id": {"type": "STRING", "description": "ID exact de l'agent depuis le contexte"},
+                    "message": {"type": "STRING", "description": "Message exact à injecter dans la session"},
+                },
+                "required": ["agent_id", "message"],
+            },
+        },
+        {
+            "name": "agent_close",
+            "description": "Ferme proprement un agent IA ET sa fenêtre terminal.",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {"agent_id": {"type": "STRING", "description": "ID exact de l'agent"}},
+                "required": ["agent_id"],
+            },
+        },
+        {
+            "name": "agent_stop",
+            "description": "Interrompt la tâche en cours d'un agent (Ctrl+C) ou le tue si force=true.",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {
+                    "agent_id": {"type": "STRING"},
+                    "force": {"type": "BOOLEAN", "description": "true pour SIGTERM, false pour Ctrl+C"},
+                },
+                "required": ["agent_id"],
+            },
+        },
+        {
+            "name": "agent_focus",
+            "description": "Met la fenêtre d'un agent IA au premier plan.",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {"agent_id": {"type": "STRING"}},
+                "required": ["agent_id"],
+            },
+        },
+        {
+            "name": "agent_swarm",
+            "description": "Déploie plusieurs agents IA en escouade sur un même projet.",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {
+                    "kinds": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "Liste de moteurs (ex. ['claude', 'codex'])"},
+                    "cwd": {"type": "STRING"},
+                    "prompt": {"type": "STRING"},
+                },
+                "required": ["kinds"],
+            },
+        },
+        {
+            "name": "agent_permission",
+            "description": "Autorise ou refuse une demande de permission en attente d'un agent IA.",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {
+                    "perm_id": {"type": "STRING"},
+                    "decision": {"type": "STRING", "enum": ["allow", "deny"]},
+                },
+                "required": ["perm_id", "decision"],
+            },
+        },
+        {
+            "name": "agent_detail",
+            "description": "Lit l'activité détaillée, les étapes récentes et le statut git d'un agent IA.",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {"agent_id": {"type": "STRING"}},
+                "required": ["agent_id"],
+            },
+        },
+        {
+            "name": "memory_save",
+            "description": "Enregistre un fait durable dans la mémoire long terme partagée avec ANO-GPT.",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {
+                    "category": {"type": "STRING", "enum": ["identity", "preferences", "projects", "relationships", "wishes", "notes"]},
+                    "key": {"type": "STRING"},
+                    "value": {"type": "STRING"},
+                },
+                "required": ["key", "value"],
+            },
+        },
+        {
+            "name": "memory_search",
+            "description": "Recherche dans la mémoire long terme et l'historique SQLite d'ANO-GPT.",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {"query": {"type": "STRING"}},
+                "required": ["query"],
+            },
+        },
+        {
+            "name": "ano_tool_call",
+            "description": "Appel universel de tout outil ANO-GPT supplémentaire non listé directement ci-dessus.",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {
+                    "tool_name": {"type": "STRING", "description": "Nom exact de l'outil ANO-GPT"},
+                    "params_json": {"type": "STRING", "description": "Paramètres encodés en objet JSON (ex. '{\"action\": \"list\"}')"},
+                },
+                "required": ["tool_name"],
+            },
+        },
+    ]
+
+
+def _select_tool_declarations(prompt, hist):
+    """Sélectionne les outils natifs + noyau ANO-GPT + paquets ANO-GPT pertinents pour la demande."""
+    decls = _native_tool_declarations()
+    native_names = {d["name"] for d in decls}
+    ano_cache = _load_ano_declarations_cache()
+    if not ano_cache:
+        return decls
+
+    folded = _fold_text(prompt + " " + " ".join(t.get("text") or "" for t in hist[-4:]))
+    chosen = list(ANO_CORE_TOOLS)
+    for pattern, tools in ANO_PACKS:
+        if re.search(pattern, folded):
+            for t in tools:
+                if t not in chosen:
+                    chosen.append(t)
+
+    for name in chosen:
+        if name in ano_cache and name not in native_names:
+            decls.append(ano_cache[name])
+    return decls
 
 
 def load_chat_history():
@@ -2180,33 +2909,179 @@ def clear_chat_history():
     CHAT_HISTORY.unlink(missing_ok=True)
 
 
-def call_gemini_json(api_key, system_prompt, contents):
-    models = ("gemini-2.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-flash-latest")
+def call_gemini_tools(api_key, system_prompt, contents, tool_decls):
+    """Appel REST Gemini avec vrai Function Calling natif (repli de modèles + tolérance coupures réseau)."""
+    import http.client
+
+    models = ("gemini-2.5-flash", "gemini-flash-latest", "gemini-3.1-flash-lite")
     payload = {
         "systemInstruction": {"parts": [{"text": system_prompt}]},
         "contents": contents,
-        "generationConfig": {
-            "temperature": 0.15,
-            "responseMimeType": "application/json",
-        },
+        "tools": [{"functionDeclarations": tool_decls}],
+        "generationConfig": {"temperature": 0.15},
     }
-    raw_body = json.dumps(payload).encode("utf-8")
+    raw_body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     last_err = "Gemini indisponible"
     for model in models:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-        req = urllib.request.Request(url, data=raw_body, headers={"Content-Type": "application/json"})
-        try:
-            with urllib.request.urlopen(req, timeout=20) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-            txt = data["candidates"][0]["content"]["parts"][0]["text"]
-            return json.loads(txt), None
-        except (urllib.error.URLError, KeyError, IndexError, ValueError, TimeoutError) as exc:
-            last_err = str(exc)[:180]
+        for attempt in range(2):
+            req = urllib.request.Request(
+                url,
+                data=raw_body,
+                headers={"Content-Type": "application/json", "Connection": "close"},
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=24) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                cand = data["candidates"][0]
+                content = cand.get("content") or {"role": "model", "parts": []}
+                return content, None
+            except urllib.error.HTTPError as exc:
+                try:
+                    body = exc.read().decode("utf-8", errors="ignore")[:220]
+                except OSError:
+                    body = ""
+                last_err = f"HTTP {exc.code}: {body or exc.reason}"
+                if exc.code in (429, 500, 502, 503, 504) and attempt == 0:
+                    time.sleep(0.6)
+                    continue
+                break
+            except (urllib.error.URLError, http.client.HTTPException, OSError, KeyError, IndexError, ValueError, TimeoutError) as exc:
+                last_err = str(exc)[:180]
+                if attempt == 0:
+                    time.sleep(0.5)
+                    continue
+                break
     return None, last_err
 
 
+def _execute_commander_call(fname, args, ctx_state):
+    """Exécute un functionCall de Katana AI et renvoie (ok, output_str, badge_type, badge_label)."""
+    args = args if isinstance(args, dict) else {}
+    agents_by_id = ctx_state["agents_by_id"]
+    default_cwd = ctx_state["default_cwd"]
+
+    if fname == "hypr_workspace":
+        ok, out = tool_hypr_workspace(args.get("action") or "switch", args.get("workspace") or "")
+        return ok, out, "hypr_workspace", f"Bureau · {clip(out, 55)}"
+
+    if fname == "hypr_windows":
+        ok, out = tool_hypr_windows(
+            args.get("action") or "list",
+            args.get("target") or "",
+            args.get("workspace") or "",
+            bool(args.get("follow", False)),
+        )
+        return ok, out, "hypr_windows", f"Fenêtres · {clip(out, 55)}"
+
+    if fname == "shell_control":
+        ok, out = tool_shell_control(args.get("action") or "", args.get("value") or "", args.get("extra") or "")
+        return ok, out, "shell_control", f"Shell · {clip(out, 55)}"
+
+    if fname == "run_shell":
+        ok, out = tool_run_shell(args.get("command") or "", args.get("cwd") or default_cwd)
+        return ok, out, "run_shell", f"Shell · {clip(args.get('command') or '', 32)} ({clip(out, 36)})"
+
+    if fname == "agent_dispatch":
+        k = str(args.get("kind") or "claude").lower()
+        c = str(args.get("cwd") or default_cwd or str(HOME))
+        pr = clean_launch_prompt(str(args.get("prompt") or ""))
+        dispatch_agent(k, c, pr)
+        lbl = f"Lancé {k.upper()} · {norm_project(c)}" + (f" ({clip(pr, 36)})" if pr else "")
+        return True, lbl, "dispatch", lbl
+
+    if fname == "agent_send":
+        aid = str(args.get("agent_id") or "")
+        msg = str(args.get("message") or "")
+        res = send_to_agent(aid, msg)
+        ok = bool(res.get("ok"))
+        detail = res.get("detail", "")
+        return ok, f"Message vers {aid} : {detail}", "send", f"Message → {aid} ({clip(detail, 45)})"
+
+    if fname == "agent_close":
+        aid = str(args.get("agent_id") or "")
+        ag = agents_by_id.get(aid)
+        if not ag:
+            return False, f"Agent introuvable ({aid}).", "close_agent", f"Agent introuvable ({aid})"
+        ok = close_agent_window(ag)
+        lbl = f"Fermé · {ag['kind']} ({ag['project']})"
+        return ok, lbl if ok else f"Impossible de fermer {aid}.", "close_agent", lbl
+
+    if fname == "agent_stop":
+        aid = str(args.get("agent_id") or "")
+        force = bool(args.get("force", False))
+        ag = agents_by_id.get(aid)
+        if not ag or not ag.get("pid"):
+            return False, f"Agent sans PID arrêtable ({aid}).", "stop", f"Agent sans PID ({aid})"
+        stop_agent(str(ag["pid"]), force=force)
+        lbl = f"{'Tué' if force else 'Stoppé'} · {ag['kind']} ({ag['project']})"
+        return True, lbl, "kill" if force else "stop", lbl
+
+    if fname == "agent_focus":
+        aid = str(args.get("agent_id") or "")
+        ag = agents_by_id.get(aid)
+        if not ag or not ag.get("window"):
+            return False, f"Fenêtre d'agent introuvable ({aid}).", "focus", f"Fenêtre introuvable ({aid})"
+        addr = ag["window"] if ag["window"].startswith("0x") else f"0x{ag['window']}"
+        ok, _ = _hypr_dispatch(f'hl.dsp.focus({{ window = "address:{addr}" }})', f"focuswindow address:{addr}")
+        lbl = f"Focus · {ag['kind']} ({ag['project']})"
+        return ok, lbl if ok else f"Échec focus {aid}.", "focus", lbl
+
+    if fname == "agent_swarm":
+        kinds = args.get("kinds") if isinstance(args.get("kinds"), list) else []
+        c = str(args.get("cwd") or default_cwd or str(HOME))
+        pr = clean_launch_prompt(str(args.get("prompt") or ""))
+        for k in kinds[:6]:
+            dispatch_agent(str(k).lower(), c, pr)
+        ok = bool(kinds)
+        lbl = f"Escouade ({', '.join(kinds)}) · {norm_project(c)}"
+        return ok, lbl if ok else "Aucun moteur précisé.", "swarm", lbl
+
+    if fname == "agent_permission":
+        pid_perm = str(args.get("perm_id") or "")
+        dec = "allow" if str(args.get("decision") or "allow") == "allow" else "deny"
+        answer(pid_perm, dec)
+        lbl = f"Permission {'autorisée' if dec == 'allow' else 'refusée'}"
+        return True, lbl, "permission", lbl
+
+    if fname == "agent_detail":
+        aid = str(args.get("agent_id") or "")
+        det = agent_detail(aid)
+        summary = {
+            "id": det.get("id"),
+            "steps": det.get("steps", [])[:8],
+            "git": det.get("gitStatus", [])[:8],
+            "events": det.get("events", [])[-6:],
+        }
+        return True, json.dumps(summary, ensure_ascii=False), "detail", f"Inspecté · {aid}"
+
+    if fname == "memory_save":
+        ok, detail = ano_memory_save(args.get("key") or "note", args.get("value") or "", args.get("category") or "notes")
+        return ok, detail, "memory_save", detail
+
+    if fname == "memory_search":
+        res_txt = ano_memory_search(args.get("query") or "")
+        return True, res_txt, "memory_search", f"Mémoire · {clip(args.get('query') or '', 32)}"
+
+    if fname == "ano_tool_call":
+        tname = str(args.get("tool_name") or "").strip()
+        raw_p = args.get("params_json") or "{}"
+        try:
+            tparams = json.loads(raw_p) if isinstance(raw_p, str) else (raw_p if isinstance(raw_p, dict) else {})
+        except ValueError:
+            tparams = {}
+        ok, detail = call_ano_action(tname, tparams)
+        return ok, detail, f"ano:{tname}", f"ANO · {tname} ({clip(detail, 52)})"
+
+    if fname in ANO_TOOLS or fname in ANO_RELAYED:
+        ok, detail = call_ano_action(fname, args)
+        return ok, detail, f"ano:{fname}", f"ANO · {fname} ({clip(detail, 52)})"
+
+    return False, f"Outil inconnu : {fname}", fname, f"Outil inconnu ({fname})"
+
+
 def commander(prompt, default_cwd=""):
-    """Commandant IA (Katana AI) : mémoire partagée ANO-GPT, mémoire de conversation, pilotage agents + actions PC ANO-GPT."""
+    """Commandant IA (Katana AI) : Function Calling natif multi-étapes, flotte agents, Hyprland, Shell et tout ANO-GPT."""
     prompt = (prompt or "").strip()
     if not prompt:
         return {"ok": False, "reply": "Écris une instruction pour le Commandant IA.", "executed": []}
@@ -2223,9 +3098,16 @@ def commander(prompt, default_cwd=""):
     projs = list_projects()
     hist = load_chat_history()
     ano_mem = load_ano_long_term_summary()
+    active_ws = _hypr_json("activeworkspace") or {}
+    clients = _hypr_json("clients") or []
 
     ctx = {
         "default_cwd": default_cwd,
+        "active_workspace": active_ws.get("id"),
+        "windows": [
+            {"addr": c.get("address"), "class": c.get("class"), "title": clip(c.get("title") or "", 40), "ws": (c.get("workspace") or {}).get("id")}
+            for c in clients[:18]
+        ],
         "agents": [
             {
                 "id": a["id"], "pid": a["pid"], "kind": a["kind"], "status": a["status"],
@@ -2235,42 +3117,29 @@ def commander(prompt, default_cwd=""):
             for a in snap["agents"]
         ],
         "perms": [{"id": p.get("id"), "project": p.get("project"), "label": p.get("label"), "detail": p.get("detail")} for p in snap["perms"]],
-        "projects": [{"name": p["name"], "cwd": p["cwd"], "branch": p["branch"]} for p in projs[:14]],
+        "projects": [{"name": p["name"], "cwd": p["cwd"], "branch": p["branch"]} for p in projs[:12]],
     }
 
+    extra_ano_names = ", ".join(sorted(set(ANO_TOOLS) | set(ANO_RELAYED)))
     system = (
-        "Tu es Katana AI, le Commandant IA d'Agent OS connecté à la MÊME mémoire et aux MÊMES actions système qu'ANO-GPT sur Arch Linux / Hyprland.\n"
-        "Tu pilotes DEUX domaines :\n"
-        "1) Les agents IA (agy = Antigravity CLI, antigravity = Antigravity App, claude = Claude Code, codex = OpenAI Codex, copilot = GitHub Copilot CLI, opencode = OpenCode, gemini = Gemini CLI, aider = Aider).\n"
-        "2) Tout le PC de l'utilisateur via les actions ANO-GPT.\n\n"
-        f"MÉMOIRE LONG TERME ANO-GPT :\n{ano_mem or '(aucune entrée)'}\n\n"
-        "Réponds UNIQUEMENT en JSON valide :\n"
-        '{"reply": "réponse courte, naturelle et factuelle en français", "actions": [...]}\n\n'
-        "Actions autorisées :\n"
-        '- {"type": "dispatch", "kind": "agy|claude|codex|copilot|opencode|antigravity|gemini|aider", "cwd": "<chemin>", "prompt": ""}\n'
-        '  RÈGLE ABSOLUE : si l\'utilisateur dit simplement « lance codex » / « ouvre claude » / « démarre copilot » SANS tâche précise, mets OBLIGATOIREMENT "prompt": "" (CHAÎNE VIDE). N\'invente JAMAIS un prompt comme « Démarrer l\'agent Codex » !\n'
-        '- {"type": "send", "agent_id": "<id exact>", "message": "<consigne exacte à envoyer dans la session de l\'agent>"}\n'
-        '- {"type": "close_agent", "agent_id": "<id exact>"}  (ferme l\'agent ET son terminal quand l\'utilisateur dit « ferme-le », « ferme codex », « quitte agy »)\n'
-        '- {"type": "stop", "agent_id": "<id exact>"}  (interrompt la tâche en cours avec Ctrl+C sans fermer le terminal)\n'
-        '- {"type": "kill", "agent_id": "<id exact>"}  (tue le processus agent)\n'
-        '- {"type": "focus", "agent_id": "<id exact>"}  (met la fenêtre de l\'agent au premier plan)\n'
-        '- {"type": "swarm", "kinds": ["claude","codex"], "cwd": "<chemin>", "prompt": "<mission>"}\n'
-        '- {"type": "approve_perm", "perm_id": "<id>"} / {"type": "deny_perm", "perm_id": "<id>"}\n'
-        '- {"type": "memory_save", "category": "identity|preferences|projects|relationships|wishes|notes", "key": "<clé>", "value": "<fait>"}\n'
-        '- {"type": "memory_search", "query": "<mots-clés>"}\n'
-        '- {"type": "ano", "tool": "<outil ANO-GPT>", "params": {...}}\n'
-        "  Outils ANO-GPT disponibles : open_app (app_name), close_app (app_name), computer_settings (action, value — volume/luminosité/wifi/bluetooth/nuit/batterie/capture), "
-        "system_state (topic: all|bluetooth|wifi|audio|brightness|power|media|hyprland|resources), system_status (), "
-        "hypr_orchestrator (action, target), music_control (action, query), youtube_video (query), browser_control (action, url, query), "
-        "web_search (query), weather_report (city), file_controller (action, path), reminder (action, text, time), "
-        "email_control (action), calendar_control (action), github_control (action), shell_exec (command), capture_control (action), prayer_control (action).\n\n"
-        "RÈGLES DE MÉMOIRE & PRÉCISION :\n"
-        "- Utilise l'historique de conversation pour résoudre les pronoms (« ferme-le », « envoie-lui… », « codex » juste après « ferme le » = fermer Codex !).\n"
-        "- Avant de répondre sur l'état réel du PC (volume, batterie, Wi-Fi, Bluetooth, RAM, musique), appelle `ano` avec `system_state`.\n"
-        "- Ne prétends jamais avoir fait une action si elle n'est pas dans `actions`."
+        "Tu es Katana AI, le Commandant IA omnipotent d'Agent OS sur Arch Linux / Hyprland.\n"
+        "Tu as le contrôle COMPLET de :\n"
+        "1) Tous les agents IA (agy, antigravity, claude, codex, copilot, opencode, gemini, aider) : lancer, parler en direct, inspecter, focus, stopper, fermer, escouade, permissions.\n"
+        "2) Tout Hyprland et le shell Caelestia / Ano Shell : changer de bureau (`hypr_workspace`), gérer les fenêtres (`hypr_windows`), piloter les panneaux/réglages/verre/minuteur/focus (`shell_control`), exécuter toute commande sûre (`run_shell`).\n"
+        "3) Toutes les actions et la mémoire partagée d'ANO-GPT (apps, réglages système, volume, luminosité, Wi-Fi, Bluetooth, musique, YouTube, navigateur, fichiers, web, météo, rappels, mails, agenda, GitHub, téléphone, vision écran…).\n"
+        f"Liste complète des outils ANO-GPT accessibles aussi via `ano_tool_call` : {extra_ano_names}.\n\n"
+        f"MÉMOIRE LONG TERME PARTAGÉE ANO-GPT :\n{ano_mem or '(aucune entrée)'}\n\n"
+        "RÈGLES IMPÉRATIVES :\n"
+        "- AGIS VRAIMENT via les outils mis à ta disposition. Ne prétends JAMAIS avoir fait une action sans l'avoir exécutée et vérifiée.\n"
+        "- Pour changer de bureau (« va sur le bureau 2 », « bureau suivant »), appelle TOUJOURS `hypr_workspace(action='switch', workspace='2')`.\n"
+        "- Pour déplacer/fermer/focus une fenêtre, appelle `hypr_windows`. Pour organiser tous les bureaux, `hypr_windows(action='organize')` ou `hypr_orchestrator`.\n"
+        "- Pour connaître l'état réel du PC (volume, batterie, Wi-Fi, Bluetooth, audio, luminosité, RAM), appelle `system_state`.\n"
+        "- Si un outil échoue (`ok: false`), analyse l'erreur et essaie immédiatement une approche alternative fiable (ex. `hypr_workspace`, `hypr_windows`, `run_shell` ou le bon outil ANO-GPT) avant de répondre.\n"
+        "- Simple lancement d'agent sans tâche (« ouvre codex ») → `agent_dispatch` avec `prompt=''` (CHAÎNE VIDE).\n"
+        "- Utilise l'historique pour résoudre les pronoms (« ferme-le », « renvoie-le sur le bureau 2 »).\n"
+        "- Réponds en français, court, clair et 100 % factuel d'après les résultats réels des outils."
     )
 
-    # Construire l'historique multi-tours pour Gemini
     contents = []
     for turn in hist[-12:]:
         role = "user" if turn.get("role") == "user" else "model"
@@ -2284,105 +3153,60 @@ def commander(prompt, default_cwd=""):
     user_turn_txt = f"État en direct :\n{json.dumps(ctx, ensure_ascii=False)}\n\nMessage de l'utilisateur :\n{prompt}"
     contents.append({"role": "user", "parts": [{"text": user_turn_txt}]})
 
-    parsed, err = call_gemini_json(api_key, system, contents)
-    if not parsed:
-        return {"ok": False, "reply": f"Erreur Commandant IA : {err}", "executed": []}
-
-    reply = str(parsed.get("reply") or "Ordres transmis.")
-    actions = parsed.get("actions") if isinstance(parsed.get("actions"), list) else []
+    tool_decls = _select_tool_declarations(prompt, hist)
+    ctx_state = {"agents_by_id": {a["id"]: a for a in snap["agents"]}, "default_cwd": default_cwd}
     executed = []
-    tool_outputs = []
-    agents_by_id = {a["id"]: a for a in snap["agents"]}
-    need_followup = False
-    info_tools = {"system_state", "system_status", "weather_report", "web_search", "memory_search", "email_control", "calendar_control", "github_control"}
+    reply = ""
+    deadline = time.monotonic() + 75.0
 
-    for act in actions[:8]:
-        if not isinstance(act, dict):
-            continue
-        atype = act.get("type")
-        try:
-            if atype == "send":
-                aid = str(act.get("agent_id") or "")
-                msg = str(act.get("message") or "")
-                res = send_to_agent(aid, msg)
-                executed.append({"type": "send", "ok": bool(res.get("ok")), "label": f"Message → {aid} ({res.get('detail', '')})"})
-            elif atype == "dispatch":
-                k = str(act.get("kind") or "claude").lower()
-                c = str(act.get("cwd") or default_cwd or str(HOME))
-                pr = clean_launch_prompt(str(act.get("prompt") or ""))
-                dispatch_agent(k, c, pr)
-                lbl = f"Lancé {k.upper()} · {norm_project(c)}" + (f" ({clip(pr, 36)})" if pr else "")
-                executed.append({"type": "dispatch", "ok": True, "label": lbl})
-            elif atype == "swarm":
-                kinds = act.get("kinds") if isinstance(act.get("kinds"), list) else []
-                c = str(act.get("cwd") or default_cwd or str(HOME))
-                pr = clean_launch_prompt(str(act.get("prompt") or ""))
-                for k in kinds[:6]:
-                    dispatch_agent(str(k).lower(), c, pr)
-                executed.append({"type": "swarm", "ok": bool(kinds), "label": f"Escouade ({', '.join(kinds)}) · {norm_project(c)}"})
-            elif atype == "close_agent":
-                aid = str(act.get("agent_id") or "")
-                ag = agents_by_id.get(aid)
-                if ag:
-                    ok = close_agent_window(ag)
-                    executed.append({"type": "close_agent", "ok": ok, "label": f"Fermé · {ag['kind']} ({ag['project']})"})
-                else:
-                    executed.append({"type": "close_agent", "ok": False, "label": f"Agent introuvable ({aid})"})
-            elif atype in ("stop", "kill"):
-                aid = str(act.get("agent_id") or "")
-                ag = agents_by_id.get(aid)
-                if ag and ag.get("pid"):
-                    stop_agent(str(ag["pid"]), force=(atype == "kill"))
-                    executed.append({"type": atype, "ok": True, "label": f"{'Tué' if atype == 'kill' else 'Stoppé'} · {ag['kind']} ({ag['project']})"})
-                else:
-                    executed.append({"type": atype, "ok": False, "label": f"Agent sans PID arrêtable ({aid})"})
-            elif atype == "focus":
-                aid = str(act.get("agent_id") or "")
-                ag = agents_by_id.get(aid)
-                if ag and ag.get("window"):
-                    addr = ag["window"] if ag["window"].startswith("0x") else f"0x{ag['window']}"
-                    r = subprocess.run(
-                        ["hyprctl", "dispatch", f'hl.dsp.focus({{ window = "address:{addr}" }})'],
-                        capture_output=True, text=True, timeout=2, check=False,
-                    )
-                    if r.returncode != 0 or "invalid" in (r.stdout + r.stderr).lower():
-                        subprocess.run(["hyprctl", "dispatch", "focuswindow", f"address:{addr}"], capture_output=True, timeout=2, check=False)
-                    executed.append({"type": "focus", "ok": True, "label": f"Focus · {ag['kind']} ({ag['project']})"})
-            elif atype in ("approve_perm", "deny_perm"):
-                pid_perm = str(act.get("perm_id") or "")
-                dec = "allow" if atype == "approve_perm" else "deny"
-                answer(pid_perm, dec)
-                executed.append({"type": atype, "ok": True, "label": f"Permission {'autorisée' if dec == 'allow' else 'refusée'}"})
-            elif atype == "memory_save":
-                ok, detail = ano_memory_save(act.get("key") or "note", act.get("value") or "", act.get("category") or "notes")
-                executed.append({"type": "memory_save", "ok": ok, "label": detail})
-            elif atype == "memory_search":
-                res_txt = ano_memory_search(act.get("query") or "")
-                executed.append({"type": "memory_search", "ok": True, "label": f"Mémoire ANO-GPT · {clip(act.get('query') or '', 30)}"})
-                tool_outputs.append({"tool": "memory_search", "output": res_txt})
-                need_followup = True
-            elif atype == "ano":
-                tname = str(act.get("tool") or "")
-                tparams = act.get("params") if isinstance(act.get("params"), dict) else {}
-                ok, detail = call_ano_action(tname, tparams)
-                executed.append({"type": f"ano:{tname}", "ok": ok, "label": f"ANO · {tname} ({clip(detail, 55)})"})
-                tool_outputs.append({"tool": tname, "ok": ok, "output": detail})
-                if tname in info_tools:
-                    need_followup = True
-        except SystemExit:
-            executed.append({"type": str(atype), "ok": False, "label": f"Échec {atype}"})
+    for _round in range(5):
+        if time.monotonic() > deadline:
+            reply = reply or "Délai maximal atteint après les actions exécutées."
+            break
+        model_content, err = call_gemini_tools(api_key, system, contents, tool_decls)
+        if not model_content:
+            if executed:
+                reply = f"Actions exécutées, mais synthèse interrompue ({err})."
+                break
+            return {"ok": False, "reply": f"Erreur Commandant IA : {err}", "executed": executed}
 
-    # Si un outil d'information a renvoyé des données réelles (batterie, météo, recherche, mémoire…), synthétiser la vraie réponse
-    if need_followup and tool_outputs:
-        followup_contents = contents + [
-            {"role": "model", "parts": [{"text": json.dumps(parsed, ensure_ascii=False)}]},
-            {"role": "user", "parts": [{"text": f"Résultats réels des outils exécutés :\n{json.dumps(tool_outputs, ensure_ascii=False)}\nFormule la réponse finale exacte en français dans {{\"reply\": \"...\", \"actions\": []}} sans ré-exécuter d'action."}]},
-        ]
-        parsed2, _ = call_gemini_json(api_key, system, followup_contents)
-        if parsed2 and parsed2.get("reply"):
-            reply = str(parsed2["reply"])
+        parts = model_content.get("parts") or []
+        fcalls = [p["functionCall"] for p in parts if isinstance(p, dict) and "functionCall" in p]
+        text_parts = [str(p.get("text") or "").strip() for p in parts if isinstance(p, dict) and p.get("text") and not p.get("thought")]
+        if text_parts:
+            reply = "\n".join(text_parts)
 
-    # Sauvegarder l'échange dans la mémoire conversationnelle persistante
+        if not fcalls:
+            break
+
+        # Conserver le tour exact du modèle (y compris thoughtSignature pour Gemini 2.5/3.x)
+        contents.append(model_content)
+        resp_parts = []
+        for fc in fcalls[:8]:
+            fname = str(fc.get("name") or "")
+            fargs = fc.get("args") if isinstance(fc.get("args"), dict) else {}
+            try:
+                ok, out, btype, blabel = _execute_commander_call(fname, fargs, ctx_state)
+            except SystemExit:
+                ok, out, btype, blabel = False, f"Échec {fname}", fname, f"Échec {fname}"
+            except Exception as exc:  # noqa: BLE001
+                ok, out, btype, blabel = False, clip(str(exc), 220), fname, f"Erreur {fname}"
+            executed.append({"type": btype, "ok": bool(ok), "label": blabel})
+            resp_parts.append({
+                "functionResponse": {
+                    "name": fname,
+                    "response": {"ok": bool(ok), "result": clip(out, 1200)},
+                }
+            })
+        contents.append({"role": "user", "parts": resp_parts})
+
+    if not reply:
+        if executed:
+            ok_n = sum(1 for e in executed if e.get("ok"))
+            reply = f"{ok_n}/{len(executed)} action(s) exécutée(s)."
+        else:
+            reply = "Aucune action nécessaire."
+
     hist.append({"role": "user", "text": prompt, "executed": [], "ts": int(time.time() * 1000)})
     hist.append({"role": "ai", "text": reply, "executed": executed, "ts": int(time.time() * 1000)})
     save_chat_history(hist)
