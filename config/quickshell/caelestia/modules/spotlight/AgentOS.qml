@@ -52,6 +52,7 @@ Item {
     readonly property color orange: "#ff9f0a"
     readonly property color red: "#ff453a"
     readonly property string agentsBin: "caelestia-agents"
+    readonly property string dictateBin: "caelestia-dictate"
 
     // ── État de l'application ──
     property int viewTab: 0 // 0 = Canvas, 1 = Cockpit & Chat agent, 2 = Commandant IA, 3 = Escouade
@@ -66,6 +67,7 @@ Item {
     property var chatHistory: [] // [{ role: "user"|"ai", text: "", executed: [] }]
     property bool aiThinking: false
     property bool sendingDirect: false
+    property bool dictating: false
     property string toastMsg: ""
 
     readonly property var visibleAgents: {
@@ -117,6 +119,28 @@ Item {
     function refreshProjects(): void {
         if (!projProc.running)
             projProc.running = true;
+    }
+
+    function refreshHistory(): void {
+        if (!histProc.running)
+            histProc.running = true;
+    }
+
+    function clearHistory(): void {
+        chatHistory = [];
+        Quickshell.execDetached([root.agentsBin, "history-clear"]);
+    }
+
+    function toggleDictation(): void {
+        if (dictating) {
+            if (dictProc.running)
+                dictProc.write('{"stop":true}\n');
+            dictating = false;
+            return;
+        }
+        dictating = true;
+        flashToast(I18n.tr("Écoute micro… reclique pour valider"));
+        dictProc.running = true;
     }
 
     function refreshDetail(): void {
@@ -247,12 +271,16 @@ Item {
                 fromR = 19;
             }
             refreshProjects();
+            refreshHistory();
             if (!selectedId && Agents.shown.length > 0)
                 selectedId = Agents.shown[0].id;
             refreshDetail();
             canvasWires.requestPaint();
             dockInput.forceActiveFocus();
             openFocusTimer.restart();
+        } else if (dictating && dictProc.running) {
+            dictProc.write('{"cancel":true}\n');
+            dictating = false;
         }
     }
 
@@ -329,6 +357,51 @@ Item {
                 } catch (e) {}
             }
         }
+    }
+
+    Process {
+        id: histProc
+
+        command: [root.agentsBin, "history"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    const arr = JSON.parse(text);
+                    if (Array.isArray(arr) && arr.length > 0 && !root.aiThinking)
+                        root.chatHistory = arr;
+                } catch (e) {}
+            }
+        }
+    }
+
+    Process {
+        id: dictProc
+
+        command: [root.dictateBin, "--stdout-only"]
+        stdinEnabled: true
+        stdout: SplitParser {
+            onRead: data => {
+                let m;
+                try {
+                    m = JSON.parse(data);
+                } catch (e) {
+                    return;
+                }
+                if (m.stage === "text" && m.text) {
+                    dockInput.text = m.text;
+                } else if (m.stage === "state" && m.state === "erreur") {
+                    root.dictating = false;
+                    root.flashToast("✕ " + (m.detail || I18n.tr("Erreur micro")));
+                } else if (m.stage === "done") {
+                    root.dictating = false;
+                    if (m.text) {
+                        dockInput.text = m.text;
+                        dockInput.forceActiveFocus();
+                    }
+                }
+            }
+        }
+        onExited: root.dictating = false
     }
 
     Process {
@@ -651,20 +724,20 @@ Item {
                     }
                 }
 
-                // Bouton Dictée vocale (Voice-First façon Katana)
+                // Bouton Dictée vocale intégrée dans Agent OS (Voice-First façon Katana)
                 Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                     width: 30
                     height: 30
                     radius: 15
-                    color: Qt.alpha(root.aiTint, voiceArea.containsMouse ? 0.26 : 0.14)
-                    border.width: 0.5
-                    border.color: Qt.alpha(root.aiTint, 0.44)
+                    color: root.dictating ? Qt.alpha(root.red, 0.34) : Qt.alpha(root.aiTint, voiceArea.containsMouse ? 0.26 : 0.14)
+                    border.width: root.dictating ? 1 : 0.5
+                    border.color: root.dictating ? Qt.alpha(root.red, 0.8) : Qt.alpha(root.aiTint, 0.44)
 
                     MaterialIcon {
                         anchors.centerIn: parent
-                        text: "mic"
-                        color: root.aiTint
+                        text: root.dictating ? "stop" : "mic"
+                        color: root.dictating ? root.red : root.aiTint
                         fontStyle: Tokens.font.icon.size(15).build()
                         fill: 1
                     }
@@ -675,10 +748,7 @@ Item {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            root.screenState.agentos = false;
-                            root.screenState.dictation = true;
-                        }
+                        onClicked: root.toggleDictation()
                     }
                 }
 
@@ -2167,14 +2237,14 @@ Item {
                                 anchors.verticalCenter: parent.verticalCenter
 
                                 StyledText {
-                                    text: I18n.tr("KATANA AI · TON COMMANDANT D'AGENTS")
+                                    text: I18n.tr("KATANA AI · MÉMOIRE & ACTIONS ANO-GPT")
                                     color: root.fg
                                     font.pointSize: 9.4
                                     font.weight: Font.Black
                                     font.letterSpacing: 0.65
                                 }
                                 StyledText {
-                                    text: I18n.tr("Donne un ordre naturel en bas : il pilote réellement AGY CLI, Claude, Codex, Copilot et OpenCode")
+                                    text: I18n.tr("Pilote tous tes agents + tout ton PC (apps, réglages, musique, web, fichiers) avec la mémoire d'ANO-GPT")
                                     color: root.fgDim
                                     font.pointSize: 7.8
                                 }
@@ -2188,7 +2258,7 @@ Item {
                             label: I18n.tr("Effacer")
                             icon: "delete_sweep"
                             tint: root.fg
-                            onClicked: root.chatHistory = []
+                            onClicked: root.clearHistory()
                         }
                     }
 

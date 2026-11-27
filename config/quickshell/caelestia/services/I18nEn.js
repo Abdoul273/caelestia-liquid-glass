@@ -1365,7 +1365,11 @@ var strings = {
     "Écrire en direct à %1 (%2)…": "Write live to %1 (%2)…",
     "Lancer %1 sur %2 avec une mission…": "Launch %1 on %2 with a mission…",
     "…": "…",
-    "Ordonner": "Command"
+    "Ordonner": "Command",
+    "Écoute micro… reclique pour valider": "Listening… click again to confirm",
+    "Erreur micro": "Microphone error",
+    "KATANA AI · MÉMOIRE & ACTIONS ANO-GPT": "KATANA AI · ANO-GPT MEMORY & ACTIONS",
+    "Pilote tous tes agents + tout ton PC (apps, réglages, musique, web, fichiers) avec la mémoire d'ANO-GPT": "Controls all your agents + your whole PC (apps, settings, music, web, files) with ANO-GPT memory"
 };
 
 var plurals = {

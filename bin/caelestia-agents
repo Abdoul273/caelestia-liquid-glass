@@ -37,6 +37,8 @@ from pathlib import Path
 
 HOME = Path.home()
 PERMS = HOME / ".local/state/caelestia/agent-perms"
+CHAT_HISTORY = HOME / ".local/state/caelestia/agentos-chat.json"
+ANO_DIR = HOME / "OUTILS/ANO-GPT"
 WAIT = 110  # secondes d'attente d'une réponse de l'île (timeout du hook : 120)
 TAIL = 96 * 1024
 RECENT_WINDOW = 1800  # 30 min pour les sessions DB récemment terminées
@@ -1690,9 +1692,22 @@ def open_terminal(cwd):
     subprocess.Popen(cmd, cwd=target, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+def clean_launch_prompt(prompt):
+    """Évite d'envoyer un faux prompt du genre 'Démarrer l'agent Codex.' lors d'un simple lancement."""
+    p = (prompt or "").strip()
+    if not p:
+        return ""
+    low = p.lower().strip(" .!?:;«»\"'")
+    words = low.split()
+    meta_starts = ("démarr", "demarr", "lanc", "ouvr", "start", "open", "run", "lancement", "démarrage", "initialis")
+    if len(words) <= 6 and any(low.startswith(m) for m in meta_starts):
+        return ""
+    return p
+
+
 def dispatch_agent(kind, cwd="", prompt=""):
     target = cwd if cwd and os.path.isdir(cwd) else str(HOME)
-    prompt = (prompt or "").strip()
+    prompt = clean_launch_prompt(prompt)
     if kind == "antigravity":
         bin_path = shutil.which("antigravity") or "/opt/Antigravity/antigravity"
         args = [bin_path, target] if cwd and os.path.isdir(cwd) else [bin_path]
@@ -1919,13 +1934,259 @@ def load_gemini_key():
     return ""
 
 
-def call_gemini_json(api_key, system_prompt, user_content):
+def close_agent_window(agent):
+    """Ferme proprement un agent ET sa fenêtre terminal (compatible Hyprland Lua + standard)."""
+    win = agent.get("window") or ""
+    pid = int(agent.get("pid") or 0)
+    closed = False
+    if win:
+        addr = win if win.startswith("0x") else f"0x{win}"
+        r = subprocess.run(
+            ["hyprctl", "dispatch", f'hl.dsp.window.kill({{ window = "address:{addr}" }})'],
+            capture_output=True, text=True, timeout=2, check=False,
+        )
+        if r.returncode == 0 and "invalid" not in (r.stdout + r.stderr).lower():
+            closed = True
+        else:
+            r2 = subprocess.run(
+                ["hyprctl", "dispatch", "closewindow", f"address:{addr}"],
+                capture_output=True, timeout=2, check=False,
+            )
+            closed = r2.returncode == 0
+    if pid > 1 and agent.get("kind") != "antigravity":
+        try:
+            os.kill(pid, signal.SIGTERM)
+            closed = True
+        except OSError:
+            pass
+    return closed
+
+
+# ───────────────────────── Mémoire & Pont ANO-GPT ─────────────────────────
+
+ANO_TOOLS = {
+    "open_app": ("actions.open_app", "open_app"),
+    "close_app": ("actions.close_app", "close_app"),
+    "shell_exec": ("actions.shell_exec", "shell_exec"),
+    "computer_settings": ("actions.computer_settings", "computer_settings"),
+    "computer_control": ("actions.computer_control", "computer_control"),
+    "browser_control": ("actions.browser_control", "browser_control"),
+    "file_controller": ("actions.file_controller", "file_controller"),
+    "hypr_orchestrator": ("actions.hypr_orchestrator", "hypr_orchestrator_control"),
+    "devsecops": ("actions.devsecops", "devsecops_control"),
+    "web_search": ("actions.web_search", "web_search"),
+    "weather_report": ("actions.weather_report", "weather_action"),
+    "system_status": ("actions.system_monitor", "get_system_status"),
+    "system_state": ("actions.system_probe", "system_state"),
+    "reminder": ("actions.reminder", "reminder"),
+    "youtube_video": ("actions.youtube_video", "youtube_video"),
+    "music_control": ("actions.music", "music_control"),
+    "download_music": ("actions.download_music", "download_music"),
+    "capture_control": ("actions.capture", "capture_control"),
+    "find_nearby": ("actions.find_nearby", "find_nearby"),
+    "email_control": ("actions.email", "email_control"),
+    "calendar_control": ("actions.calendar", "calendar_control"),
+    "contacts_control": ("actions.contacts", "contacts_control"),
+    "github_control": ("actions.github", "github_control"),
+    "cloud_integrations_control": ("actions.cloud_integrations", "cloud_integrations_control"),
+    "send_message": ("actions.send_message", "send_message"),
+    "prayer_control": ("actions.prayer", "prayer_control"),
+}
+
+
+def load_ano_long_term_summary():
+    """Lit la mémoire long terme partagée d'ANO-GPT (~1 ms, sans importer de gros modules)."""
+    lt = ANO_DIR / "memory/long_term.json"
+    if not lt.is_file():
+        return ""
+    try:
+        data = json.loads(lt.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    lines = []
+    for cat in ("identity", "preferences", "projects", "relationships", "wishes", "notes"):
+        sec = data.get(cat)
+        if not isinstance(sec, dict) or not sec:
+            continue
+        items = []
+        for k, v in list(sec.items())[:12]:
+            val = v.get("value") if isinstance(v, dict) else v
+            if val:
+                items.append(f"{k}: {clip(val, 140)}")
+        if items:
+            lines.append(f"[{cat}] " + " ; ".join(items))
+    return "\n".join(lines)[:2400]
+
+
+def ano_memory_save(key, value, category="notes"):
+    """Écrit atomiquement dans la mémoire long terme d'ANO-GPT (memory/long_term.json)."""
+    lt = ANO_DIR / "memory/long_term.json"
+    if not lt.parent.is_dir():
+        return False, "Dossier mémoire ANO-GPT introuvable"
+    valid_cats = {"identity", "preferences", "projects", "relationships", "wishes", "notes"}
+    cat = category if category in valid_cats else "notes"
+    try:
+        data = json.loads(lt.read_text(encoding="utf-8")) if lt.is_file() else {}
+    except (OSError, ValueError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    data.setdefault(cat, {})
+    if not isinstance(data[cat], dict):
+        data[cat] = {}
+    data[cat][str(key).strip()[:80]] = {
+        "value": str(value).strip()[:380],
+        "updated": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+    }
+    try:
+        if lt.is_file():
+            shutil.copy2(lt, lt.with_suffix(".json.bak"))
+        tmp = lt.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        tmp.replace(lt)
+        return True, f"Mémorisé dans ANO-GPT [{cat}] {key}"
+    except OSError as exc:
+        return False, str(exc)[:120]
+
+
+def ano_memory_search(query):
+    """Recherche dans la mémoire long terme et memory.db (FTS5) d'ANO-GPT."""
+    q = (query or "").strip()
+    if not q:
+        return load_ano_long_term_summary() or "Mémoire vide."
+    hits = []
+    lt = ANO_DIR / "memory/long_term.json"
+    if lt.is_file():
+        try:
+            data = json.loads(lt.read_text(encoding="utf-8"))
+            ql = q.lower()
+            for cat, sec in data.items():
+                if not isinstance(sec, dict):
+                    continue
+                for k, v in sec.items():
+                    val = str(v.get("value") if isinstance(v, dict) else v)
+                    if ql in k.lower() or ql in val.lower():
+                        hits.append(f"[{cat}] {k}: {clip(val, 160)}")
+        except (OSError, ValueError):
+            pass
+    mdb = ANO_DIR / "memory/memory.db"
+    if mdb.is_file():
+        try:
+            con = sqlite3.connect(f"file:{mdb}?mode=ro", uri=True, timeout=0.5)
+            # Lecture robuste quelle que soit la colonne texte de memories
+            cols = [c[0] for c in con.execute("SELECT * FROM memories LIMIT 0").description]
+            text_col = next((c for c in ("content", "text", "summary", "value", "fact") if c in cols), None)
+            if text_col:
+                for (txt,) in con.execute(
+                    f"SELECT {text_col} FROM memories WHERE {text_col} LIKE ? ORDER BY rowid DESC LIMIT 6",
+                    (f"%{q}%",),
+                ):
+                    if txt:
+                        hits.append(clip(txt, 180))
+            con.close()
+        except sqlite3.Error:
+            pass
+    return "\n".join(hits[:10]) if hits else f"Aucun souvenir trouvé pour « {q} »."
+
+
+def call_ano_action(tool_name, params):
+    """Exécute n'importe quelle action d'ANO-GPT (~/OUTILS/ANO-GPT/actions/*) en chargement paresseux."""
+    import contextlib
+    import importlib
+    import inspect
+    import io
+    import warnings
+
+    if tool_name not in ANO_TOOLS:
+        return False, f"Outil ANO-GPT inconnu : {tool_name}"
+    if not ANO_DIR.is_dir():
+        return False, "Dépôt ANO-GPT introuvable"
+
+    mod_name, fn_name = ANO_TOOLS[tool_name]
+    prev_cwd = os.getcwd()
+    if str(ANO_DIR) not in sys.path:
+        sys.path.insert(0, str(ANO_DIR))
+
+    class _NoopUI:
+        current_file = None
+
+        def __call__(self, *a, **k):
+            return None
+
+        def __bool__(self):
+            return False
+
+        def __getattr__(self, _):
+            return _NoopUI()
+
+    buf = io.StringIO()
+    try:
+        os.chdir(ANO_DIR)
+        warnings.filterwarnings("ignore")
+        with contextlib.redirect_stdout(buf):
+            mod = importlib.import_module(mod_name)
+            fn = getattr(mod, fn_name)
+            clean_params = {k: v for k, v in (params or {}).items() if not str(k).startswith("_")}
+            if tool_name == "system_status":
+                res = fn()
+            elif tool_name == "system_state":
+                res = fn(str(clean_params.get("topic") or "all"))
+            else:
+                ui = _NoopUI()
+                offer = {
+                    "parameters": clean_params,
+                    "player": ui,
+                    "ui": ui,
+                    "response": None,
+                    "session_memory": {},
+                    "speak": lambda *_: None,
+                }
+                sig = inspect.signature(fn)
+                takes_all = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
+                kwargs = {k: v for k, v in offer.items() if takes_all or k in sig.parameters}
+                if "parameters" not in sig.parameters and not takes_all:
+                    kwargs = {}
+                res = fn(**kwargs)
+        txt = str(res) if res not in (None, "") else (buf.getvalue().strip() or "Action exécutée.")
+        return True, clip(txt, 500)
+    except Exception as exc:  # noqa: BLE001 — ne jamais planter Agent OS
+        return False, clip(f"Erreur {tool_name}: {exc}", 240)
+    finally:
+        try:
+            os.chdir(prev_cwd)
+        except OSError:
+            pass
+
+
+def load_chat_history():
+    try:
+        arr = json.loads(CHAT_HISTORY.read_text(encoding="utf-8"))
+        return arr if isinstance(arr, list) else []
+    except (OSError, ValueError):
+        return []
+
+
+def save_chat_history(hist):
+    try:
+        CHAT_HISTORY.parent.mkdir(parents=True, exist_ok=True)
+        tmp = CHAT_HISTORY.with_suffix(".tmp")
+        tmp.write_text(json.dumps(hist[-24:], ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(CHAT_HISTORY)
+    except OSError:
+        pass
+
+
+def clear_chat_history():
+    CHAT_HISTORY.unlink(missing_ok=True)
+
+
+def call_gemini_json(api_key, system_prompt, contents):
     models = ("gemini-2.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-flash-latest")
     payload = {
         "systemInstruction": {"parts": [{"text": system_prompt}]},
-        "contents": [{"role": "user", "parts": [{"text": user_content}]}],
+        "contents": contents,
         "generationConfig": {
-            "temperature": 0.2,
+            "temperature": 0.15,
             "responseMimeType": "application/json",
         },
     }
@@ -1935,7 +2196,7 @@ def call_gemini_json(api_key, system_prompt, user_content):
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
         req = urllib.request.Request(url, data=raw_body, headers={"Content-Type": "application/json"})
         try:
-            with urllib.request.urlopen(req, timeout=18) as resp:
+            with urllib.request.urlopen(req, timeout=20) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
             txt = data["candidates"][0]["content"]["parts"][0]["text"]
             return json.loads(txt), None
@@ -1945,7 +2206,7 @@ def call_gemini_json(api_key, system_prompt, user_content):
 
 
 def commander(prompt, default_cwd=""):
-    """Commandant IA (Katana AI) : comprend une demande en français et pilote réellement tous les agents."""
+    """Commandant IA (Katana AI) : mémoire partagée ANO-GPT, mémoire de conversation, pilotage agents + actions PC ANO-GPT."""
     prompt = (prompt or "").strip()
     if not prompt:
         return {"ok": False, "reply": "Écris une instruction pour le Commandant IA.", "executed": []}
@@ -1960,13 +2221,16 @@ def commander(prompt, default_cwd=""):
 
     snap = snapshot({})
     projs = list_projects()
+    hist = load_chat_history()
+    ano_mem = load_ano_long_term_summary()
+
     ctx = {
         "default_cwd": default_cwd,
         "agents": [
             {
                 "id": a["id"], "pid": a["pid"], "kind": a["kind"], "status": a["status"],
                 "project": a["project"], "cwd": a["cwd"], "title": a["title"],
-                "tool": a["tool"], "model": a["model"], "files": a["files"],
+                "tool": a["tool"], "model": a["model"], "files": a["files"], "window": a["window"],
             }
             for a in snap["agents"]
         ],
@@ -1975,35 +2239,62 @@ def commander(prompt, default_cwd=""):
     }
 
     system = (
-        "Tu es Katana AI, le Commandant IA intégré d'Agent OS sur Linux/Hyprland. "
-        "Tu pilotes directement les agents IA de l'utilisateur (agy = Antigravity CLI, antigravity = Antigravity App, claude = Claude Code, codex = OpenAI Codex, copilot = GitHub Copilot CLI, opencode = OpenCode, gemini = Gemini CLI, aider = Aider).\n"
-        "Réponds UNIQUEMENT en JSON valide de forme :\n"
-        '{"reply": "réponse courte et claire en français", "actions": [...]}\n'
-        "Actions autorisées dans le tableau actions :\n"
-        '- {"type": "send", "agent_id": "<id exact dans agents>", "message": "<consigne précise à envoyer dans la session de l\'agent>"}\n'
-        '- {"type": "dispatch", "kind": "agy|claude|codex|copilot|opencode|antigravity|gemini|aider", "cwd": "<chemin projet existant>", "prompt": "<mission précise>"}\n'
-        '- {"type": "swarm", "kinds": ["claude","codex",...], "cwd": "<chemin projet>", "prompt": "<mission commune>"}\n'
-        '- {"type": "stop", "agent_id": "<id exact>"}\n'
-        '- {"type": "kill", "agent_id": "<id exact>"}\n'
-        '- {"type": "focus", "agent_id": "<id exact>"}\n'
-        '- {"type": "approve_perm", "perm_id": "<id>"}\n'
-        '- {"type": "deny_perm", "perm_id": "<id>"}\n'
-        "Règles :\n"
-        "- Si l'utilisateur demande de parler/dire quelque chose à un agent déjà dans `agents`, utilise `send` avec son `agent_id` exact.\n"
-        "- Si l'agent demandé (ex. agy, copilot, opencode, claude, codex) n'est PAS dans `agents`, utilise `dispatch` avec le `cwd` du projet mentionné (ou `default_cwd`) et un prompt clair.\n"
-        "- Si l'utilisateur pose une question de suivi/bilan (ex. 'où en sont mes agents ?'), laisse `actions` vide et résume précisément leur état réel.\n"
+        "Tu es Katana AI, le Commandant IA d'Agent OS connecté à la MÊME mémoire et aux MÊMES actions système qu'ANO-GPT sur Arch Linux / Hyprland.\n"
+        "Tu pilotes DEUX domaines :\n"
+        "1) Les agents IA (agy = Antigravity CLI, antigravity = Antigravity App, claude = Claude Code, codex = OpenAI Codex, copilot = GitHub Copilot CLI, opencode = OpenCode, gemini = Gemini CLI, aider = Aider).\n"
+        "2) Tout le PC de l'utilisateur via les actions ANO-GPT.\n\n"
+        f"MÉMOIRE LONG TERME ANO-GPT :\n{ano_mem or '(aucune entrée)'}\n\n"
+        "Réponds UNIQUEMENT en JSON valide :\n"
+        '{"reply": "réponse courte, naturelle et factuelle en français", "actions": [...]}\n\n'
+        "Actions autorisées :\n"
+        '- {"type": "dispatch", "kind": "agy|claude|codex|copilot|opencode|antigravity|gemini|aider", "cwd": "<chemin>", "prompt": ""}\n'
+        '  RÈGLE ABSOLUE : si l\'utilisateur dit simplement « lance codex » / « ouvre claude » / « démarre copilot » SANS tâche précise, mets OBLIGATOIREMENT "prompt": "" (CHAÎNE VIDE). N\'invente JAMAIS un prompt comme « Démarrer l\'agent Codex » !\n'
+        '- {"type": "send", "agent_id": "<id exact>", "message": "<consigne exacte à envoyer dans la session de l\'agent>"}\n'
+        '- {"type": "close_agent", "agent_id": "<id exact>"}  (ferme l\'agent ET son terminal quand l\'utilisateur dit « ferme-le », « ferme codex », « quitte agy »)\n'
+        '- {"type": "stop", "agent_id": "<id exact>"}  (interrompt la tâche en cours avec Ctrl+C sans fermer le terminal)\n'
+        '- {"type": "kill", "agent_id": "<id exact>"}  (tue le processus agent)\n'
+        '- {"type": "focus", "agent_id": "<id exact>"}  (met la fenêtre de l\'agent au premier plan)\n'
+        '- {"type": "swarm", "kinds": ["claude","codex"], "cwd": "<chemin>", "prompt": "<mission>"}\n'
+        '- {"type": "approve_perm", "perm_id": "<id>"} / {"type": "deny_perm", "perm_id": "<id>"}\n'
+        '- {"type": "memory_save", "category": "identity|preferences|projects|relationships|wishes|notes", "key": "<clé>", "value": "<fait>"}\n'
+        '- {"type": "memory_search", "query": "<mots-clés>"}\n'
+        '- {"type": "ano", "tool": "<outil ANO-GPT>", "params": {...}}\n'
+        "  Outils ANO-GPT disponibles : open_app (app_name), close_app (app_name), computer_settings (action, value — volume/luminosité/wifi/bluetooth/nuit/batterie/capture), "
+        "system_state (topic: all|bluetooth|wifi|audio|brightness|power|media|hyprland|resources), system_status (), "
+        "hypr_orchestrator (action, target), music_control (action, query), youtube_video (query), browser_control (action, url, query), "
+        "web_search (query), weather_report (city), file_controller (action, path), reminder (action, text, time), "
+        "email_control (action), calendar_control (action), github_control (action), shell_exec (command), capture_control (action), prayer_control (action).\n\n"
+        "RÈGLES DE MÉMOIRE & PRÉCISION :\n"
+        "- Utilise l'historique de conversation pour résoudre les pronoms (« ferme-le », « envoie-lui… », « codex » juste après « ferme le » = fermer Codex !).\n"
+        "- Avant de répondre sur l'état réel du PC (volume, batterie, Wi-Fi, Bluetooth, RAM, musique), appelle `ano` avec `system_state`.\n"
         "- Ne prétends jamais avoir fait une action si elle n'est pas dans `actions`."
     )
-    user_msg = f"Contexte système en direct :\n{json.dumps(ctx, ensure_ascii=False)}\n\nOrdre de l'utilisateur :\n{prompt}"
 
-    parsed, err = call_gemini_json(api_key, system, user_msg)
+    # Construire l'historique multi-tours pour Gemini
+    contents = []
+    for turn in hist[-12:]:
+        role = "user" if turn.get("role") == "user" else "model"
+        txt = turn.get("text") or ""
+        if role == "model" and turn.get("executed"):
+            acts_txt = "; ".join(f"{'OK' if e.get('ok') else 'ERR'}: {e.get('label')}" for e in turn["executed"])
+            txt = f"{txt}\n[Actions exécutées : {acts_txt}]"
+        if txt:
+            contents.append({"role": role, "parts": [{"text": txt}]})
+
+    user_turn_txt = f"État en direct :\n{json.dumps(ctx, ensure_ascii=False)}\n\nMessage de l'utilisateur :\n{prompt}"
+    contents.append({"role": "user", "parts": [{"text": user_turn_txt}]})
+
+    parsed, err = call_gemini_json(api_key, system, contents)
     if not parsed:
         return {"ok": False, "reply": f"Erreur Commandant IA : {err}", "executed": []}
 
     reply = str(parsed.get("reply") or "Ordres transmis.")
     actions = parsed.get("actions") if isinstance(parsed.get("actions"), list) else []
     executed = []
+    tool_outputs = []
     agents_by_id = {a["id"]: a for a in snap["agents"]}
+    need_followup = False
+    info_tools = {"system_state", "system_status", "weather_report", "web_search", "memory_search", "email_control", "calendar_control", "github_control"}
 
     for act in actions[:8]:
         if not isinstance(act, dict):
@@ -2018,16 +2309,25 @@ def commander(prompt, default_cwd=""):
             elif atype == "dispatch":
                 k = str(act.get("kind") or "claude").lower()
                 c = str(act.get("cwd") or default_cwd or str(HOME))
-                pr = str(act.get("prompt") or "")
+                pr = clean_launch_prompt(str(act.get("prompt") or ""))
                 dispatch_agent(k, c, pr)
-                executed.append({"type": "dispatch", "ok": True, "label": f"Lancé {k.upper()} · {norm_project(c)}"})
+                lbl = f"Lancé {k.upper()} · {norm_project(c)}" + (f" ({clip(pr, 36)})" if pr else "")
+                executed.append({"type": "dispatch", "ok": True, "label": lbl})
             elif atype == "swarm":
                 kinds = act.get("kinds") if isinstance(act.get("kinds"), list) else []
                 c = str(act.get("cwd") or default_cwd or str(HOME))
-                pr = str(act.get("prompt") or "")
+                pr = clean_launch_prompt(str(act.get("prompt") or ""))
                 for k in kinds[:6]:
                     dispatch_agent(str(k).lower(), c, pr)
                 executed.append({"type": "swarm", "ok": bool(kinds), "label": f"Escouade ({', '.join(kinds)}) · {norm_project(c)}"})
+            elif atype == "close_agent":
+                aid = str(act.get("agent_id") or "")
+                ag = agents_by_id.get(aid)
+                if ag:
+                    ok = close_agent_window(ag)
+                    executed.append({"type": "close_agent", "ok": ok, "label": f"Fermé · {ag['kind']} ({ag['project']})"})
+                else:
+                    executed.append({"type": "close_agent", "ok": False, "label": f"Agent introuvable ({aid})"})
             elif atype in ("stop", "kill"):
                 aid = str(act.get("agent_id") or "")
                 ag = agents_by_id.get(aid)
@@ -2040,15 +2340,52 @@ def commander(prompt, default_cwd=""):
                 aid = str(act.get("agent_id") or "")
                 ag = agents_by_id.get(aid)
                 if ag and ag.get("window"):
-                    subprocess.run(["hyprctl", "dispatch", "focuswindow", f"address:0x{ag['window']}"], capture_output=True, timeout=2, check=False)
+                    addr = ag["window"] if ag["window"].startswith("0x") else f"0x{ag['window']}"
+                    r = subprocess.run(
+                        ["hyprctl", "dispatch", f'hl.dsp.focus({{ window = "address:{addr}" }})'],
+                        capture_output=True, text=True, timeout=2, check=False,
+                    )
+                    if r.returncode != 0 or "invalid" in (r.stdout + r.stderr).lower():
+                        subprocess.run(["hyprctl", "dispatch", "focuswindow", f"address:{addr}"], capture_output=True, timeout=2, check=False)
                     executed.append({"type": "focus", "ok": True, "label": f"Focus · {ag['kind']} ({ag['project']})"})
             elif atype in ("approve_perm", "deny_perm"):
                 pid_perm = str(act.get("perm_id") or "")
                 dec = "allow" if atype == "approve_perm" else "deny"
                 answer(pid_perm, dec)
                 executed.append({"type": atype, "ok": True, "label": f"Permission {'autorisée' if dec == 'allow' else 'refusée'}"})
+            elif atype == "memory_save":
+                ok, detail = ano_memory_save(act.get("key") or "note", act.get("value") or "", act.get("category") or "notes")
+                executed.append({"type": "memory_save", "ok": ok, "label": detail})
+            elif atype == "memory_search":
+                res_txt = ano_memory_search(act.get("query") or "")
+                executed.append({"type": "memory_search", "ok": True, "label": f"Mémoire ANO-GPT · {clip(act.get('query') or '', 30)}"})
+                tool_outputs.append({"tool": "memory_search", "output": res_txt})
+                need_followup = True
+            elif atype == "ano":
+                tname = str(act.get("tool") or "")
+                tparams = act.get("params") if isinstance(act.get("params"), dict) else {}
+                ok, detail = call_ano_action(tname, tparams)
+                executed.append({"type": f"ano:{tname}", "ok": ok, "label": f"ANO · {tname} ({clip(detail, 55)})"})
+                tool_outputs.append({"tool": tname, "ok": ok, "output": detail})
+                if tname in info_tools:
+                    need_followup = True
         except SystemExit:
             executed.append({"type": str(atype), "ok": False, "label": f"Échec {atype}"})
+
+    # Si un outil d'information a renvoyé des données réelles (batterie, météo, recherche, mémoire…), synthétiser la vraie réponse
+    if need_followup and tool_outputs:
+        followup_contents = contents + [
+            {"role": "model", "parts": [{"text": json.dumps(parsed, ensure_ascii=False)}]},
+            {"role": "user", "parts": [{"text": f"Résultats réels des outils exécutés :\n{json.dumps(tool_outputs, ensure_ascii=False)}\nFormule la réponse finale exacte en français dans {{\"reply\": \"...\", \"actions\": []}} sans ré-exécuter d'action."}]},
+        ]
+        parsed2, _ = call_gemini_json(api_key, system, followup_contents)
+        if parsed2 and parsed2.get("reply"):
+            reply = str(parsed2["reply"])
+
+    # Sauvegarder l'échange dans la mémoire conversationnelle persistante
+    hist.append({"role": "user", "text": prompt, "executed": [], "ts": int(time.time() * 1000)})
+    hist.append({"role": "ai", "text": reply, "executed": executed, "ts": int(time.time() * 1000)})
+    save_chat_history(hist)
 
     return {"ok": True, "reply": reply, "executed": executed}
 
@@ -2416,6 +2753,11 @@ if __name__ == "__main__":
             cwd_arg = args[1]
             args = args[2:]
         print(json.dumps(commander(" ".join(args), default_cwd=cwd_arg), ensure_ascii=False))
+    elif cmd == "history":
+        print(json.dumps(load_chat_history(), ensure_ascii=False))
+    elif cmd == "history-clear":
+        clear_chat_history()
+        print("[]")
     elif cmd == "terminal" and len(sys.argv) >= 2:
         open_terminal(sys.argv[2] if len(sys.argv) > 2 else "")
     elif cmd == "projects":
