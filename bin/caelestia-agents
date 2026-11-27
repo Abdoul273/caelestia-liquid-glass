@@ -28,7 +28,9 @@ import sqlite3
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.parse
+import urllib.request
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -1710,16 +1712,16 @@ def dispatch_agent(kind, cwd="", prompt=""):
         sys.exit(2)
     if prompt:
         q = shlex.quote(prompt)
-        if kind == "copilot":
+        if kind in ("agy", "copilot"):
             run_str = f"{exe} -i {q}"
         elif kind == "opencode":
-            run_str = f"{exe} --prompt {q}"
+            run_str = f"{exe} --prompt {q} {shlex.quote(target)}"
         elif kind == "aider":
             run_str = f"{exe} --message {q}"
         else:
             run_str = f"{exe} {q}"
     else:
-        run_str = exe
+        run_str = f"{exe} {shlex.quote(target)}" if kind == "opencode" else exe
     term = shutil.which("kitty") or shutil.which("foot") or shutil.which("alacritty")
     if not term:
         sys.exit(1)
@@ -1730,6 +1732,325 @@ def dispatch_agent(kind, cwd="", prompt=""):
     else:
         cmd = [term, "-e", shell, "-ic", run_str]
     subprocess.Popen(cmd, cwd=target, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def find_kitty_ancestor(pid, procs):
+    cur = pid
+    for _ in range(24):
+        p = procs.get(cur)
+        if not p:
+            break
+        if p["comm"].lower() == "kitty":
+            return cur
+        if p["ppid"] <= 1:
+            break
+        cur = p["ppid"]
+    return 0
+
+
+def find_kitty_window_id(kitty_pid, agent_pid, procs):
+    """Trouve l'id de fenêtre Kitty qui héberge agent_pid (ou son shell parent)."""
+    sock = f"unix:@kitty-{kitty_pid}"
+    try:
+        res = subprocess.run(
+            ["kitten", "@", "--to", sock, "ls"],
+            capture_output=True, text=True, timeout=2, check=False,
+        )
+        if res.returncode != 0:
+            return sock, None
+        data = json.loads(res.stdout or "[]")
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return sock, None
+
+    # Construire l'ensemble des ancêtres de agent_pid
+    ancestors = set()
+    cur = agent_pid
+    for _ in range(16):
+        ancestors.add(cur)
+        p = procs.get(cur)
+        if not p or p["ppid"] <= 1:
+            break
+        cur = p["ppid"]
+
+    fallback_id = None
+    for os_w in data:
+        for tab in os_w.get("tabs") or []:
+            for win in tab.get("windows") or []:
+                wid = win.get("id")
+                if fallback_id is None:
+                    fallback_id = wid
+                if win.get("pid") in ancestors:
+                    return sock, wid
+                for fg in win.get("foreground_processes") or []:
+                    if fg.get("pid") in ancestors:
+                        return sock, wid
+    return sock, fallback_id
+
+
+def send_via_kitty(kitty_pid, agent_pid, procs, message):
+    sock, wid = find_kitty_window_id(kitty_pid, agent_pid, procs)
+    if wid is None:
+        return False, "Fenêtre Kitty introuvable"
+    try:
+        r1 = subprocess.run(
+            ["kitten", "@", "--to", sock, "send-text", "--match", f"id:{wid}", "--", message],
+            capture_output=True, text=True, timeout=2, check=False,
+        )
+        if r1.returncode != 0:
+            return False, (r1.stderr or "Erreur kitty send-text").strip()[:120]
+        time.sleep(0.08)
+        subprocess.run(
+            ["kitten", "@", "--to", sock, "send-text", "--match", f"id:{wid}", "\r"],
+            capture_output=True, timeout=2, check=False,
+        )
+        return True, f"Envoyé en direct au terminal (Kitty #{wid})"
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return False, str(exc)
+
+
+def resolve_full_session_id(agent_id, kind):
+    prefix = agent_id.split(":", 1)[-1]
+    if kind in ("agy", "antigravity"):
+        brain = HOME / ".gemini/antigravity/brain"
+        if brain.is_dir():
+            for d in brain.iterdir():
+                if d.is_dir() and d.name.startswith(prefix):
+                    return d.name
+    elif kind == "opencode":
+        ocdb = HOME / ".local/share/opencode/opencode.db"
+        if ocdb.is_file():
+            try:
+                con = sqlite3.connect(f"file:{ocdb}?mode=ro", uri=True, timeout=0.3)
+                row = con.execute("SELECT id FROM session_v2 WHERE id LIKE ? ORDER BY time_updated DESC LIMIT 1", (f"{prefix}%",)).fetchone()
+                con.close()
+                if row:
+                    return row[0]
+            except sqlite3.Error:
+                pass
+    elif kind == "copilot":
+        sroot = HOME / ".copilot/session-state"
+        if sroot.is_dir():
+            for d in sroot.iterdir():
+                if d.is_dir() and d.name.startswith(prefix):
+                    return d.name
+    return ""
+
+
+def send_to_agent(agent_id, message):
+    """Envoie un ordre/message directement à un agent en cours (via Kitty remote ou reprise de session)."""
+    msg = (message or "").strip()
+    if not msg:
+        return {"ok": False, "method": "none", "detail": "Message vide"}
+
+    procs, _ = scan()
+    snap = snapshot({})
+    target = next((a for a in snap["agents"] if a["id"] == agent_id), None)
+    if not target:
+        return {"ok": False, "method": "none", "detail": f"Agent introuvable ({agent_id})"}
+
+    kind = target["kind"]
+    pid = int(target.get("pid") or 0)
+    cwd = target.get("cwd") or str(HOME)
+
+    # 1. Agent CLI vivant dans Kitty : injection directe sans voler le focus
+    if pid > 1 and kind != "antigravity":
+        kpid = find_kitty_ancestor(pid, procs)
+        if kpid:
+            ok, detail = send_via_kitty(kpid, pid, procs, msg)
+            if ok:
+                return {"ok": True, "method": "kitty", "detail": detail}
+
+    # 2. Reprise interactive de session pour AGY / OpenCode / Copilot / Claude / Codex
+    if kind in ("agy", "opencode", "copilot", "claude", "codex"):
+        full_sid = resolve_full_session_id(agent_id, kind)
+        term = shutil.which("kitty") or shutil.which("foot") or shutil.which("alacritty")
+        shell = shutil.which("fish") or os.environ.get("SHELL", "/bin/sh")
+        q = shlex.quote(msg)
+        if kind == "agy":
+            run_str = f"agy --conversation {shlex.quote(full_sid)} -i {q}" if full_sid else f"agy -i {q}"
+        elif kind == "opencode":
+            run_str = f"opencode --session {shlex.quote(full_sid)} --prompt {q} {shlex.quote(cwd)}" if full_sid else f"opencode --prompt {q} {shlex.quote(cwd)}"
+        elif kind == "copilot":
+            run_str = f"copilot --resume={shlex.quote(full_sid)} -i {q}" if full_sid else f"copilot -i {q}"
+        elif kind == "codex":
+            run_str = f"codex resume --last {q}"
+        else:
+            run_str = f"claude -c {q}"
+        if term:
+            proj = norm_project(cwd)
+            cmd = [term, "--directory", cwd, "--title", f"{kind.capitalize()} · {proj}", shell, "-ic", run_str] if os.path.basename(term) == "kitty" else [term, "-e", shell, "-ic", run_str]
+            subprocess.Popen(cmd, cwd=cwd, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return {"ok": True, "method": "resume", "detail": f"Session {kind} reprise avec ton message"}
+
+    # 3. Antigravity App (fenêtre GUI Electron) : ouvre AGY CLI sur la même conversation ou copie + focus
+    if kind == "antigravity":
+        full_sid = resolve_full_session_id(agent_id, kind)
+        if full_sid and shutil.which("agy") and shutil.which("kitty"):
+            shell = shutil.which("fish") or os.environ.get("SHELL", "/bin/sh")
+            run_str = f"agy --conversation {shlex.quote(full_sid)} -i {shlex.quote(msg)}"
+            subprocess.Popen(
+                [shutil.which("kitty"), "--directory", cwd, "--title", f"AGY · {norm_project(cwd)}", shell, "-ic", run_str],
+                cwd=cwd, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            return {"ok": True, "method": "agy-bridge", "detail": "Relié à la conversation Antigravity via AGY CLI"}
+        if shutil.which("wl-copy"):
+            subprocess.run(["wl-copy"], input=msg, text=True, timeout=2, check=False)
+            return {"ok": True, "method": "clipboard", "detail": "Copié dans le presse-papiers pour Antigravity App"}
+
+    return {"ok": False, "method": "none", "detail": "Impossible d'envoyer à cet agent"}
+
+
+def load_gemini_key():
+    key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if key:
+        return key
+    for p, field in (
+        (HOME / ".config/caelestia-write/config.json", "api_key"),
+        (HOME / ".config/ano-shell/agentos.json", "api_key"),
+        (HOME / "OUTILS/ANO-GPT/config/api_keys.json", "gemini_api_key"),
+    ):
+        if p.is_file():
+            try:
+                val = (json.loads(p.read_text()).get(field) or "").strip()
+                if val:
+                    return val
+            except (OSError, ValueError):
+                pass
+    return ""
+
+
+def call_gemini_json(api_key, system_prompt, user_content):
+    models = ("gemini-2.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-flash-latest")
+    payload = {
+        "systemInstruction": {"parts": [{"text": system_prompt}]},
+        "contents": [{"role": "user", "parts": [{"text": user_content}]}],
+        "generationConfig": {
+            "temperature": 0.2,
+            "responseMimeType": "application/json",
+        },
+    }
+    raw_body = json.dumps(payload).encode("utf-8")
+    last_err = "Gemini indisponible"
+    for model in models:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+        req = urllib.request.Request(url, data=raw_body, headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=18) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            txt = data["candidates"][0]["content"]["parts"][0]["text"]
+            return json.loads(txt), None
+        except (urllib.error.URLError, KeyError, IndexError, ValueError, TimeoutError) as exc:
+            last_err = str(exc)[:180]
+    return None, last_err
+
+
+def commander(prompt, default_cwd=""):
+    """Commandant IA (Katana AI) : comprend une demande en français et pilote réellement tous les agents."""
+    prompt = (prompt or "").strip()
+    if not prompt:
+        return {"ok": False, "reply": "Écris une instruction pour le Commandant IA.", "executed": []}
+
+    api_key = load_gemini_key()
+    if not api_key:
+        return {
+            "ok": False,
+            "reply": "Clé Gemini introuvable (configure GEMINI_API_KEY ou ~/.config/caelestia-write/config.json).",
+            "executed": [],
+        }
+
+    snap = snapshot({})
+    projs = list_projects()
+    ctx = {
+        "default_cwd": default_cwd,
+        "agents": [
+            {
+                "id": a["id"], "pid": a["pid"], "kind": a["kind"], "status": a["status"],
+                "project": a["project"], "cwd": a["cwd"], "title": a["title"],
+                "tool": a["tool"], "model": a["model"], "files": a["files"],
+            }
+            for a in snap["agents"]
+        ],
+        "perms": [{"id": p.get("id"), "project": p.get("project"), "label": p.get("label"), "detail": p.get("detail")} for p in snap["perms"]],
+        "projects": [{"name": p["name"], "cwd": p["cwd"], "branch": p["branch"]} for p in projs[:14]],
+    }
+
+    system = (
+        "Tu es Katana AI, le Commandant IA intégré d'Agent OS sur Linux/Hyprland. "
+        "Tu pilotes directement les agents IA de l'utilisateur (agy = Antigravity CLI, antigravity = Antigravity App, claude = Claude Code, codex = OpenAI Codex, copilot = GitHub Copilot CLI, opencode = OpenCode, gemini = Gemini CLI, aider = Aider).\n"
+        "Réponds UNIQUEMENT en JSON valide de forme :\n"
+        '{"reply": "réponse courte et claire en français", "actions": [...]}\n'
+        "Actions autorisées dans le tableau actions :\n"
+        '- {"type": "send", "agent_id": "<id exact dans agents>", "message": "<consigne précise à envoyer dans la session de l\'agent>"}\n'
+        '- {"type": "dispatch", "kind": "agy|claude|codex|copilot|opencode|antigravity|gemini|aider", "cwd": "<chemin projet existant>", "prompt": "<mission précise>"}\n'
+        '- {"type": "swarm", "kinds": ["claude","codex",...], "cwd": "<chemin projet>", "prompt": "<mission commune>"}\n'
+        '- {"type": "stop", "agent_id": "<id exact>"}\n'
+        '- {"type": "kill", "agent_id": "<id exact>"}\n'
+        '- {"type": "focus", "agent_id": "<id exact>"}\n'
+        '- {"type": "approve_perm", "perm_id": "<id>"}\n'
+        '- {"type": "deny_perm", "perm_id": "<id>"}\n'
+        "Règles :\n"
+        "- Si l'utilisateur demande de parler/dire quelque chose à un agent déjà dans `agents`, utilise `send` avec son `agent_id` exact.\n"
+        "- Si l'agent demandé (ex. agy, copilot, opencode, claude, codex) n'est PAS dans `agents`, utilise `dispatch` avec le `cwd` du projet mentionné (ou `default_cwd`) et un prompt clair.\n"
+        "- Si l'utilisateur pose une question de suivi/bilan (ex. 'où en sont mes agents ?'), laisse `actions` vide et résume précisément leur état réel.\n"
+        "- Ne prétends jamais avoir fait une action si elle n'est pas dans `actions`."
+    )
+    user_msg = f"Contexte système en direct :\n{json.dumps(ctx, ensure_ascii=False)}\n\nOrdre de l'utilisateur :\n{prompt}"
+
+    parsed, err = call_gemini_json(api_key, system, user_msg)
+    if not parsed:
+        return {"ok": False, "reply": f"Erreur Commandant IA : {err}", "executed": []}
+
+    reply = str(parsed.get("reply") or "Ordres transmis.")
+    actions = parsed.get("actions") if isinstance(parsed.get("actions"), list) else []
+    executed = []
+    agents_by_id = {a["id"]: a for a in snap["agents"]}
+
+    for act in actions[:8]:
+        if not isinstance(act, dict):
+            continue
+        atype = act.get("type")
+        try:
+            if atype == "send":
+                aid = str(act.get("agent_id") or "")
+                msg = str(act.get("message") or "")
+                res = send_to_agent(aid, msg)
+                executed.append({"type": "send", "ok": bool(res.get("ok")), "label": f"Message → {aid} ({res.get('detail', '')})"})
+            elif atype == "dispatch":
+                k = str(act.get("kind") or "claude").lower()
+                c = str(act.get("cwd") or default_cwd or str(HOME))
+                pr = str(act.get("prompt") or "")
+                dispatch_agent(k, c, pr)
+                executed.append({"type": "dispatch", "ok": True, "label": f"Lancé {k.upper()} · {norm_project(c)}"})
+            elif atype == "swarm":
+                kinds = act.get("kinds") if isinstance(act.get("kinds"), list) else []
+                c = str(act.get("cwd") or default_cwd or str(HOME))
+                pr = str(act.get("prompt") or "")
+                for k in kinds[:6]:
+                    dispatch_agent(str(k).lower(), c, pr)
+                executed.append({"type": "swarm", "ok": bool(kinds), "label": f"Escouade ({', '.join(kinds)}) · {norm_project(c)}"})
+            elif atype in ("stop", "kill"):
+                aid = str(act.get("agent_id") or "")
+                ag = agents_by_id.get(aid)
+                if ag and ag.get("pid"):
+                    stop_agent(str(ag["pid"]), force=(atype == "kill"))
+                    executed.append({"type": atype, "ok": True, "label": f"{'Tué' if atype == 'kill' else 'Stoppé'} · {ag['kind']} ({ag['project']})"})
+                else:
+                    executed.append({"type": atype, "ok": False, "label": f"Agent sans PID arrêtable ({aid})"})
+            elif atype == "focus":
+                aid = str(act.get("agent_id") or "")
+                ag = agents_by_id.get(aid)
+                if ag and ag.get("window"):
+                    subprocess.run(["hyprctl", "dispatch", "focuswindow", f"address:0x{ag['window']}"], capture_output=True, timeout=2, check=False)
+                    executed.append({"type": "focus", "ok": True, "label": f"Focus · {ag['kind']} ({ag['project']})"})
+            elif atype in ("approve_perm", "deny_perm"):
+                pid_perm = str(act.get("perm_id") or "")
+                dec = "allow" if atype == "approve_perm" else "deny"
+                answer(pid_perm, dec)
+                executed.append({"type": atype, "ok": True, "label": f"Permission {'autorisée' if dec == 'allow' else 'refusée'}"})
+        except SystemExit:
+            executed.append({"type": str(atype), "ok": False, "label": f"Échec {atype}"})
+
+    return {"ok": True, "reply": reply, "executed": executed}
 
 
 def launch_agent(kind):
@@ -2086,6 +2407,15 @@ if __name__ == "__main__":
         launch_agent(sys.argv[2])
     elif cmd == "dispatch" and len(sys.argv) >= 4:
         dispatch_agent(sys.argv[2], sys.argv[3], " ".join(sys.argv[4:]))
+    elif cmd == "send" and len(sys.argv) >= 4:
+        print(json.dumps(send_to_agent(sys.argv[2], " ".join(sys.argv[3:])), ensure_ascii=False))
+    elif cmd == "commander" and len(sys.argv) >= 3:
+        cwd_arg = ""
+        args = sys.argv[2:]
+        if len(args) >= 2 and args[0] == "--cwd":
+            cwd_arg = args[1]
+            args = args[2:]
+        print(json.dumps(commander(" ".join(args), default_cwd=cwd_arg), ensure_ascii=False))
     elif cmd == "terminal" and len(sys.argv) >= 2:
         open_terminal(sys.argv[2] if len(sys.argv) > 2 else "")
     elif cmd == "projects":

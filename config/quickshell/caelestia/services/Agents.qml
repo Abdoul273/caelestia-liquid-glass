@@ -130,6 +130,12 @@ Singleton {
         Quickshell.execDetached(["caelestia-agents", "dispatch", kind, cwd || "", prompt || ""]);
     }
 
+    function sendMessage(agentId: string, message: string): void {
+        if (!agentId || !message.trim())
+            return;
+        Quickshell.execDetached(["caelestia-agents", "send", agentId, message.trim()]);
+    }
+
     function openTerminal(cwd: string): void {
         Quickshell.execDetached(["caelestia-agents", "terminal", cwd || ""]);
     }
