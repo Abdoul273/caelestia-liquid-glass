@@ -73,6 +73,11 @@ Region {
     }
 
     R {
+        panel: root.panels.agentos
+        width: root.panels.agentos.visible ? panel.width : 0
+    }
+
+    R {
         panel: root.panels.display
         width: root.panels.display.visible ? panel.width : 0
     }

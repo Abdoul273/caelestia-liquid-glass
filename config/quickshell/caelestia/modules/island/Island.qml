@@ -7216,6 +7216,50 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
                         }
                     }
 
+                    // Bouton ouvrir la grande app Agent OS (goutte de verre Katana)
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: openOsRow.implicitWidth + 14
+                        height: 22
+                        radius: 11
+                        scale: openOsArea.pressed ? 0.94 : 1
+                        color: Qt.alpha(agentsFace.leadTint, openOsArea.containsMouse ? 0.24 : 0.14)
+                        border.width: 0.5
+                        border.color: Qt.alpha(agentsFace.leadTint, openOsArea.containsMouse ? 0.55 : 0.34)
+
+                        Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+
+                        Row {
+                            id: openOsRow
+
+                            anchors.centerIn: parent
+                            spacing: 4
+
+                            MaterialIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "open_in_full"
+                                color: agentsFace.leadTint
+                                fontStyle: Tokens.font.icon.size(11).build()
+                            }
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: I18n.tr("Studio")
+                                color: root.fg
+                                font.pointSize: 7.4
+                                font.weight: Font.Bold
+                            }
+                        }
+
+                        MouseArea {
+                            id: openOsArea
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.openInfoDrop("agentos")
+                        }
+                    }
+
                     // Bouton lanceur rapide (+)
                     Rectangle {
                         anchors.verticalCenter: parent.verticalCenter

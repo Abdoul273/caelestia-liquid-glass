@@ -30,6 +30,7 @@ PersistentProperties {
     property bool emoji
     property bool clipboard
     property bool earbuds
+    property bool agentos
 
     // Dashboard state
     property int dashboardTab

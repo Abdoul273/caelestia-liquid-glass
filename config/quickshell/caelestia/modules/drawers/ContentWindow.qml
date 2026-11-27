@@ -72,7 +72,7 @@ StyledWindow {
     name: "drawers"
     WlrLayershell.exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: (fsTransitionProg > 0 && contentItem.Config.general.showOverFullscreen) || (hasSpecialWorkspace && hasFullscreenOnNormalWs) ? WlrLayer.Overlay : WlrLayer.Top
-    WlrLayershell.keyboardFocus: screenState.launcher || screenState.session || screenState.notesActive || screenState.controlCenter || screenState.spotlight || screenState.calculator || screenState.dictation || screenState.writing || screenState.translate || screenState.siri || screenState.display || screenState.clipboard || screenState.emoji || screenState.keyhelp || screenState.clock || screenState.settings || screenState.annotate || screenState.earbuds ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: screenState.launcher || screenState.session || screenState.notesActive || screenState.controlCenter || screenState.spotlight || screenState.calculator || screenState.dictation || screenState.writing || screenState.translate || screenState.siri || screenState.display || screenState.clipboard || screenState.emoji || screenState.keyhelp || screenState.clock || screenState.settings || screenState.annotate || screenState.earbuds || screenState.agentos ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
     mask: hasFullscreen ? emptyRegion : regions
 
@@ -119,7 +119,7 @@ StyledWindow {
         active: {
             const s = root.screenState;
             const conf = root.contentItem.Config;
-            if ((s.launcher && conf.launcher.enabled) || (s.session && conf.session.enabled) || (s.sidebar && conf.sidebar.enabled) || s.controlCenter || s.spotlight || s.calculator || s.dictation || s.writing || s.translate || s.display || s.clipboard || s.emoji || s.keyhelp || s.clock || s.settings || s.annotate || s.earbuds)
+            if ((s.launcher && conf.launcher.enabled) || (s.session && conf.session.enabled) || (s.sidebar && conf.sidebar.enabled) || s.controlCenter || s.spotlight || s.calculator || s.dictation || s.writing || s.translate || s.display || s.clipboard || s.emoji || s.keyhelp || s.clock || s.settings || s.annotate || s.earbuds || s.agentos)
                 return true;
             if (!conf.dashboard.showOnHover && s.dashboard && conf.dashboard.enabled)
                 return true;
@@ -143,6 +143,7 @@ StyledWindow {
             root.screenState.display = false;
             root.screenState.annotate = false;
             root.screenState.earbuds = false;
+            root.screenState.agentos = false;
             root.screenState.settings = false;
             root.screenState.clock = false;
             root.screenState.keyhelp = false;
@@ -476,6 +477,22 @@ StyledWindow {
 
             panel: panels.earbuds
             deformAmount: 0.1
+            visible: gp.visible
+            radius: gp.curR
+            x: gp.curX + bar.implicitWidth
+            implicitWidth: gp.curW
+            y: gp.visible ? gp.curTop + root.borderThickness : -400
+            implicitHeight: gp.visible ? Math.max(0, gp.curBottom - gp.curTop) : 0
+        }
+
+        // Agent OS façon Katana (Super + Maj + A) : goutte de verre réfractive complète
+        PanelBg {
+            id: agentosBg
+
+            readonly property var gp: panels.agentos
+
+            panel: panels.agentos
+            deformAmount: 0.08
             visible: gp.visible
             radius: gp.curR
             x: gp.curX + bar.implicitWidth
@@ -833,6 +850,9 @@ StyledWindow {
             }
             earbuds.transform: Matrix4x4 {
                 matrix: earbudsBg.deformMatrix
+            }
+            agentos.transform: Matrix4x4 {
+                matrix: agentosBg.deformMatrix
             }
             display.transform: Matrix4x4 {
                 matrix: displayBg.deformMatrix

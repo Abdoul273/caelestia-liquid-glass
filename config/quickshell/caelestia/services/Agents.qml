@@ -111,11 +111,27 @@ Singleton {
         Quickshell.execDetached(["caelestia-agents", "stop", String(agent.pid)]);
     }
 
+    function kill(agent: var): void {
+        if (!agent?.canStop || !agent?.pid)
+            return;
+        Quickshell.execDetached(["caelestia-agents", "kill", String(agent.pid)]);
+    }
+
     function launch(kind: string): void {
         if (!kind)
             return;
         launcherOpen = false;
         Quickshell.execDetached(["caelestia-agents", "launch", kind]);
+    }
+
+    function dispatch(kind: string, cwd: string, prompt: string): void {
+        if (!kind)
+            return;
+        Quickshell.execDetached(["caelestia-agents", "dispatch", kind, cwd || "", prompt || ""]);
+    }
+
+    function openTerminal(cwd: string): void {
+        Quickshell.execDetached(["caelestia-agents", "terminal", cwd || ""]);
     }
 
     function focus(agent: var): void {

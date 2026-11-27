@@ -24,7 +24,7 @@ Scope {
     }
 
     // Gouttes de verre de l'île (Spotlight, calculatrice, projection, presse-papiers…) : une seule à la fois
-    readonly property var drops: ["spotlight", "calculator", "display", "clipboard", "emoji", "keyhelp", "clock", "settings", "annotate", "earbuds", "dictation", "writing", "translate", "siri"]
+    readonly property var drops: ["spotlight", "calculator", "display", "clipboard", "emoji", "keyhelp", "clock", "settings", "annotate", "earbuds", "agentos", "dictation", "writing", "translate", "siri"]
     function toggleDrop(kind: string): void {
         if (hasFullscreen)
             return;
@@ -148,6 +148,14 @@ Scope {
         name: "earbuds"
         description: I18n.tr("Écouteurs 3D (Super + Maj + B) : même goutte de verre façon AirPodsDesktop")
         onPressed: root.toggleDrop("earbuds")
+    }
+
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
+        name: "agentos"
+        description: I18n.tr("Agent OS (Super + Maj + A) : cockpit multi-agents Liquid Glass façon Katana")
+        onPressed: root.toggleDrop("agentos")
     }
 
     // qmllint disable unresolved-type
@@ -349,6 +357,24 @@ Scope {
         }
 
         target: "earbuds"
+    }
+
+    IpcHandler {
+        function toggle(): void {
+            root.toggleDrop("agentos");
+        }
+        function open(): void {
+            const screenState = ShellState.forActive();
+            if (screenState && !screenState.agentos)
+                root.toggleDrop("agentos");
+        }
+        function close(): void {
+            const screenState = ShellState.forActive();
+            if (screenState)
+                screenState.agentos = false;
+        }
+
+        target: "agentos"
     }
 
     IpcHandler {

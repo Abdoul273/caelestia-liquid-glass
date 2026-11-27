@@ -55,6 +55,7 @@ Item {
     readonly property alias emoji: emoji
     readonly property alias clipboard: clipboard
     readonly property alias earbuds: earbuds
+    readonly property alias agentos: agentos
 
     anchors.fill: parent
     anchors.margins: borderThickness
@@ -505,6 +506,29 @@ Item {
 
                     anchors.horizontalCenter: parent.horizontalCenter
                     y: Math.round(parent.height * 0.12)
+                }
+            }
+        }
+    }
+
+    LazyPanel {
+        id: agentos
+
+        host: lazyHost
+        wantOpen: root.screenState.agentos
+        sourceComponent: Component {
+            Item {
+                property alias panel: p
+
+                SpotlightModule.AgentOS {
+                    id: p
+
+                    screen: root.screen
+                    screenState: root.screenState
+                    island: root.island
+
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: Math.round(parent.height * 0.11)
                 }
             }
         }
