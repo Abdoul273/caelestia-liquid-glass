@@ -25,10 +25,12 @@ ShaderEffect {
     readonly property real refraction: 0
     readonly property real thickAlpha: Glass.thickAlpha
     readonly property real unknownBg: 1
+    readonly property real clearGlass: 0
+    readonly property real clearVeil: 0
     readonly property var wallpaper: dummyTex
     readonly property var windows: dummyTex
 
-    fragmentShader: Qt.resolvedUrl(Quickshell.shellPath(Glass.ios ? "assets/shaders/liquidios.frag.qsb" : "assets/shaders/glassblob.frag.qsb"))
+    fragmentShader: Qt.resolvedUrl(Quickshell.shellPath(Glass.ios ? (Glass.fastShader ? "assets/shaders/liquidios-fast.frag.qsb" : "assets/shaders/liquidios.frag.qsb") : "assets/shaders/glassblob.frag.qsb"))
 
     ShaderEffectSource {
         id: dummyTex

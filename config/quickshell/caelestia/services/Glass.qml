@@ -61,8 +61,9 @@ Singleton {
     }
 
     // Chaque carte en verre (couleur venant de tile()) devient sa propre pièce de verre
-    // bombée (biseau, reflets, liseré), comme les widgets d'iOS 27. false = simple voile.
-    readonly property bool tileLens: lensControls
+    // bombée (biseau, reflets, liseré), comme les widgets d'iOS 27. Sur batterie (hors ultra),
+    // simple liseré léger (0 shader par carte) ; les petits contrôles gardent leur lentille.
+    readonly property bool tileLens: lensControls && !(UPower.onBattery && ecoOnBattery)
 
     function isTile(c: color): bool {
         if (!panels || c.a < 0.025 || c.a > 0.17)

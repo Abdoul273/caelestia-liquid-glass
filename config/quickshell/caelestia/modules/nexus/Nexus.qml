@@ -36,33 +36,24 @@ Item {
         id: blobGroup
 
         smoothing: root.Tokens.rounding.medium
-        color: Glass.panels ? Qt.alpha(root.blobColour, 1) : root.blobColour
+        color: root.blobColour
     }
 
-    // Cadre et navigation en liquid glass (même shader que le shell)
+    // Mode Caelestia d'origine (Glass désactivé) : cadre fluide opaque d'origine.
+    // En Liquid Glass, le verre vient déjà de la goutte du shell (ou du flou Hyprland
+    // en fenêtre détachée) : aucun 2ᵉ shader FBO plein écran, zéro coins carrés ni encoche.
     Item {
         id: glassFrame
 
         anchors.fill: parent
-        layer.enabled: Glass.panels
-        layer.effect: GlassBlob {
-            tintColour: root.blobColour
-            tintOpacity: Glass.strength(Colours.light ? 0.5 : 0.4)
-            shadow: 0
-            pointerActive: frameHover.hovered
-            mouse: Qt.point(frameHover.point.position.x / Math.max(1, width), frameHover.point.position.y / Math.max(1, height))
-        }
-
-        HoverHandler {
-            id: frameHover
-        }
+        visible: !Glass.panels
     }
 
     BlobInvertedRect {
         parent: glassFrame
         anchors.fill: parent
         group: blobGroup
-        opacity: Glass.panels ? 1 : root.blobColour.a
+        opacity: root.blobColour.a
         radius: Tokens.rounding.large
 
         borderLeft: navPane.width + navPane.anchors.margins * 2
@@ -80,19 +71,64 @@ Item {
         anchors.margins: root.nState.isWindow ? 0 : Tokens.padding.extraSmall
 
         group: blobGroup
-        opacity: Glass.panels ? 1 : root.blobColour.a
+        opacity: root.blobColour.a
         radius: Tokens.rounding.medium
 
         implicitWidth: windowBtn.implicitWidth + (root.nState.isWindow ? Tokens.padding.extraSmall : Tokens.padding.small) * 2
         implicitHeight: windowBtn.implicitHeight + (root.nState.isWindow ? Tokens.padding.extraSmall : Tokens.padding.small)
     }
 
+    // Barre latérale flottante façon Réglages macOS 27 (0 shader GPU supplémentaire)
+    Rectangle {
+        id: glassSidebar
+
+        visible: Glass.panels
+        anchors.fill: navPane
+        anchors.margins: -Tokens.padding.small
+        radius: Tokens.rounding.large
+        color: Qt.alpha(Colours.palette.m3onSurface, Colours.light ? 0.08 : 0.055)
+        border.width: 1
+        border.color: Qt.alpha(Colours.palette.m3onSurface, Colours.light ? 0.14 : 0.10)
+
+        Rectangle {
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.leftMargin: parent.radius * 0.65
+            anchors.rightMargin: parent.radius * 0.65
+            anchors.topMargin: 1
+            height: 1
+            color: Qt.alpha("#ffffff", Colours.light ? 0.45 : 0.14)
+        }
+    }
+
+    // Pastille verre discrète pour le bouton détacher / fermer (remplace l'encoche BlobRect)
+    Rectangle {
+        id: windowBtnPill
+
+        z: 2
+        visible: Glass.panels
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.margins: Tokens.padding.large
+        width: windowBtn.implicitWidth + Tokens.padding.small * 2
+        height: windowBtn.implicitHeight + Tokens.padding.small
+        radius: height / 2
+        color: Qt.alpha(Colours.palette.m3onSurface, windowBtn.hovered ? 0.14 : 0.06)
+        border.width: 1
+        border.color: Qt.alpha(Colours.palette.m3onSurface, Colours.light ? 0.14 : 0.10)
+
+        Behavior on color {
+            CAnim {}
+        }
+    }
+
     IconButton {
         id: windowBtn
 
-        // glassFrame couvre toute la fenêtre : mêmes coordonnées que le bouton
-        x: windowBtnRect.x + (windowBtnRect.width - width) / 2
-        y: windowBtnRect.y + (windowBtnRect.height - height) / 2
+        z: 3
+        x: Glass.panels ? windowBtnPill.x + (windowBtnPill.width - width) / 2 : windowBtnRect.x + (windowBtnRect.width - width) / 2
+        y: Glass.panels ? windowBtnPill.y + (windowBtnPill.height - height) / 2 : windowBtnRect.y + (windowBtnRect.height - height) / 2
         icon: nState.isWindow ? "close" : "pip"
         type: IconButton.Text
         label.fill: 0

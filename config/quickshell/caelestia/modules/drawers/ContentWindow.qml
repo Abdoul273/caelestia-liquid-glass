@@ -643,6 +643,7 @@ StyledWindow {
         hideSource: true
         live: false
         visible: false
+        mipmap: true
         textureSize: Qt.size(Math.round(width / 2), Math.round(height / 2))
 
         Connections {
@@ -783,7 +784,8 @@ StyledWindow {
             readonly property vector3d tint: Qt.vector3d(root.surfaceColour.r, root.surfaceColour.g, root.surfaceColour.b)
             readonly property real tintAlpha: Glass.strength(Glass.ios ? (Colours.light ? 0.3 : 0.24) : Colours.light ? 0.56 : 0.46)
             readonly property real light: Colours.light ? 1.2 : 1
-            readonly property real shadowStrength: 0.17 * Math.max(0, root.shadowOpacity) / 0.7
+            // Sur batterie (hors ultra) : sans ombre → sortie shader en 1 lecture sur 93 % de l'écran
+            readonly property real shadowStrength: (UPower.onBattery && Glass.ecoOnBattery) ? 0 : 0.17 * Math.max(0, root.shadowOpacity) / 0.7
             readonly property point mouse: interactions.containsMouse
                 ? Qt.point(interactions.mouseX / Math.max(1, width), interactions.mouseY / Math.max(1, height))
                 : Qt.point(0.5, 0.0)

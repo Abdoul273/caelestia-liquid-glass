@@ -55,15 +55,16 @@ void main() {
     vec2 uv = qt_TexCoord0;
     float a0 = texture(source, uv).a;
 
-    float p0 = texture(source, uv + vec2(16.0, 0.0) * texel).a;
-    float p1 = texture(source, uv - vec2(16.0, 0.0) * texel).a;
-    float p2 = texture(source, uv + vec2(0.0, 16.0) * texel).a;
-    float p3 = texture(source, uv - vec2(0.0, 16.0) * texel).a;
-    float pMax = max(max(p0, p1), max(p2, p3));
-    float pMin = min(min(p0, p1), min(p2, p3));
-
     if (a0 < 0.004) {
-        if (pMax < 0.004 || shadowStrength <= 0.0) {
+        if (shadowStrength <= 0.0) {
+            fragColor = vec4(0.0);
+            return;
+        }
+        float s0 = texture(source, uv + vec2(16.0, 0.0) * texel).a;
+        float s1 = texture(source, uv - vec2(16.0, 0.0) * texel).a;
+        float s2 = texture(source, uv + vec2(0.0, 16.0) * texel).a;
+        float s3 = texture(source, uv - vec2(0.0, 16.0) * texel).a;
+        if (max(max(s0, s1), max(s2, s3)) < 0.004) {
             fragColor = vec4(0.0);
             return;
         }
@@ -72,6 +73,12 @@ void main() {
         fragColor = vec4(0.0, 0.0, 0.0, sh) * qt_Opacity;
         return;
     }
+
+    float p0 = texture(source, uv + vec2(16.0, 0.0) * texel).a;
+    float p1 = texture(source, uv - vec2(16.0, 0.0) * texel).a;
+    float p2 = texture(source, uv + vec2(0.0, 16.0) * texel).a;
+    float p3 = texture(source, uv - vec2(0.0, 16.0) * texel).a;
+    float pMin = min(min(p0, p1), min(p2, p3));
 
     // Profil du bord : large (biseau de la lentille) et fin (liseré)
     vec2 gWide = vec2(0.0);
@@ -91,11 +98,11 @@ void main() {
     float line = clamp((1.0 - avgNarrow) * 2.2, 0.0, 1.0);
     vec2 n = length(gWide) > 1e-4 ? normalize(gWide) : vec2(0.0); // vers l'extérieur
 
-    // Éclairage : lumière en haut à gauche, reflet secondaire en bas à droite
+    // Éclairage directionnel façon macOS 27 : éclat net haut-gauche, contre-reflet mesuré
     vec2 L = normalize(vec2(-0.5, -0.87));
     float facing = dot(n, L);
-    float key = pow(max(facing, 0.0), 1.6);
-    float back = pow(max(-facing, 0.0), 2.2) * 0.7;
+    float key = pow(max(facing, 0.0), 2.2);
+    float back = pow(max(-facing, 0.0), 2.8) * 0.48;
 
     vec2 px = uv / texel;
     vec2 size = 1.0 / texel;
@@ -103,20 +110,16 @@ void main() {
     float frameMask = 1.0 - smoothstep(0.0, 36.0, outside);
     float overWin = texture(windows, uv).r;
 
-    // ─── Fond : teinte adaptative, comme les matériaux de macOS. Le verre reste clair quand
-    //     ce qui est derrière s'accorde avec lui, et s'épaissit quand le fond contraste
-    //     (page blanche sous un panneau sombre, fenêtre sombre sous un panneau clair) :
-    //     le panneau garde sa couleur et le texte reste lisible quoi qu'il y ait derrière.
-    float tintL = dot(tint, vec3(0.299, 0.587, 0.114));
-    vec3 wp = texture(wallpaper, uv).rgb * 0.4
-            + texture(wallpaper, uv + vec2(48.0, 0.0) * texel).rgb * 0.15
-            + texture(wallpaper, uv - vec2(48.0, 0.0) * texel).rgb * 0.15
-            + texture(wallpaper, uv + vec2(0.0, 48.0) * texel).rgb * 0.15
-            + texture(wallpaper, uv - vec2(0.0, 48.0) * texel).rgb * 0.15;
-    float wpContrast = abs(dot(wp, vec3(0.299, 0.587, 0.114)) - tintL);
-    float wpThick = smoothstep(0.12, 0.5, wpContrast) * 0.75;
-    // Sous une fenêtre on ne voit pas son contenu : on part du pire (verre épais)
+    // ─── Fond : teinte adaptative (luminance + saturation vive), via mipmap lissé en 1 lecture
     float unknown = max(unknownBg, overWin * (1.0 - frameMask));
+    float wpThick = 0.0;
+    if (unknown < 0.99 && frameMask < 0.99) {
+        float tintL = dot(tint, vec3(0.299, 0.587, 0.114));
+        vec3 wp = textureLod(wallpaper, uv, 3.5).rgb;
+        float wpChroma = max(wp.r, max(wp.g, wp.b)) - min(wp.r, min(wp.g, wp.b));
+        float wpContrast = max(abs(dot(wp, vec3(0.299, 0.587, 0.114)) - tintL), wpChroma * 0.58);
+        wpThick = smoothstep(0.14, 0.52, wpContrast) * 0.75;
+    }
     float thick = max(unknown, wpThick * (1.0 - frameMask));
     vec3 col = tint;
     float a = mix(tintAlpha, max(thickAlpha, tintAlpha), thick);
@@ -186,25 +189,26 @@ void main() {
 
     // ─── Halo de Fresnel : le bord du verre s'éclaire
     float fresnel = pow(bevelIn, 2.0);
-    col = mix(col, vec3(1.0), fresnel * 0.1 * light);
-    a += fresnel * 0.06;
+    col = mix(col, vec3(1.0), fresnel * 0.08 * light);
+    a += fresnel * 0.045;
 
-    // ─── Reflets spéculaires : large sur le biseau, net sur le liseré
-    // Frange de couleur du biseau : très légère, presque blanche (le verre colore à peine
-    // la lumière, comme sur iOS — plus de bord bleu/orange « autocollant »)
-    vec3 rimTint = mix(vec3(1.0), vec3(0.5 + 0.5 * n.x, 0.55 + 0.2 * (n.x + n.y), 0.5 + 0.5 * n.y), 0.08);
-    float specWide = (key + back) * bevel * bevel * 0.45;
-    float lineLit = line * (0.32 + 1.0 * max(key, back * 1.3));
-    col = mix(col, rimTint, clamp((specWide + lineLit * 0.85) * light, 0.0, 1.0));
-    a += specWide * 0.2 + lineLit * 0.45;
+    // ─── Reflets spéculaires fins et directionnels (façon macOS 27 / iOS 27)
+    vec3 rimTint = mix(vec3(1.0), vec3(0.5 + 0.5 * n.x, 0.55 + 0.2 * (n.x + n.y), 0.5 + 0.5 * n.y), 0.07);
+    float sharpLine = mix(line, line * line, 0.45);
+    float specWide = (key * 0.34 + back * 0.24) * bevel * bevel;
+    float lineLit = sharpLine * (0.14 + 0.86 * max(key, back * 1.15));
+    col = mix(col, rimTint, clamp((specWide + lineLit * 0.78) * light, 0.0, 1.0));
+    a += specWide * 0.16 + lineLit * 0.34;
 
-    // ─── Reflet qui suit le pointeur (surtout sur les bords)
-    vec2 md = (uv - mouse) / texel;
-    float d2 = dot(md, md);
-    float spot = exp(-d2 / (2.0 * 120.0 * 120.0)) * hover;
-    float spotRim = exp(-d2 / (2.0 * 80.0 * 80.0)) * hover * (line + bevel * 0.8);
-    col = mix(col, vec3(1.0), clamp(spot * 0.06 + spotRim * 0.55, 0.0, 1.0));
-    a += spot * 0.03 + spotRim * 0.3;
+    // ─── Reflet qui suit le pointeur (calculé uniquement au survol)
+    if (hover > 0.005) {
+        vec2 md = (uv - mouse) / texel;
+        float d2 = dot(md, md);
+        float spot = exp(-d2 / (2.0 * 120.0 * 120.0)) * hover;
+        float spotRim = exp(-d2 / (2.0 * 80.0 * 80.0)) * hover * (line + bevel * 0.8);
+        col = mix(col, vec3(1.0), clamp(spot * 0.06 + spotRim * 0.55, 0.0, 1.0));
+        a += spot * 0.03 + spotRim * 0.3;
+    }
 
     a = clamp(a, 0.0, 1.0) * a0 * qt_Opacity;
     fragColor = vec4(col * a, a);

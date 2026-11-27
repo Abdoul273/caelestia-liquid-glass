@@ -61,35 +61,37 @@ void main() {
     float bevelW = 14.0;
     float bevel = exp(-e / bevelW * 2.2);
 
-    // Lumière principale en haut à gauche, contre-reflet en bas à droite
+    // Lumière principale en haut à gauche, contre-reflet mesuré en bas à droite
     vec2 L = normalize(vec2(-0.55, -0.85));
     float facing = dot(n, L);
-    float key = pow(max(facing, 0.0), 2.0);
-    float back = pow(max(-facing, 0.0), 3.0) * 0.45;
-    float spec = (key + back) * bevel;
+    float key = pow(max(facing, 0.0), 2.2);
+    float back = pow(max(-facing, 0.0), 2.8) * 0.42;
+    float spec = (key * 0.9 + back * 0.7) * bevel;
 
-    // Liseré net d'un pixel (le « bord de verre »)
-    float line = smoothstep(1.6, 0.2, e);
-    float lineLit = line * (0.22 + 0.78 * max(key, back * 1.6));
+    // Liseré fin et directionnel (façon macOS 27 / iOS 27)
+    float line = smoothstep(1.5, 0.2, e);
+    float lineLit = line * (0.13 + 0.87 * max(key, back * 1.15));
 
     // Aberration chromatique sur le biseau : léger décalage des teintes selon la normale
     vec3 chroma = vec3(0.5 + 0.5 * n.x, 0.5 + 0.25 * (n.x + n.y), 0.5 + 0.5 * n.y);
-    vec3 rimCol = mix(vec3(1.0), chroma, 0.12);
+    vec3 rimCol = mix(vec3(1.0), chroma, 0.09);
 
-    col = mix(col, rimCol, clamp(spec * 0.55 * light + lineLit * 0.85, 0.0, 1.0));
-    a += spec * 0.28 * light + lineLit * 0.45;
+    col = mix(col, rimCol, clamp(spec * 0.48 * light + lineLit * 0.78, 0.0, 1.0));
+    a += spec * 0.22 * light + lineLit * 0.34;
 
     // Épaisseur : léger assombrissement intérieur juste derrière le liseré
     float inner = smoothstep(2.0, 5.0, e) * (1.0 - smoothstep(5.0, 22.0, e));
     col *= 1.0 - inner * 0.06;
 
-    // Reflet spéculaire qui suit le pointeur
-    vec2 mp = (mouse - 0.5) * size;
-    float md = length(p - mp);
-    float spot = exp(-(md * md) / (2.0 * 90.0 * 90.0)) * hover;
-    float spotRim = exp(-(md * md) / (2.0 * 55.0 * 55.0)) * hover * (line + bevel * 0.6);
-    col = mix(col, vec3(1.0), clamp(spot * 0.10 + spotRim * 0.55, 0.0, 1.0));
-    a += spot * 0.06 + spotRim * 0.35;
+    // Reflet spéculaire qui suit le pointeur (calculé uniquement au survol)
+    if (hover > 0.005) {
+        vec2 mp = (mouse - 0.5) * size;
+        float md = length(p - mp);
+        float spot = exp(-(md * md) / (2.0 * 90.0 * 90.0)) * hover;
+        float spotRim = exp(-(md * md) / (2.0 * 55.0 * 55.0)) * hover * (line + bevel * 0.6);
+        col = mix(col, vec3(1.0), clamp(spot * 0.10 + spotRim * 0.55, 0.0, 1.0));
+        a += spot * 0.06 + spotRim * 0.35;
+    }
 
     a = clamp(a, 0.0, 1.0) * mask * qt_Opacity;
     fragColor = vec4(col * a, a);

@@ -41,7 +41,7 @@ Item {
 
     // ── Couleurs ──
     readonly property color fg: Colours.palette.m3onSurface
-    readonly property color fgDim: Qt.alpha(fg, 0.55)
+    readonly property color fgDim: Qt.alpha(fg, 0.72)
     readonly property color fgFaint: Qt.alpha(fg, 0.1)
     readonly property color accent: Colours.palette.m3primary
     readonly property color green: "#32d74b"
@@ -346,7 +346,7 @@ Item {
                     font.family: root.glyphFont
                     font.pixelSize: 18
                     color: card.connected ? root.fg : root.fgDim
-                    opacity: card.connected ? 1 : 0.55
+                    opacity: card.connected ? 1 : 0.72
                 }
 
                 // Pastille L / R sur le coin de l'anneau
@@ -392,7 +392,7 @@ Item {
 
                 Text {
                     text: card.busy ? I18n.tr("Connexion…") : card.showPct ? `${card.pct} %` : card.sublabel
-                    color: card.connected ? root.green : card.busy ? root.orange : Qt.alpha(root.fg, 0.42)
+                    color: card.connected ? root.green : card.busy ? root.orange : Qt.alpha(root.fg, 0.68)
                     font.pixelSize: 10
                     font.weight: Font.DemiBold
                 }
