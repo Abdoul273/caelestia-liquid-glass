@@ -7414,6 +7414,8 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
 
                         // Pilule "Tous"
                         Rectangle {
+                            id: fAllPill
+
                             readonly property bool sel: Agents.filter === "all"
 
                             anchors.verticalCenter: parent.verticalCenter
@@ -7429,9 +7431,9 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
 
                                 anchors.centerIn: parent
                                 text: I18n.tr("Tous (%1)").arg(Agents.shown.length)
-                                color: sel ? root.fg : root.fgDim
+                                color: fAllPill.sel ? root.fg : root.fgDim
                                 font.pointSize: 7.3
-                                font.weight: sel ? Font.Bold : Font.DemiBold
+                                font.weight: fAllPill.sel ? Font.Bold : Font.DemiBold
                                 font.features: { "tnum": 1 }
                             }
 
@@ -7447,6 +7449,8 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
 
                         // Pilule "Actifs" (si mélange actifs + terminés)
                         Rectangle {
+                            id: fActPill
+
                             readonly property bool sel: Agents.filter === "active"
 
                             visible: Agents.activeCount > 0 && Agents.doneShown > 0
@@ -7463,9 +7467,9 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
 
                                 anchors.centerIn: parent
                                 text: I18n.tr("Actifs (%1)").arg(Agents.activeCount)
-                                color: sel ? agentsFace.leadTint : root.fgDim
+                                color: fActPill.sel ? agentsFace.leadTint : root.fgDim
                                 font.pointSize: 7.3
-                                font.weight: sel ? Font.Bold : Font.DemiBold
+                                font.weight: fActPill.sel ? Font.Bold : Font.DemiBold
                                 font.features: { "tnum": 1 }
                             }
 
