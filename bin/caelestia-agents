@@ -2413,9 +2413,167 @@ def tool_run_shell(command, cwd="", timeout=15):
         return False, str(exc)[:180]
 
 
-def load_ano_long_term_summary():
-    """Lit la mémoire long terme partagée d'ANO-GPT (~1 ms, sans importer de gros modules)."""
+def tool_system_control(action="state", value=""):
+    """Contrôle système autonome (fonctionne même sans ANO-GPT : volume, luminosité, Wi-Fi, Bluetooth, média, apps, météo, état)."""
+    act = _fold_text(action or "state")
+    val = str(value or "").strip()
+
+    if act in ("state", "status", "info"):
+        parts = []
+        try:
+            r = subprocess.run(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"], capture_output=True, text=True, timeout=2, check=False)
+            if r.returncode == 0 and r.stdout.strip():
+                parts.append(f"Audio: {r.stdout.strip()}")
+        except OSError:
+            pass
+        try:
+            r = subprocess.run(["brightnessctl", "-m"], capture_output=True, text=True, timeout=2, check=False)
+            if r.returncode == 0 and r.stdout.strip():
+                cols = r.stdout.strip().splitlines()[0].split(",")
+                if len(cols) >= 4:
+                    parts.append(f"Luminosité: {cols[3]}")
+        except OSError:
+            pass
+        try:
+            r = subprocess.run(["nmcli", "-t", "-f", "NAME,TYPE", "con", "show", "--active"], capture_output=True, text=True, timeout=2, check=False)
+            if r.returncode == 0 and r.stdout.strip():
+                parts.append("Réseau: " + ", ".join(r.stdout.strip().splitlines()[:3]))
+        except OSError:
+            pass
+        try:
+            r = subprocess.run(["bluetoothctl", "show"], capture_output=True, text=True, timeout=2, check=False)
+            m = re.search(r"Powered:\s*(\w+)", r.stdout or "")
+            if m:
+                parts.append(f"Bluetooth: {m.group(1)}")
+        except OSError:
+            pass
+        for bat in sorted(Path("/sys/class/power_supply").glob("BAT*")):
+            try:
+                cap = (bat / "capacity").read_text().strip()
+                st = (bat / "status").read_text().strip()
+                parts.append(f"Batterie: {cap}% ({st})")
+                break
+            except OSError:
+                pass
+        try:
+            r = subprocess.run(["playerctl", "metadata", "--format", "{{status}} — {{artist}} - {{title}}"], capture_output=True, text=True, timeout=2, check=False)
+            if r.returncode == 0 and r.stdout.strip():
+                parts.append(f"Média: {clip(r.stdout.strip(), 80)}")
+        except OSError:
+            pass
+        return True, " | ".join(parts) if parts else "État système indisponible."
+
+    if act == "volume":
+        v = _fold_text(val)
+        if v in ("mute", "couper", "muet"):
+            cmd = ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "1"]
+        elif v in ("unmute", "retablir"):
+            cmd = ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "0"]
+        elif v == "toggle":
+            cmd = ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"]
+        else:
+            m = re.match(r"^([+-])?(\d+)\s*%?$", v)
+            if not m:
+                return False, f"Valeur de volume invalide : {val}"
+            sign, num = m.group(1), m.group(2)
+            arg = f"{num}%{sign}" if sign else f"{num}%"
+            cmd = ["wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@", arg]
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=2, check=False)
+            cur = subprocess.run(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"], capture_output=True, text=True, timeout=2, check=False)
+            return r.returncode == 0, f"Volume réglé ({cur.stdout.strip()})." if r.returncode == 0 else clip(r.stderr, 140)
+        except OSError as exc:
+            return False, str(exc)[:140]
+
+    if act in ("brightness", "luminosite"):
+        v = _fold_text(val)
+        m = re.match(r"^([+-])?(\d+)\s*%?$", v)
+        if not m:
+            return False, f"Valeur de luminosité invalide : {val}"
+        sign, num = m.group(1), m.group(2)
+        arg = f"{num}%{sign}" if sign else f"{num}%"
+        try:
+            r = subprocess.run(["brightnessctl", "set", arg], capture_output=True, text=True, timeout=2, check=False)
+            return r.returncode == 0, f"Luminosité réglée ({arg})." if r.returncode == 0 else clip(r.stderr, 140)
+        except OSError as exc:
+            return False, str(exc)[:140]
+
+    if act == "wifi":
+        v = _fold_text(val)
+        if v in ("on", "off"):
+            r = subprocess.run(["nmcli", "radio", "wifi", v], capture_output=True, text=True, timeout=4, check=False)
+            return r.returncode == 0, f"Wi-Fi {'activé' if v == 'on' else 'désactivé'}." if r.returncode == 0 else clip(r.stderr, 140)
+        r = subprocess.run(["nmcli", "radio", "wifi"], capture_output=True, text=True, timeout=2, check=False)
+        return r.returncode == 0, f"Wi-Fi : {r.stdout.strip()}"
+
+    if act == "bluetooth":
+        v = _fold_text(val)
+        if v in ("on", "off"):
+            r = subprocess.run(["bluetoothctl", "power", v], capture_output=True, text=True, timeout=4, check=False)
+            return r.returncode == 0, f"Bluetooth {'activé' if v == 'on' else 'désactivé'}." if r.returncode == 0 else clip(r.stderr, 140)
+        r = subprocess.run(["bluetoothctl", "show"], capture_output=True, text=True, timeout=2, check=False)
+        m = re.search(r"Powered:\s*(\w+)", r.stdout or "")
+        return True, f"Bluetooth : {m.group(1) if m else 'inconnu'}"
+
+    if act == "media":
+        sub = _fold_text(val) or "play-pause"
+        mapping = {"play": "play", "pause": "pause", "play-pause": "play-pause", "toggle": "play-pause", "next": "next", "suivant": "next", "previous": "previous", "prev": "previous", "precedent": "previous", "stop": "stop"}
+        cmd_arg = mapping.get(sub)
+        if not cmd_arg:
+            r = subprocess.run(["playerctl", "metadata", "--format", "{{status}} — {{artist}} - {{title}}"], capture_output=True, text=True, timeout=2, check=False)
+            return r.returncode == 0, r.stdout.strip() or "Aucun lecteur actif."
+        r = subprocess.run(["playerctl", cmd_arg], capture_output=True, text=True, timeout=2, check=False)
+        return r.returncode == 0, f"Média : {cmd_arg}." if r.returncode == 0 else "Aucun lecteur média actif."
+
+    if act == "open_app":
+        if not val:
+            return False, "Nom d'application ou URL manquant."
+        try:
+            if val.startswith(("http://", "https://")):
+                subprocess.Popen(["setsid", "-f", "xdg-open", val], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=_hypr_env())
+                return True, f"Ouverture de {val}."
+            binary = shutil.which(val) or shutil.which(val.lower())
+            if binary:
+                subprocess.Popen(["setsid", "-f", binary], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=_hypr_env())
+                return True, f"Application {val} lancée."
+            subprocess.Popen(["setsid", "-f", "gtk-launch", val], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=_hypr_env())
+            return True, f"Lancement desktop {val} demandé."
+        except OSError as exc:
+            return False, str(exc)[:140]
+
+    if act == "close_app":
+        return tool_hypr_windows("close", target=val)
+
+    if act == "weather":
+        city = urllib.parse.quote(val) if val else ""
+        try:
+            req = urllib.request.Request(f"https://wttr.in/{city}?format=3&lang=fr", headers={"User-Agent": "curl/8.0"})
+            with urllib.request.urlopen(req, timeout=4) as resp:
+                return True, clip(resp.read().decode("utf-8", errors="ignore").strip(), 180)
+        except Exception as exc:  # noqa: BLE001
+            return False, f"Météo indisponible : {str(exc)[:100]}"
+
+    if act == "notify":
+        try:
+            subprocess.Popen(["notify-send", "-a", "Katana AI", "Katana AI", val or "Notification"])
+            return True, "Notification envoyée."
+        except OSError as exc:
+            return False, str(exc)[:120]
+
+    return False, f"Action système inconnue : {action}"
+
+
+def _memory_file():
+    """Mémoire partagée ANO-GPT si présente, sinon mémoire autonome du shell."""
     lt = ANO_DIR / "memory/long_term.json"
+    if lt.parent.is_dir():
+        return lt
+    return CHAT_HISTORY.parent / "agentos-memory.json"
+
+
+def load_ano_long_term_summary():
+    """Lit la mémoire long terme partagée d'ANO-GPT (ou locale autonome, ~1 ms)."""
+    lt = _memory_file()
     if not lt.is_file():
         return ""
     try:
@@ -2438,10 +2596,12 @@ def load_ano_long_term_summary():
 
 
 def ano_memory_save(key, value, category="notes"):
-    """Écrit atomiquement dans la mémoire long terme d'ANO-GPT (memory/long_term.json)."""
-    lt = ANO_DIR / "memory/long_term.json"
-    if not lt.parent.is_dir():
-        return False, "Dossier mémoire ANO-GPT introuvable"
+    """Écrit atomiquement dans la mémoire long terme partagée (ANO-GPT ou locale autonome)."""
+    lt = _memory_file()
+    try:
+        lt.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return False, str(exc)[:120]
     valid_cats = {"identity", "preferences", "projects", "relationships", "wishes", "notes"}
     cat = category if category in valid_cats else "notes"
     try:
@@ -2463,18 +2623,18 @@ def ano_memory_save(key, value, category="notes"):
         tmp = lt.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         tmp.replace(lt)
-        return True, f"Mémorisé dans ANO-GPT [{cat}] {key}"
+        return True, f"Mémorisé [{cat}] {key}"
     except OSError as exc:
         return False, str(exc)[:120]
 
 
 def ano_memory_search(query):
-    """Recherche dans la mémoire long terme et memory.db (FTS5) d'ANO-GPT."""
+    """Recherche dans la mémoire long terme (ANO-GPT ou autonome) et memory.db (FTS5) si présente."""
     q = (query or "").strip()
     if not q:
         return load_ano_long_term_summary() or "Mémoire vide."
     hits = []
-    lt = ANO_DIR / "memory/long_term.json"
+    lt = _memory_file()
     if lt.is_file():
         try:
             data = json.loads(lt.read_text(encoding="utf-8"))
@@ -2723,6 +2883,21 @@ def _native_tool_declarations():
                     },
                     "value": {"type": "STRING", "description": "Paramètre principal (ex. '5 min' ou 'stop' pour timer, 'dnd'/'work'/'sleep'/'stop' pour focus_mode, 'dark'/'light' pour theme, 'shell'/'performance'/'density'/'gtk' pour glass, 'random' pour wallpaper)"},
                     "extra": {"type": "STRING", "description": "Paramètre secondaire (ex. libellé du minuteur, durée focus en minutes, valeur glass 'ios'|'classic'|'off'|'eco'|'ultra'|'auto'|'0.6')"},
+                },
+                "required": ["action"],
+            },
+        },
+        {
+            "name": "system_control",
+            "description": "Contrôle système natif autonome (sans dépendance ANO-GPT) : état PC (audio/luminosité/réseau/BT/batterie/média), volume, luminosité, Wi-Fi, Bluetooth, lecteur média, ouvrir/fermer une appli, météo, notification.",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {
+                    "action": {
+                        "type": "STRING",
+                        "enum": ["state", "volume", "brightness", "wifi", "bluetooth", "media", "open_app", "close_app", "weather", "notify"],
+                    },
+                    "value": {"type": "STRING", "description": "Valeur (ex. '50%', '+10%', 'mute', 'on'/'off', 'play-pause'/'next', nom d'appli/URL, ville météo)"},
                 },
                 "required": ["action"],
             },
@@ -2978,6 +3153,10 @@ def _execute_commander_call(fname, args, ctx_state):
         ok, out = tool_shell_control(args.get("action") or "", args.get("value") or "", args.get("extra") or "")
         return ok, out, "shell_control", f"Shell · {clip(out, 55)}"
 
+    if fname == "system_control":
+        ok, out = tool_system_control(args.get("action") or "state", args.get("value") or "")
+        return ok, out, "system_control", f"Système · {clip(out, 55)}"
+
     if fname == "run_shell":
         ok, out = tool_run_shell(args.get("command") or "", args.get("cwd") or default_cwd)
         return ok, out, "run_shell", f"Shell · {clip(args.get('command') or '', 32)} ({clip(out, 36)})"
@@ -3120,21 +3299,26 @@ def commander(prompt, default_cwd=""):
         "projects": [{"name": p["name"], "cwd": p["cwd"], "branch": p["branch"]} for p in projs[:12]],
     }
 
-    extra_ano_names = ", ".join(sorted(set(ANO_TOOLS) | set(ANO_RELAYED)))
+    has_ano = ANO_DIR.is_dir()
+    extra_ano_line = (
+        f"3) Toutes les actions et la mémoire partagée d'ANO-GPT (apps, réglages, musique, YouTube, navigateur, fichiers, web, météo, rappels, mails, agenda, GitHub, téléphone, vision écran…).\n"
+        f"Liste complète des outils ANO-GPT accessibles aussi via `ano_tool_call` : {', '.join(sorted(set(ANO_TOOLS) | set(ANO_RELAYED)))}.\n\n"
+        if has_ano
+        else "3) Contrôle système complet autonome via `system_control` (état PC, volume, luminosité, Wi-Fi, Bluetooth, média, apps, météo, notifications) et `run_shell`.\n\n"
+    )
     system = (
         "Tu es Katana AI, le Commandant IA omnipotent d'Agent OS sur Arch Linux / Hyprland.\n"
         "Tu as le contrôle COMPLET de :\n"
         "1) Tous les agents IA (agy, antigravity, claude, codex, copilot, opencode, gemini, aider) : lancer, parler en direct, inspecter, focus, stopper, fermer, escouade, permissions.\n"
-        "2) Tout Hyprland et le shell Caelestia / Ano Shell : changer de bureau (`hypr_workspace`), gérer les fenêtres (`hypr_windows`), piloter les panneaux/réglages/verre/minuteur/focus (`shell_control`), exécuter toute commande sûre (`run_shell`).\n"
-        "3) Toutes les actions et la mémoire partagée d'ANO-GPT (apps, réglages système, volume, luminosité, Wi-Fi, Bluetooth, musique, YouTube, navigateur, fichiers, web, météo, rappels, mails, agenda, GitHub, téléphone, vision écran…).\n"
-        f"Liste complète des outils ANO-GPT accessibles aussi via `ano_tool_call` : {extra_ano_names}.\n\n"
-        f"MÉMOIRE LONG TERME PARTAGÉE ANO-GPT :\n{ano_mem or '(aucune entrée)'}\n\n"
+        "2) Tout Hyprland et le shell Caelestia / Ano Shell : changer de bureau (`hypr_workspace`), gérer les fenêtres (`hypr_windows`), piloter les panneaux/réglages/verre/minuteur/focus (`shell_control`), réglages rapides (`system_control`), exécuter toute commande sûre (`run_shell`).\n"
+        f"{extra_ano_line}"
+        f"MÉMOIRE LONG TERME :\n{ano_mem or '(aucune entrée)'}\n\n"
         "RÈGLES IMPÉRATIVES :\n"
         "- AGIS VRAIMENT via les outils mis à ta disposition. Ne prétends JAMAIS avoir fait une action sans l'avoir exécutée et vérifiée.\n"
         "- Pour changer de bureau (« va sur le bureau 2 », « bureau suivant »), appelle TOUJOURS `hypr_workspace(action='switch', workspace='2')`.\n"
         "- Pour déplacer/fermer/focus une fenêtre, appelle `hypr_windows`. Pour organiser tous les bureaux, `hypr_windows(action='organize')` ou `hypr_orchestrator`.\n"
-        "- Pour connaître l'état réel du PC (volume, batterie, Wi-Fi, Bluetooth, audio, luminosité, RAM), appelle `system_state`.\n"
-        "- Si un outil échoue (`ok: false`), analyse l'erreur et essaie immédiatement une approche alternative fiable (ex. `hypr_workspace`, `hypr_windows`, `run_shell` ou le bon outil ANO-GPT) avant de répondre.\n"
+        "- Pour connaître l'état réel du PC (volume, batterie, Wi-Fi, Bluetooth, audio, luminosité, RAM), appelle `system_state` ou `system_control(action='state')`.\n"
+        "- Si un outil échoue (`ok: false`), analyse l'erreur et essaie immédiatement une approche alternative fiable (`hypr_workspace`, `hypr_windows`, `system_control`, `run_shell` ou le bon outil ANO-GPT) avant de répondre.\n"
         "- Simple lancement d'agent sans tâche (« ouvre codex ») → `agent_dispatch` avec `prompt=''` (CHAÎNE VIDE).\n"
         "- Utilise l'historique pour résoudre les pronoms (« ferme-le », « renvoie-le sur le bureau 2 »).\n"
         "- Réponds en français, court, clair et 100 % factuel d'après les résultats réels des outils."

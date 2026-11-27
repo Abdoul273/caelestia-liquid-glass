@@ -8,11 +8,11 @@ Custom Qt6 liquid-glass shaders, a 9-page Dynamic Island with live AI agent moni
 
 [![Arch Linux](https://img.shields.io/badge/Arch_Linux-1793D1?style=flat&logo=archlinux&logoColor=white)](https://archlinux.org)
 [![Hyprland](https://img.shields.io/badge/Hyprland-0.56+-58E1FF?style=flat)](https://hyprland.org)
-[![Caelestia](https://img.shields.io/badge/caelestia--shell-2.3-e6c093?style=flat)](https://github.com/caelestia-dots/caelestia)
+[![Caelestia](https://img.shields.io/badge/caelestia--shell-2.5-e6c093?style=flat)](https://github.com/caelestia-dots/caelestia)
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue?style=flat)](LICENSE)
 [![CI](https://github.com/Abdoul273/caelestia-liquid-glass/actions/workflows/ci.yml/badge.svg)](https://github.com/Abdoul273/caelestia-liquid-glass/actions/workflows/ci.yml)
 
-**🇬🇧 English** · [🇫🇷 Français](README.fr.md)
+**🇬🇧 English** · [🇫🇷 Français](README.fr.md) · [🫧 Standalone edition: Ano Shell](https://github.com/Abdoul273/ano-shell)
 
 <br>
 
@@ -65,7 +65,7 @@ Custom Qt6 liquid-glass shaders, a 9-page Dynamic Island with live AI agent moni
 ### 🫧 Liquid Glass Everywhere
 - **Unified liquid-glass shell**: panels morph seamlessly out of the screen border into a single continuous piece of glass with a luminous rim and a cursor-tracking specular highlight.
 - **Custom Qt6 GLSL shaders**: beveled refractive edges, subtle chromatic dispersion, specular sheen, and convex lens controls — paired with Hyprland's native blur for low idle overhead (~7% of a single core).
-- **Adaptive glass & power awareness**: automatically tones down glass and Hyprland effects on battery; animated video/GIF wallpapers (`caelestia-animwall`) pause to a static frame when unplugged and resume on AC.
+- **Adaptive glass & performance profiles (`ultra` / `eco` / `auto`)**: switch live in Settings (`Super + I`) or at install time (`./install --profile auto|eco|ultra`); `liquidios-fast.frag` (~2× fewer texture fetches), 1-fetch battery early-exit, `LazyPanel` lazy-loading, and animated video wallpapers (`caelestia-animwall`) paused on battery.
 - **Glass apps & terminal**: themed **kitty** (pill tab bar, dropdown terminal, fuzzy history, hints, command palette), **Starship** Catppuccin Mocha pill prompt, and translucent **GTK4/GTK3** apps (Nautilus with Finder-like floating sidebar, Calculator, Text Editor, Thunar, file chooser portal) automatically synced to your wallpaper palette.
 - **macOS-inspired SDDM login & Plymouth boot**: glass login screen synced with your current wallpaper and `~/.face`, macOS cursor ([apple_cursor](https://github.com/ful1e5/apple_cursor)), and optional minimal boot splash.
 
@@ -93,6 +93,7 @@ Merged into the top border with smooth spring physics and trackpad/scroll naviga
 - **Mission Control (`Super + Tab` or 3-finger swipe up)**: live window overview grid + workspace bar.
 - **Spotlight (`Super + Space`)**: app launcher, system actions, local files, notes/tasks, inline math & unit conversion, and web search.
 - **Live Calculator (`Super + O`)**: single-line glass calculator right under the island with instant copy and history.
+- **Agent OS · Katana AI Studio (`Super + Shift + A`)**: spatial Liquid Glass cockpit monitoring & piloting **Antigravity, AGY CLI, Claude Code, Codex, GitHub Copilot CLI, OpenCode, Gemini CLI, and Aider**, with multi-step Gemini Function Calling controlling both your AI agents and your entire Hyprland/Arch desktop (`hypr_workspace`, `hypr_windows`, `shell_control`, `system_control`).
 - **3D Earbuds HUD (`Super + Shift + B`)**: AirPodsDesktop-style interactive 3D glass popup with inertia rotation, case animation, battery LEDs, and Bluetooth controls.
 - **Optional Gemini AI Tools**: voice assistant (`Super + Shift + Space`), live dictation (`Super + Shift + D`), writing tools (`Super + Shift + W`), and instant translation (`Super + Alt + T`) using your own Gemini API key (`GEMINI_API_KEY` or per-tool config).
 
@@ -111,7 +112,7 @@ Merged into the top border with smooth spring physics and trackpad/scroll naviga
 
 - **Arch Linux** or an Arch-based distro (EndeavourOS, CachyOS, Manjaro…)
 - **Hyprland ≥ 0.56** (Lua configuration)
-- **Caelestia installed and working** (`caelestia-shell` 2.3)
+- **Caelestia installed and working** (`caelestia-shell` 2.5) — or use **[Ano Shell](https://github.com/Abdoul273/ano-shell)** for a 100% standalone install with zero Caelestia dependency.
 
 > [!IMPORTANT]
 > Install **Caelestia** first and log into Hyprland once before running the Liquid Glass installer:

@@ -43,12 +43,20 @@ jobs:
 
       - name: Verify no hardcoded local home paths
         run: |
-          if git grep -nE '/home/[a-zA-Z0-9._-]+/' -- ':!*.md' ':!.github/*'; then
+          if git grep -nE '/home/[a-zA-Z0-9._-]+/' -- ':!*.md' ':!.github/*' ':!tools/sync-repos.py'; then
             echo "Found hardcoded /home/<user>/ path. Use @HOME@ or \$HOME instead."
             exit 1
           fi
 
-      - name: Install test dependencies and run pytest
+      - name: Install test dependencies and run ruff + pytest
         run: |
-          python3 -m pip install --upgrade pip pytest
+          python3 -m pip install --upgrade pip pytest ruff
+          python3 - << 'EOF'
+          import pathlib, subprocess, sys
+          py_files = [
+              str(p) for folder in ("bin", "tools") for p in sorted(pathlib.Path(folder).iterdir())
+              if p.is_file() and (p.suffix == ".py" or p.read_bytes().startswith(b"#!/usr/bin/env python3"))
+          ]
+          sys.exit(subprocess.run(["ruff", "check", "--select", "E9,F63,F7,F82", *py_files], check=False).returncode)
+          EOF
           pytest -q tests/

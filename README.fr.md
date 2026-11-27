@@ -8,11 +8,11 @@ Verre translucide partout, Dynamic Island (9 pages + agents IA), Centre de contr
 
 [![Arch Linux](https://img.shields.io/badge/Arch_Linux-1793D1?style=flat&logo=archlinux&logoColor=white)](https://archlinux.org)
 [![Hyprland](https://img.shields.io/badge/Hyprland-0.56+-58E1FF?style=flat)](https://hyprland.org)
-[![Caelestia](https://img.shields.io/badge/caelestia--shell-2.3-e6c093?style=flat)](https://github.com/caelestia-dots/caelestia)
+[![Caelestia](https://img.shields.io/badge/caelestia--shell-2.5-e6c093?style=flat)](https://github.com/caelestia-dots/caelestia)
 [![Licence](https://img.shields.io/badge/licence-GPL--3.0-blue?style=flat)](LICENSE)
 [![CI](https://github.com/Abdoul273/caelestia-liquid-glass/actions/workflows/ci.yml/badge.svg)](https://github.com/Abdoul273/caelestia-liquid-glass/actions/workflows/ci.yml)
 
-**🇫🇷 Français** · [🇬🇧 English](README.md)
+**🇫🇷 Français** · [🇬🇧 English](README.md) · [🫧 Version autonome : Ano Shell](https://github.com/Abdoul273/ano-shell)
 
 <br>
 
@@ -67,7 +67,7 @@ Verre translucide partout, Dynamic Island (9 pages + agents IA), Centre de contr
 - **kitty survitaminé** : barre d'onglets en pilules (icône du programme, disposition, batterie, heure), terminal déroulant (``Super + ` ``), splits au clavier, recherche floue dans l'historique, sortie de la dernière commande, hints (liens, chemins, `fichier:ligne` → nvim), diffusion dans tous les panneaux, sessions, notification quand une longue commande finit, palette de commandes (`Ctrl + Maj + Alt + P`).
 - **Prompt Starship en capsules** : distribution + utilisateur, dossier, git, langages, durée, erreurs et heure dans des capsules Catppuccin Mocha reliées par une ligne.
 - **Les couleurs suivent ton fond d'écran** : tout est régénéré automatiquement à chaque changement de thème.
-- **Économie d'énergie automatique** : dès le débranchement, le verre et Hyprland s'allègent automatiquement ; les fonds d'écran vidéo (`.mp4`, `.webm`, GIF via `caelestia-animwall`) se jouent uniquement sur secteur et basculent sur une image fixe sur batterie.
+- **Profils de performance & batterie (`ultra` / `eco` / `auto`)** : commutables en direct dans Paramètres (`Super + I`) ou à l'installation (`./install --profile auto|eco|ultra`) ; shader optimisé `liquidios-fast.frag` (~2× plus léger), sortie anticipée 1 lecture sur batterie, panneaux à la demande (`LazyPanel`), et fonds vidéo (`caelestia-animwall`) mis en pause sur batterie.
 
 ### 🪟 Façon macOS
 - **Dock qui se cache**, pensé pour le tiling : il ne prend aucune place, sort du bas de l'écran quand la souris touche le bord (et reste sur un bureau vide), icônes qui grossissent au survol, point sous les apps ouvertes, glisser-déposer pour réorganiser, rebond au lancement, clic droit pour épingler / quitter.
@@ -85,6 +85,7 @@ Verre translucide partout, Dynamic Island (9 pages + agents IA), Centre de contr
     ```json
     "hooks": { "PermissionRequest": [{ "matcher": "*", "hooks": [{ "type": "command", "command": "~/.local/bin/caelestia-agents hook", "timeout": 120 }] }] }
     ```
+- **Agent OS · Studio Katana AI (`Super + Maj + A`)** : cockpit spatial Liquid Glass pilotant **Antigravity, AGY CLI, Claude Code, Codex, GitHub Copilot CLI, OpenCode, Gemini CLI et Aider**, avec Commandant IA en Function Calling multi-étapes contrôlant à la fois la flotte d'agents et tout ton bureau Hyprland/Arch (`hypr_workspace`, `hypr_windows`, `shell_control`, `system_control`).
 - **Écouteurs 3D** (`Super + Maj + B` ou automatique à la connexion) : goutte de verre avec rendu 3D temps réel façon AirPodsDesktop (boîtier qui s'ouvre au ressort, rotation avec inertie, LEDs selon la batterie, jauges Gauche / Boîtier / Droite, volume et reconnexion Bluetooth).
 - **Mission Control** (`Super + Tab` ou **3 doigts vers le haut**) : fenêtres en grille, bureaux en haut, navigation directe.
 - **Spotlight** (`Super + Espace`) : lanceur d'applications, actions système, fichiers locaux, notes/tâches, calculs et conversions, suggestions et recherche web.
@@ -117,7 +118,7 @@ Verre translucide partout, Dynamic Island (9 pages + agents IA), Centre de contr
 
 - **Arch Linux** ou dérivée (EndeavourOS, CachyOS, Manjaro…)
 - **Hyprland 0.56 ou plus récent** (configuration Lua)
-- **Caelestia installé et fonctionnel**
+- **Caelestia installé et fonctionnel** (`caelestia-shell` 2.5) — ou utilise **[Ano Shell](https://github.com/Abdoul273/ano-shell)** pour une installation 100 % autonome sans Caelestia.
 
 > [!IMPORTANT]
 > **Installe d'abord Caelestia**, puis connecte-toi une fois à ta session Hyprland avant d'installer Liquid Glass :
