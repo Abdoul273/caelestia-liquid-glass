@@ -1270,7 +1270,22 @@ var strings = {
     "Puissance maximale": "Maximum power",
     "Sous le titre de la musique (cache d'Onde, .lrc, LRCLIB en ligne)": "Below the track title (Onde cache, .lrc, online LRCLIB)",
     "Suivi Claude Code / Codex et demandes de permissions en direct": "Live Claude Code / Codex tracking and permission prompts",
-    "🔒 Note chiffrée\nOuvre-la dans AetherNotes pour la lire.": "🔒 Encrypted note\nOpen it in AetherNotes to read."
+    "🔒 Note chiffrée\nOuvre-la dans AetherNotes pour la lire.": "🔒 Encrypted note\nOpen it in AetherNotes to read.",
+    "AGENT OS": "AGENT OS",
+    "Attend validation…": "Awaiting approval…",
+    "%1 actif · %2 attente": "%1 active · %2 waiting",
+    "%1 en attente": "%1 waiting",
+    "+%1 sub": "+%1 sub",
+    "%1 fich.": "%1 files",
+    "Lancer": "Launch",
+    "Tous (%1)": "All (%1)",
+    "Actifs (%1)": "Active (%1)",
+    "Aucun agent actif — lance une session en un clic": "No active agent — launch a session in one click",
+    "Aucun agent pour ce filtre": "No agent matching this filter",
+    "Validation · %1": "Approval · %1",
+    "Session active": "Active session",
+    "Stop": "Stop",
+    "En veille": "Idle"
 };
 
 var plurals = {

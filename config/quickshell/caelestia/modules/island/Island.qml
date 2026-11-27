@@ -658,7 +658,7 @@ Item {
         if (Notifs.dnd)
             return "#bf5af2";
         if (Agents.busy)
-            return Agents.kindColour(Agents.lead?.kind ?? "");
+            return Agents.waiting > 0 ? "#ff9f0a" : Agents.kindColour(Agents.lead?.kind ?? "");
         return accent;
     }
     readonly property bool showIdleWeather: Island.weather && !!Weather.cc
@@ -1014,7 +1014,7 @@ Item {
             root.flash("agentDone", 7000);
         }
         function onShownChanged(): void {
-            if (Agents.shown.length === 0 && root.pageName === "agents")
+            if (!Island.agents && root.pageName === "agents")
                 root.pageName = "info";
         }
     }
@@ -1615,7 +1615,7 @@ Item {
     }
 
     function actColour(a: string): color {
-        return ({ call: callMuted ? "#ff453a" : root.green, transfer: "#0a84ff", record: "#ff453a", clockMini: "#ff9f0a", agentsMini: Agents.kindColour(Agents.lead?.kind ?? ""), media: root.accent, caffeine: root.fg })[a] ?? root.fg;
+        return ({ call: callMuted ? "#ff453a" : root.green, transfer: "#0a84ff", record: "#ff453a", clockMini: "#ff9f0a", agentsMini: Agents.waiting > 0 ? "#ff9f0a" : Agents.kindColour(Agents.lead?.kind ?? ""), media: root.accent, caffeine: root.fg })[a] ?? root.fg;
     }
 
     readonly property bool notifHasActions: (notif?.actions?.length ?? 0) > 0
@@ -1657,9 +1657,21 @@ Item {
         case "clockMini":
             return Qt.size((clockLabel ? 290 : 230) + actsInset, 40);
         case "agentsMini":
-            return Qt.size(330 + actsInset, 40);
-        case "agents":
-            return Qt.size(pageWidth, 76 + 61 * Math.min(3, Agents.shown.length));
+            return Qt.size(364 + actsInset, 40);
+        case "agents": {
+            const list = Agents.filteredShown;
+            const hasFilters = Agents.presentKinds.length > 1 || Agents.shown.length > 2;
+            const hasLauncher = Agents.launcherOpen && Agents.shown.length > 0;
+            let bodyH = 112;
+            if (list.length > 0) {
+                let sum = 0;
+                for (let i = 0; i < list.length; i++)
+                    sum += (list[i].id === Agents.expandedId ? 124 : 68) + (i > 0 ? 6 : 0);
+                bodyH = Math.min(316, sum);
+            }
+            const extra = (hasFilters ? 32 : 0) + (hasLauncher ? 36 : 0);
+            return Qt.size(Math.max(pageWidth, 610), 66 + extra + bodyH);
+        }
         case "perm":
             return Qt.size(Math.max(pageWidth, 600), 148);
         case "agentDone":
@@ -2512,7 +2524,7 @@ Item {
 
     // Pages de l'île ouverte : enregistrement et minuteur en cours d'abord (s'il y en a),
     // puis heure/météo ↔ performances du PC ↔ musique (si un lecteur est actif)
-    readonly property list<string> pages: [...(inCall ? ["callFull"] : []), ...(transfer ? ["transferFull"] : []), ...(Recorder.running ? ["recordFull"] : []), ...(clockKind !== "" ? ["clock"] : []), ...(IdleInhibitor.enabled ? ["caffeine"] : []), ...(Agents.shown.length > 0 ? ["agents"] : []), "info", "perf", ...(hasMedia ? ["player"] : [])]
+    readonly property list<string> pages: [...(inCall ? ["callFull"] : []), ...(transfer ? ["transferFull"] : []), ...(Recorder.running ? ["recordFull"] : []), ...(clockKind !== "" ? ["clock"] : []), ...(IdleInhibitor.enabled ? ["caffeine"] : []), ...(Island.agents ? ["agents"] : []), "info", "perf", ...(hasMedia ? ["player"] : [])]
     // Page retenue par son nom : elle reste la même quand d'autres pages apparaissent ou disparaissent
     property string pageName: "info"
     readonly property int pageIndex: Math.max(0, pages.indexOf(pageName))
@@ -3008,7 +3020,7 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
             } else if (root.mode === "agentsMini") {
                 Agents.focus(Agents.lead);
             } else if (root.mode === "agentDone") {
-                Agents.focusPid(root.agentDone?.id ?? 0);
+                Agents.focus(root.agentDone);
                 root.dismissCurrent();
             } else if (button === Qt.MiddleButton || root.mode === "media") {
                 root.player?.togglePlaying();
@@ -3727,8 +3739,8 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
                 IdleIcon {
                     shown: idleFace.agentsMiniOn
                     icon: "smart_toy"
-                    tint: Agents.kindColour(Agents.lead?.kind ?? "")
-                    count: Agents.working
+                    tint: Agents.waiting > 0 ? "#ff9f0a" : Agents.kindColour(Agents.lead?.kind ?? "")
+                    count: Agents.activeCount
                     leadGap: idleIcons.hasBeforeAgents ? 6 : 0
                 }
 
@@ -6886,59 +6898,86 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
             }
         }
 
-        // ── agents IA au travail (compact) : anneau qui tourne, projet, outil en cours ──
+        // ── agents IA au travail (compact) : anneau qui tourne, moteur, projet, outil en cours ──
         Face {
             active: root.mode === "agentsMini"
             inset: root.actsInset
 
             readonly property var lead: Agents.lead
-            readonly property color tint: Agents.kindColour(lead?.kind ?? "")
+            readonly property bool isWait: (lead?.status ?? "") === "waiting"
+            readonly property color tint: isWait ? "#ff9f0a" : Agents.kindColour(lead?.kind ?? "")
 
             AgentSpinner {
                 id: amSpin
 
                 anchors.left: parent.left
-                anchors.leftMargin: 16
+                anchors.leftMargin: 14
                 anchors.verticalCenter: parent.verticalCenter
                 tint: parent.tint
-                spinning: root.mode === "agentsMini"
+                spinning: root.mode === "agentsMini" && !parent.isWait
+                letter: Agents.kindLetter(parent.lead?.kind ?? "")
+            }
+
+            Rectangle {
+                id: amKindPill
+
+                anchors.left: amSpin.right
+                anchors.leftMargin: 8
+                anchors.verticalCenter: parent.verticalCenter
+                width: amKindTxt.implicitWidth + 10
+                height: 16
+                radius: 8
+                color: Qt.alpha(parent.tint, 0.18)
+                border.width: 0.5
+                border.color: Qt.alpha(parent.tint, 0.38)
+
+                StyledText {
+                    id: amKindTxt
+
+                    anchors.centerIn: parent
+                    text: Agents.kindShort(parent.parent.lead?.kind ?? "")
+                    color: parent.parent.tint
+                    font.pointSize: 6.2
+                    font.weight: Font.Bold
+                    font.letterSpacing: 0.45
+                }
             }
 
             StyledText {
                 id: amName
 
-                anchors.left: amSpin.right
-                anchors.leftMargin: 10
+                anchors.left: amKindPill.right
+                anchors.leftMargin: 7
                 anchors.verticalCenter: parent.verticalCenter
-                width: Math.min(implicitWidth, 120)
+                width: Math.min(implicitWidth, 108)
                 elide: Text.ElideRight
                 text: parent.lead?.project ?? ""
                 color: root.fg
-                font.pointSize: 10
+                font.pointSize: 9.6
                 font.weight: Font.Bold
             }
 
             StyledText {
                 anchors.left: amName.right
-                anchors.leftMargin: 8
+                anchors.leftMargin: 7
                 anchors.right: amRight.left
                 anchors.rightMargin: 10
                 anchors.verticalCenter: parent.verticalCenter
                 elide: Text.ElideRight
-                text: parent.lead?.tool || I18n.tr("réfléchit…")
-                color: root.fgDim
-                font.pointSize: 9
+                text: parent.isWait ? I18n.tr("Attend validation…") : (parent.lead?.focus || parent.lead?.tool || I18n.tr("Réfléchit…"))
+                color: parent.isWait ? "#ff9f0a" : root.fgDim
+                font.pointSize: 8.8
             }
 
             StyledText {
                 id: amRight
 
                 anchors.right: parent.right
-                anchors.rightMargin: 18
+                anchors.rightMargin: 16
                 anchors.verticalCenter: parent.verticalCenter
-                text: Agents.working > 1 ? `×${Agents.working}` : Agents.elapsed(parent.lead?.since ?? Agents.now)
+                text: Agents.activeCount > 1 ? `×${Agents.activeCount}` : Agents.elapsed(parent.lead?.since ?? Agents.now)
                 color: parent.tint
-                font.pointSize: 10
+                font.pointSize: 9.8
                 font.weight: Font.Bold
                 font.features: {
                     "tnum": 1
@@ -6946,12 +6985,14 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
             }
         }
 
-        // ── agents IA : cockpit Liquid Glass (Claude Code / Codex, cartes vitrées biseautées, clic = focus terminal) ──
+        // ── AGENT OS : cockpit multi-agents Liquid Glass (Antigravity, AGY CLI, Claude, Codex, Copilot, OpenCode…) ──
         Face {
             id: agentsFace
 
             readonly property real hoverX: Math.max(0, Math.min(width, islandHover.point.position.x - (root.width - width) / 2))
-            readonly property color leadTint: Agents.lead ? Agents.kindColour(Agents.lead.kind) : root.accent
+            readonly property color leadTint: Agents.waiting > 0 ? "#ff9f0a" : (Agents.lead ? Agents.kindColour(Agents.lead.kind) : root.accent)
+            readonly property bool showFilters: Agents.presentKinds.length > 1 || Agents.shown.length > 2
+            readonly property bool showLauncherBar: Agents.launcherOpen && Agents.shown.length > 0
 
             active: root.mode === "agents"
             slide: root.pageSlide("agents")
@@ -6960,14 +7001,14 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
             Rectangle {
                 x: 16
                 y: 8
-                width: 240
-                height: 44
-                radius: 22
-                opacity: Colours.light ? 0.32 : 0.55
+                width: 280
+                height: 46
+                radius: 23
+                opacity: Colours.light ? 0.34 : 0.58
                 gradient: Gradient {
                     orientation: Gradient.Horizontal
                     GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 0.3; color: Qt.alpha(agentsFace.leadTint, 0.14) }
+                    GradientStop { position: 0.3; color: Qt.alpha(agentsFace.leadTint, 0.15) }
                     GradientStop { position: 0.75; color: Qt.alpha(agentsFace.leadTint, 0.05) }
                     GradientStop { position: 1.0; color: "transparent" }
                 }
@@ -6980,7 +7021,7 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: Math.max(120, parent.width - 72)
                 height: 1
-                opacity: root.hovered ? 0.36 : 0.18
+                opacity: root.hovered ? 0.38 : 0.18
                 gradient: Gradient {
                     orientation: Gradient.Horizontal
                     GradientStop { position: 0.0; color: "transparent" }
@@ -7009,21 +7050,21 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
                 Behavior on opacity { NumberAnimation { duration: 180 } }
             }
 
-            // En-tête Agents IA
+            // En-tête AGENT OS
             Item {
                 id: agHead
 
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.leftMargin: 22
-                anchors.rightMargin: 22
-                y: 14
+                anchors.leftMargin: 20
+                anchors.rightMargin: 20
+                y: 13
                 height: 26
 
                 Row {
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: 8
+                    spacing: 7
 
                     Rectangle {
                         anchors.verticalCenter: parent.verticalCenter
@@ -7031,9 +7072,9 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
                         height: 26
                         radius: 9
                         border.width: 0.5
-                        border.color: Qt.alpha(agentsFace.leadTint, 0.38)
+                        border.color: Qt.alpha(agentsFace.leadTint, 0.4)
                         gradient: Gradient {
-                            GradientStop { position: 0.0; color: Qt.alpha(agentsFace.leadTint, 0.18) }
+                            GradientStop { position: 0.0; color: Qt.alpha(agentsFace.leadTint, 0.2) }
                             GradientStop { position: 1.0; color: Qt.alpha(root.fg, 0.04) }
                         }
 
@@ -7050,7 +7091,7 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
 
                         MaterialIcon {
                             anchors.centerIn: parent
-                            text: "smart_toy"
+                            text: "hub"
                             color: agentsFace.leadTint
                             fontStyle: Tokens.font.icon.size(14).build()
                             fill: 1
@@ -7059,11 +7100,11 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
 
                     StyledText {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: I18n.tr("AGENTS IA")
+                        text: I18n.tr("AGENT OS")
                         color: root.fg
                         font.pointSize: 8.6
-                        font.weight: Font.Bold
-                        font.letterSpacing: 0.75
+                        font.weight: Font.Black
+                        font.letterSpacing: 0.85
                     }
 
                     // Pastille d'état en direct
@@ -7072,9 +7113,9 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
                         width: agStatusRow.implicitWidth + 14
                         height: 19
                         radius: 9.5
-                        color: Agents.working > 0 ? Qt.alpha(agentsFace.leadTint, 0.14) : Qt.alpha(root.fg, 0.065)
+                        color: Agents.activeCount > 0 ? Qt.alpha(agentsFace.leadTint, 0.15) : Qt.alpha(root.fg, 0.065)
                         border.width: 0.5
-                        border.color: Agents.working > 0 ? Qt.alpha(agentsFace.leadTint, 0.34) : Qt.alpha(root.fg, 0.14)
+                        border.color: Agents.activeCount > 0 ? Qt.alpha(agentsFace.leadTint, 0.36) : Qt.alpha(root.fg, 0.14)
 
                         Row {
                             id: agStatusRow
@@ -7087,17 +7128,55 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
                                 width: 5.5
                                 height: 5.5
                                 radius: 2.75
-                                color: Agents.working > 0 ? agentsFace.leadTint : root.green
+                                color: Agents.activeCount > 0 ? agentsFace.leadTint : root.green
+
+                                SequentialAnimation on opacity {
+                                    running: Agents.activeCount > 0 && root.mode === "agents"
+                                    loops: Animation.Infinite
+                                    NumberAnimation { to: 0.35; duration: 750; easing.type: Easing.InOutSine }
+                                    NumberAnimation { to: 1.0; duration: 750; easing.type: Easing.InOutSine }
+                                }
                             }
 
                             StyledText {
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: Agents.working > 0 ? I18n.tr("%1 actif(s)").arg(Agents.working) : I18n.tr("en veille")
-                                color: Agents.working > 0 ? agentsFace.leadTint : root.fgDim
-                                font.pointSize: 7.4
+                                text: {
+                                    if (Agents.waiting > 0 && Agents.working > 0)
+                                        return I18n.tr("%1 actif · %2 attente").arg(Agents.working).arg(Agents.waiting);
+                                    if (Agents.waiting > 0)
+                                        return I18n.tr("%1 en attente").arg(Agents.waiting);
+                                    if (Agents.working > 0)
+                                        return I18n.tr("%1 actif(s)").arg(Agents.working);
+                                    return Agents.shown.length > 0 ? I18n.tr("En veille") : I18n.tr("Prêt");
+                                }
+                                color: Agents.activeCount > 0 ? agentsFace.leadTint : root.fgDim
+                                font.pointSize: 7.3
                                 font.weight: Font.Bold
                                 font.features: { "tnum": 1 }
                             }
+                        }
+                    }
+
+                    // Pastille sous-agents actifs
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: Agents.totalSubagents > 0
+                        width: agSubTxt.implicitWidth + 12
+                        height: 19
+                        radius: 9.5
+                        color: Qt.alpha("#a78bfa", 0.16)
+                        border.width: 0.5
+                        border.color: Qt.alpha("#a78bfa", 0.36)
+
+                        StyledText {
+                            id: agSubTxt
+
+                            anchors.centerIn: parent
+                            text: I18n.tr("+%1 sub").arg(Agents.totalSubagents)
+                            color: "#a78bfa"
+                            font.pointSize: 7.1
+                            font.weight: Font.Bold
+                            font.features: { "tnum": 1 }
                         }
                     }
                 }
@@ -7105,27 +7184,70 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
                 Row {
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: 7
+                    spacing: 6
 
+                    // Micro-télémétrie cumulée (tokens / fichiers)
                     Rectangle {
                         anchors.verticalCenter: parent.verticalCenter
-                        visible: Agents.shown.length > 3
-                        width: agMoreTxt.implicitWidth + 12
+                        visible: Agents.totalTokens > 0 || Agents.totalFiles > 0
+                        width: agStatTxt.implicitWidth + 12
                         height: 20
                         radius: 10
-                        color: Qt.alpha(root.fg, 0.07)
+                        color: Qt.alpha(root.fg, 0.06)
                         border.width: 0.5
-                        border.color: Qt.alpha(root.fg, 0.14)
+                        border.color: Qt.alpha(root.fg, 0.12)
 
                         StyledText {
-                            id: agMoreTxt
+                            id: agStatTxt
 
                             anchors.centerIn: parent
-                            text: I18n.tr("+%1").arg(Agents.shown.length - 3)
+                            text: {
+                                const parts = [];
+                                if (Agents.totalFiles > 0)
+                                    parts.push(I18n.tr("%1 fich.").arg(Agents.totalFiles));
+                                if (Agents.totalTokens > 0)
+                                    parts.push(`${Agents.fmtTokens(Agents.totalTokens)} tok`);
+                                return parts.join(" · ");
+                            }
                             color: root.fgDim
-                            font.pointSize: 7.5
-                            font.weight: Font.Bold
+                            font.pointSize: 7.1
+                            font.weight: Font.DemiBold
                             font.features: { "tnum": 1 }
+                        }
+                    }
+
+                    // Bouton lanceur rapide (+)
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: Agents.shown.length > 0
+                        width: 24
+                        height: 22
+                        radius: 11
+                        scale: launchToggleArea.pressed ? 0.92 : 1
+                        color: Agents.launcherOpen
+                            ? Qt.alpha(agentsFace.leadTint, 0.22)
+                            : Qt.alpha(root.fg, launchToggleArea.containsMouse ? 0.14 : 0.07)
+                        border.width: 0.5
+                        border.color: Agents.launcherOpen
+                            ? Qt.alpha(agentsFace.leadTint, 0.45)
+                            : Qt.alpha(root.fg, launchToggleArea.containsMouse ? 0.3 : 0.15)
+
+                        Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+
+                        MaterialIcon {
+                            anchors.centerIn: parent
+                            text: Agents.launcherOpen ? "close" : "add"
+                            color: Agents.launcherOpen ? agentsFace.leadTint : root.fg
+                            fontStyle: Tokens.font.icon.size(13).build()
+                        }
+
+                        MouseArea {
+                            id: launchToggleArea
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: Agents.launcherOpen = !Agents.launcherOpen
                         }
                     }
 
@@ -7133,7 +7255,7 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
                     Rectangle {
                         anchors.verticalCenter: parent.verticalCenter
                         visible: Agents.doneShown > 0
-                        width: cleanRow.implicitWidth + 16
+                        width: cleanRow.implicitWidth + 14
                         height: 22
                         radius: 11
                         scale: cleanArea.pressed ? 0.94 : 1
@@ -7143,17 +7265,6 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
 
                         Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
                         Behavior on color { ColorAnimation { duration: 150 } }
-
-                        Rectangle {
-                            anchors.top: parent.top
-                            anchors.topMargin: 1
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            width: parent.width - 14
-                            height: 1
-                            radius: 0.5
-                            color: "#ffffff"
-                            opacity: Colours.light ? 0.32 : 0.18
-                        }
 
                         Row {
                             id: cleanRow
@@ -7172,7 +7283,7 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Agents.doneShown > 1 ? I18n.tr("Nettoyer (%1)").arg(Agents.doneShown) : I18n.tr("Nettoyer")
                                 color: root.fg
-                                font.pointSize: 7.6
+                                font.pointSize: 7.4
                                 font.weight: Font.Bold
                             }
                         }
@@ -7191,9 +7302,9 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
 
             // Séparateur horizontal effilé
             Rectangle {
-                x: 24
-                y: 45
-                width: parent.width - 48
+                x: 22
+                y: 44
+                width: parent.width - 44
                 height: 1
                 gradient: Gradient {
                     orientation: Gradient.Horizontal
@@ -7204,231 +7315,831 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
                 }
             }
 
-            // Cartes d'agents en verre biseauté
+            // Corps principal : lanceur rapide + filtres moteurs + liste scrollable des agents
             Column {
                 anchors.left: parent.left
                 anchors.right: parent.right
-                y: 52
-                anchors.leftMargin: 20
-                anchors.rightMargin: 20
-                spacing: 5
+                anchors.bottom: parent.bottom
+                anchors.leftMargin: 18
+                anchors.rightMargin: 18
+                anchors.bottomMargin: 12
+                y: 51
+                spacing: 6
 
-                Repeater {
-                    model: Agents.shown.slice(0, 3)
+                // Tiroir Lanceur Rapide (quand ouvert via +)
+                Row {
+                    visible: agentsFace.showLauncherBar
+                    width: parent.width
+                    height: visible ? 30 : 0
+                    spacing: 5
 
-                    Item {
-                        id: agRow
+                    StyledText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: I18n.tr("Lancer")
+                        color: root.fgDim
+                        font.pointSize: 7.4
+                        font.weight: Font.Bold
+                    }
 
-                        required property var modelData
-                        readonly property bool working: modelData.status === "working"
-                        readonly property bool waiting: modelData.status === "waiting"
-                        readonly property bool done: !working && !waiting
-                        readonly property color tint: Agents.kindColour(modelData.kind)
-                        readonly property color stateCol: waiting ? "#ff9f0a" : working ? tint : root.green
-
-                        width: parent?.width ?? 0
-                        height: 56
+                    Repeater {
+                        model: Agents.launchKinds
 
                         Rectangle {
-                            anchors.fill: parent
-                            radius: 14
-                            scale: agArea.pressed ? 0.985 : 1
+                            id: lPill
+
+                            required property string modelData
+                            readonly property color tint: Agents.kindColour(modelData)
+
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: lPillRow.implicitWidth + 14
+                            height: 24
+                            radius: 12
+                            scale: lPillArea.pressed ? 0.93 : 1
+                            color: Qt.alpha(tint, lPillArea.containsMouse ? 0.22 : 0.12)
                             border.width: 0.5
-                            border.color: Qt.alpha(agRow.stateCol, agArea.containsMouse ? 0.45 : 0.22)
-                            gradient: Gradient {
-                                GradientStop { position: 0.0; color: Qt.alpha(agRow.stateCol, agArea.pressed ? 0.18 : agArea.containsMouse ? 0.13 : 0.085) }
-                                GradientStop { position: 1.0; color: Qt.alpha(root.fg, 0.03) }
-                            }
+                            border.color: Qt.alpha(tint, lPillArea.containsMouse ? 0.52 : 0.28)
 
-                            Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
-                            Behavior on border.color { ColorAnimation { duration: 160 } }
-
-                            // Reflet spéculaire supérieur sur la carte agent
-                            Rectangle {
-                                anchors.top: parent.top
-                                anchors.topMargin: 1
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.leftMargin: 14
-                                anchors.rightMargin: 14
-                                height: 1
-                                radius: 0.5
-                                color: "#ffffff"
-                                opacity: Colours.light ? 0.32 : 0.16
-                            }
-
-                            // Épine lumineuse latérale d'état
-                            Rectangle {
-                                anchors.left: parent.left
-                                anchors.leftMargin: 6
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: 3
-                                height: 24
-                                radius: 1.5
-                                color: agRow.stateCol
-                            }
-                        }
-
-                        MouseArea {
-                            id: agArea
-
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: agRow.modelData.window ? Qt.PointingHandCursor : Qt.ArrowCursor
-                            onClicked: Agents.focus(agRow.modelData)
-                        }
-
-                        AgentSpinner {
-                            id: agSpin
-
-                            anchors.left: parent.left
-                            anchors.leftMargin: 16
-                            anchors.verticalCenter: parent.verticalCenter
-                            size: 30
-                            tint: agRow.stateCol
-                            spinning: agRow.working && root.mode === "agents"
-                            done: agRow.done
-                            letter: agRow.modelData.kind === "codex" ? "X" : "C"
-                        }
-
-                        Column {
-                            anchors.left: agSpin.right
-                            anchors.leftMargin: 12
-                            anchors.right: agRightCol.left
-                            anchors.rightMargin: 10
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: 2
+                            Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
 
                             Row {
-                                width: parent.width
-                                spacing: 6
+                                id: lPillRow
 
-                                // Micro-badge de type (CLAUDE / CODEX)
-                                Rectangle {
-                                    id: kindPill
-
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    width: kindTxt.implicitWidth + 10
-                                    height: 15
-                                    radius: 7.5
-                                    color: Qt.alpha(agRow.tint, 0.16)
-                                    border.width: 0.5
-                                    border.color: Qt.alpha(agRow.tint, 0.34)
-
-                                    StyledText {
-                                        id: kindTxt
-
-                                        anchors.centerIn: parent
-                                        text: Agents.kindName(agRow.modelData.kind).toUpperCase()
-                                        color: agRow.tint
-                                        font.pointSize: 6.2
-                                        font.weight: Font.Bold
-                                        font.letterSpacing: 0.55
-                                    }
-                                }
+                                anchors.centerIn: parent
+                                spacing: 4
 
                                 StyledText {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    width: Math.max(40, parent.width - kindPill.width - 6)
-                                    elide: Text.ElideRight
-                                    text: `${agRow.modelData.project}${agRow.modelData.title ? " · " + agRow.modelData.title : ""}`
+                                    text: Agents.kindLetter(lPill.modelData)
+                                    color: lPill.tint
+                                    font.pointSize: 7.2
+                                    font.weight: Font.Black
+                                }
+                                StyledText {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: Agents.kindName(lPill.modelData)
                                     color: root.fg
-                                    font.pointSize: 9.4
+                                    font.pointSize: 7.4
                                     font.weight: Font.DemiBold
                                 }
                             }
 
+                            MouseArea {
+                                id: lPillArea
+
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: Agents.launch(lPill.modelData)
+                            }
+                        }
+                    }
+                }
+
+                // Barre de filtres moteurs Agent OS
+                Flickable {
+                    visible: agentsFace.showFilters
+                    width: parent.width
+                    height: visible ? 26 : 0
+                    contentWidth: filterRow.implicitWidth
+                    contentHeight: 26
+                    clip: true
+                    interactive: contentWidth > width
+                    boundsBehavior: Flickable.StopAtBounds
+
+                    Row {
+                        id: filterRow
+
+                        height: 26
+                        spacing: 5
+
+                        // Pilule "Tous"
+                        Rectangle {
+                            readonly property bool sel: Agents.filter === "all"
+
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: fAllTxt.implicitWidth + 14
+                            height: 22
+                            radius: 11
+                            color: sel ? Qt.alpha(root.fg, 0.16) : Qt.alpha(root.fg, fAllArea.containsMouse ? 0.11 : 0.055)
+                            border.width: 0.5
+                            border.color: sel ? Qt.alpha(root.fg, 0.35) : Qt.alpha(root.fg, 0.12)
+
                             StyledText {
-                                width: parent.width
-                                elide: Text.ElideRight
-                                text: agRow.waiting ? I18n.tr("Attend ta réponse") : agRow.working ? (agRow.modelData.tool || I18n.tr("Réfléchit…")) : (agRow.modelData.reply || I18n.tr("Prêt"))
-                                color: agRow.waiting ? "#ff9f0a" : root.fgDim
-                                font.pointSize: 8.4
+                                id: fAllTxt
+
+                                anchors.centerIn: parent
+                                text: I18n.tr("Tous (%1)").arg(Agents.shown.length)
+                                color: sel ? root.fg : root.fgDim
+                                font.pointSize: 7.3
+                                font.weight: sel ? Font.Bold : Font.DemiBold
+                                font.features: { "tnum": 1 }
+                            }
+
+                            MouseArea {
+                                id: fAllArea
+
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: Agents.setFilter("all")
                             }
                         }
 
-                        // Colonne droite : pastille durée + fichiers modifiés + × au survol si terminé
-                        Row {
-                            id: agRightCol
+                        // Pilule "Actifs" (si mélange actifs + terminés)
+                        Rectangle {
+                            readonly property bool sel: Agents.filter === "active"
 
-                            z: 2
-                            anchors.right: parent.right
-                            anchors.rightMargin: 10
+                            visible: Agents.activeCount > 0 && Agents.doneShown > 0
                             anchors.verticalCenter: parent.verticalCenter
-                            spacing: 6
+                            width: fActTxt.implicitWidth + 14
+                            height: 22
+                            radius: 11
+                            color: sel ? Qt.alpha(agentsFace.leadTint, 0.22) : Qt.alpha(root.fg, fActArea.containsMouse ? 0.11 : 0.055)
+                            border.width: 0.5
+                            border.color: sel ? Qt.alpha(agentsFace.leadTint, 0.48) : Qt.alpha(root.fg, 0.12)
 
-                            Column {
+                            StyledText {
+                                id: fActTxt
+
+                                anchors.centerIn: parent
+                                text: I18n.tr("Actifs (%1)").arg(Agents.activeCount)
+                                color: sel ? agentsFace.leadTint : root.fgDim
+                                font.pointSize: 7.3
+                                font.weight: sel ? Font.Bold : Font.DemiBold
+                                font.features: { "tnum": 1 }
+                            }
+
+                            MouseArea {
+                                id: fActArea
+
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: Agents.setFilter("active")
+                            }
+                        }
+
+                        // Pilules par moteur présent
+                        Repeater {
+                            model: Agents.presentKinds
+
+                            Rectangle {
+                                id: fKindPill
+
+                                required property var modelData
+                                readonly property bool sel: Agents.filter === modelData.kind
+                                readonly property color tint: Agents.kindColour(modelData.kind)
+
                                 anchors.verticalCenter: parent.verticalCenter
-                                spacing: 2
+                                width: fKindRow.implicitWidth + 14
+                                height: 22
+                                radius: 11
+                                color: sel ? Qt.alpha(tint, 0.22) : Qt.alpha(tint, fKindArea.containsMouse ? 0.14 : 0.08)
+                                border.width: 0.5
+                                border.color: sel ? Qt.alpha(tint, 0.54) : Qt.alpha(tint, 0.22)
 
-                                Rectangle {
-                                    anchors.right: parent.right
-                                    width: agElapsedTxt.implicitWidth + 12
-                                    height: 18
-                                    radius: 9
-                                    color: agRow.done ? Qt.alpha(root.fg, 0.065) : Qt.alpha(agRow.stateCol, 0.14)
-                                    border.width: 0.5
-                                    border.color: agRow.done ? Qt.alpha(root.fg, 0.13) : Qt.alpha(agRow.stateCol, 0.32)
+                                Row {
+                                    id: fKindRow
 
+                                    anchors.centerIn: parent
+                                    spacing: 4.5
+
+                                    Rectangle {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: 5
+                                        height: 5
+                                        radius: 2.5
+                                        color: fKindPill.modelData.active > 0 ? fKindPill.tint : Qt.alpha(fKindPill.tint, 0.45)
+                                    }
                                     StyledText {
-                                        id: agElapsedTxt
-
-                                        anchors.centerIn: parent
-                                        text: Agents.elapsed(agRow.modelData.since)
-                                        color: agRow.done ? root.fgDim : agRow.stateCol
-                                        font.pointSize: 7.8
-                                        font.weight: Font.Bold
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: `${Agents.kindName(fKindPill.modelData.kind)} ${fKindPill.modelData.total}`
+                                        color: fKindPill.sel ? fKindPill.tint : root.fg
+                                        font.pointSize: 7.3
+                                        font.weight: fKindPill.sel ? Font.Bold : Font.DemiBold
                                         font.features: { "tnum": 1 }
                                     }
                                 }
 
-                                StyledText {
-                                    anchors.right: parent.right
-                                    visible: agRow.modelData.files > 0
-                                    text: I18n.trn("%n fichier(s)", agRow.modelData.files)
-                                    color: root.fgDim
-                                    font.pointSize: 7.2
-                                    font.features: { "tnum": 1 }
-                                }
-                            }
-
-                            // Bouton × concentrique au survol d'un agent terminé
-                            Rectangle {
-                                id: agCloseBtn
-
-                                anchors.verticalCenter: parent.verticalCenter
-                                visible: agRow.done && rowHover.hovered
-                                z: 2
-                                width: 24
-                                height: 24
-                                radius: 12
-                                scale: agCloseArea.pressed ? 0.88 : 1
-                                color: Qt.alpha(root.fg, agCloseArea.containsMouse ? 0.18 : 0.1)
-                                border.width: 0.5
-                                border.color: Qt.alpha(root.fg, agCloseArea.containsMouse ? 0.34 : 0.18)
-
-                                Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
-
-                                MaterialIcon {
-                                    anchors.centerIn: parent
-                                    text: "close"
-                                    color: root.fg
-                                    fontStyle: Tokens.font.icon.size(12).build()
-                                }
-
                                 MouseArea {
-                                    id: agCloseArea
+                                    id: fKindArea
 
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: Agents.dismiss(agRow.modelData)
+                                    onClicked: Agents.setFilter(fKindPill.modelData.kind)
                                 }
                             }
                         }
+                    }
+                }
 
-                        HoverHandler {
-                            id: rowHover
+                // État vide élégant avec lancement en 1 clic
+                Rectangle {
+                    visible: Agents.filteredShown.length === 0
+                    width: parent.width
+                    height: visible ? 106 : 0
+                    radius: 14
+                    color: Qt.alpha(root.fg, 0.045)
+                    border.width: 0.5
+                    border.color: Qt.alpha(root.fg, 0.12)
+
+                    Column {
+                        anchors.centerIn: parent
+                        width: parent.width - 28
+                        spacing: 10
+
+                        StyledText {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: Agents.shown.length === 0
+                                ? I18n.tr("Aucun agent actif — lance une session en un clic")
+                                : I18n.tr("Aucun agent pour ce filtre")
+                            color: root.fgDim
+                            font.pointSize: 8.6
+                            font.weight: Font.Medium
+                        }
+
+                        Flow {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            spacing: 6
+
+                            Repeater {
+                                model: Agents.launchKinds
+
+                                Rectangle {
+                                    id: emptyLPill
+
+                                    required property string modelData
+                                    readonly property color tint: Agents.kindColour(modelData)
+
+                                    width: emptyLRow.implicitWidth + 16
+                                    height: 28
+                                    radius: 14
+                                    scale: emptyLArea.pressed ? 0.94 : 1
+                                    color: Qt.alpha(tint, emptyLArea.containsMouse ? 0.24 : 0.12)
+                                    border.width: 0.5
+                                    border.color: Qt.alpha(tint, emptyLArea.containsMouse ? 0.55 : 0.3)
+
+                                    Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
+
+                                    Row {
+                                        id: emptyLRow
+
+                                        anchors.centerIn: parent
+                                        spacing: 5
+
+                                        StyledText {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: Agents.kindLetter(emptyLPill.modelData)
+                                            color: emptyLPill.tint
+                                            font.pointSize: 8
+                                            font.weight: Font.Black
+                                        }
+                                        StyledText {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: Agents.kindName(emptyLPill.modelData)
+                                            color: root.fg
+                                            font.pointSize: 8
+                                            font.weight: Font.DemiBold
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        id: emptyLArea
+
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: Agents.launch(emptyLPill.modelData)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Liste scrollable des cartes d'agents en verre biseauté
+                Flickable {
+                    id: agListFlick
+
+                    visible: Agents.filteredShown.length > 0
+                    width: parent.width
+                    height: visible ? Math.min(316, agListCol.implicitHeight) : 0
+                    contentWidth: width
+                    contentHeight: agListCol.implicitHeight
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+                    flickableDirection: Flickable.VerticalFlick
+
+                    Column {
+                        id: agListCol
+
+                        width: agListFlick.width
+                        spacing: 6
+
+                        Repeater {
+                            model: Agents.filteredShown
+
+                            Item {
+                                id: agRow
+
+                                required property var modelData
+                                readonly property bool working: modelData.status === "working"
+                                readonly property bool waiting: modelData.status === "waiting"
+                                readonly property bool done: !working && !waiting
+                                readonly property bool expanded: Agents.expandedId === modelData.id
+                                readonly property color tint: Agents.kindColour(modelData.kind)
+                                readonly property color stateCol: waiting ? "#ff9f0a" : working ? tint : root.green
+                                readonly property bool hasSteps: (modelData.stepTotal ?? 0) > 0
+                                readonly property bool hasMeta: Boolean(modelData.model || modelData.branch || (modelData.files ?? 0) > 0 || (modelData.tokens ?? 0) > 0 || hasSteps)
+
+                                width: agListCol.width
+                                height: expanded ? 124 : 68
+
+                                Behavior on height { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+
+                                Rectangle {
+                                    anchors.fill: parent
+                                    radius: 14
+                                    scale: agArea.pressed ? 0.988 : 1
+                                    border.width: 0.5
+                                    border.color: Qt.alpha(agRow.stateCol, agRow.expanded ? 0.52 : agArea.containsMouse ? 0.46 : 0.22)
+                                    gradient: Gradient {
+                                        GradientStop { position: 0.0; color: Qt.alpha(agRow.stateCol, agArea.pressed ? 0.18 : agArea.containsMouse || agRow.expanded ? 0.13 : 0.085) }
+                                        GradientStop { position: 1.0; color: Qt.alpha(root.fg, 0.03) }
+                                    }
+
+                                    Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+                                    Behavior on border.color { ColorAnimation { duration: 160 } }
+
+                                    // Reflet spéculaire supérieur sur la carte agent
+                                    Rectangle {
+                                        anchors.top: parent.top
+                                        anchors.topMargin: 1
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        anchors.leftMargin: 14
+                                        anchors.rightMargin: 14
+                                        height: 1
+                                        radius: 0.5
+                                        color: "#ffffff"
+                                        opacity: Colours.light ? 0.32 : 0.16
+                                    }
+
+                                    // Épine lumineuse latérale d'état
+                                    Rectangle {
+                                        anchors.left: parent.left
+                                        anchors.leftMargin: 6
+                                        y: 16
+                                        width: 3
+                                        height: agRow.expanded ? 90 : 36
+                                        radius: 1.5
+                                        color: agRow.stateCol
+
+                                        Behavior on height { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: agArea
+
+                                    anchors.fill: parent
+                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                    hoverEnabled: true
+                                    cursorShape: (agRow.modelData.window || agRow.modelData.kind === "antigravity") ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                    onClicked: mouse => {
+                                        if (mouse.button === Qt.RightButton)
+                                            Agents.toggleExpand(agRow.modelData);
+                                        else
+                                            Agents.focus(agRow.modelData);
+                                    }
+                                }
+
+                                // Rangée principale (hauteur fixe 68px)
+                                Item {
+                                    id: agMainRow
+
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    y: 0
+                                    height: 68
+
+                                    AgentSpinner {
+                                        id: agSpin
+
+                                        anchors.left: parent.left
+                                        anchors.leftMargin: 15
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        size: 32
+                                        tint: agRow.stateCol
+                                        spinning: agRow.working && root.mode === "agents"
+                                        done: agRow.done
+                                        letter: Agents.kindLetter(agRow.modelData.kind)
+                                    }
+
+                                    Column {
+                                        anchors.left: agSpin.right
+                                        anchors.leftMargin: 11
+                                        anchors.right: agRightCol.left
+                                        anchors.rightMargin: 8
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        spacing: 2.5
+
+                                        // Ligne 1 : Badge moteur + Projet · Titre + sous-agents
+                                        Row {
+                                            width: parent.width
+                                            spacing: 5.5
+
+                                            Rectangle {
+                                                id: kindPill
+
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                width: kindTxt.implicitWidth + 10
+                                                height: 15
+                                                radius: 7.5
+                                                color: Qt.alpha(agRow.tint, 0.17)
+                                                border.width: 0.5
+                                                border.color: Qt.alpha(agRow.tint, 0.38)
+
+                                                StyledText {
+                                                    id: kindTxt
+
+                                                    anchors.centerIn: parent
+                                                    text: Agents.kindShort(agRow.modelData.kind)
+                                                    color: agRow.tint
+                                                    font.pointSize: 6.1
+                                                    font.weight: Font.Bold
+                                                    font.letterSpacing: 0.45
+                                                }
+                                            }
+
+                                            Rectangle {
+                                                id: subPill
+
+                                                visible: (agRow.modelData.subagents ?? 0) > 0
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                width: subTxt.implicitWidth + 8
+                                                height: 15
+                                                radius: 7.5
+                                                color: Qt.alpha("#a78bfa", 0.18)
+                                                border.width: 0.5
+                                                border.color: Qt.alpha("#a78bfa", 0.4)
+
+                                                StyledText {
+                                                    id: subTxt
+
+                                                    anchors.centerIn: parent
+                                                    text: `+${agRow.modelData.subagents}`
+                                                    color: "#a78bfa"
+                                                    font.pointSize: 6.2
+                                                    font.weight: Font.Bold
+                                                }
+                                            }
+
+                                            StyledText {
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                width: Math.max(40, parent.width - kindPill.width - (subPill.visible ? subPill.width + 5.5 : 0) - 5.5)
+                                                elide: Text.ElideRight
+                                                text: `${agRow.modelData.project}${agRow.modelData.title ? " · " + agRow.modelData.title : ""}`
+                                                color: root.fg
+                                                font.pointSize: 9.1
+                                                font.weight: Font.DemiBold
+                                            }
+                                        }
+
+                                        // Ligne 2 : Activité temps réel (phase / outil / attente / réponse)
+                                        StyledText {
+                                            width: parent.width
+                                            elide: Text.ElideRight
+                                            text: agRow.waiting
+                                                ? (agRow.modelData.tool ? I18n.tr("Validation · %1").arg(agRow.modelData.tool) : I18n.tr("Attend ta réponse"))
+                                                : agRow.working
+                                                    ? (agRow.modelData.focus || agRow.modelData.tool || I18n.tr("Réfléchit…"))
+                                                    : (agRow.modelData.reply || I18n.tr("Prêt"))
+                                            color: agRow.waiting ? "#ff9f0a" : root.fgDim
+                                            font.pointSize: 8.1
+                                        }
+
+                                        // Ligne 3 : Micro-télémétrie (modèle · branche · fichiers · tokens · progression)
+                                        Row {
+                                            visible: agRow.hasMeta
+                                            width: parent.width
+                                            spacing: 6
+
+                                            StyledText {
+                                                visible: Boolean(agRow.modelData.model)
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                text: agRow.modelData.model
+                                                color: Qt.alpha(agRow.tint, 0.92)
+                                                font.pointSize: 6.9
+                                                font.weight: Font.DemiBold
+                                            }
+
+                                            StyledText {
+                                                visible: Boolean(agRow.modelData.branch)
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                text: `⎇ ${agRow.modelData.branch}`
+                                                color: root.fgDim
+                                                font.pointSize: 6.9
+                                                font.weight: Font.Medium
+                                            }
+
+                                            StyledText {
+                                                visible: (agRow.modelData.files ?? 0) > 0
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                text: I18n.tr("%1 fich.").arg(agRow.modelData.files)
+                                                color: root.fgDim
+                                                font.pointSize: 6.9
+                                                font.features: { "tnum": 1 }
+                                            }
+
+                                            StyledText {
+                                                visible: (agRow.modelData.tokens ?? 0) > 0
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                text: `${Agents.fmtTokens(agRow.modelData.tokens)} tok`
+                                                color: root.fgDim
+                                                font.pointSize: 6.9
+                                                font.features: { "tnum": 1 }
+                                            }
+
+                                            // Mini barre de progression des étapes (Antigravity update_steps)
+                                            Row {
+                                                visible: agRow.hasSteps
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                spacing: 4
+
+                                                Rectangle {
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    width: 34
+                                                    height: 4
+                                                    radius: 2
+                                                    color: Qt.alpha(root.fg, 0.14)
+
+                                                    Rectangle {
+                                                        width: Math.max(4, parent.width * Math.min(1, (agRow.modelData.stepDone ?? 0) / Math.max(1, agRow.modelData.stepTotal ?? 1)))
+                                                        height: parent.height
+                                                        radius: 2
+                                                        color: agRow.stateCol
+                                                    }
+                                                }
+                                                StyledText {
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    text: `${agRow.modelData.stepDone}/${agRow.modelData.stepTotal}`
+                                                    color: agRow.stateCol
+                                                    font.pointSize: 6.8
+                                                    font.weight: Font.Bold
+                                                    font.features: { "tnum": 1 }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Colonne droite : durée + contrôles rapides (inspecter, stop, retirer)
+                                    Row {
+                                        id: agRightCol
+
+                                        z: 2
+                                        anchors.right: parent.right
+                                        anchors.rightMargin: 10
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        spacing: 5
+
+                                        Rectangle {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: agElapsedTxt.implicitWidth + 12
+                                            height: 19
+                                            radius: 9.5
+                                            color: agRow.done ? Qt.alpha(root.fg, 0.065) : Qt.alpha(agRow.stateCol, 0.15)
+                                            border.width: 0.5
+                                            border.color: agRow.done ? Qt.alpha(root.fg, 0.13) : Qt.alpha(agRow.stateCol, 0.34)
+
+                                            StyledText {
+                                                id: agElapsedTxt
+
+                                                anchors.centerIn: parent
+                                                text: Agents.elapsed(agRow.modelData.since)
+                                                color: agRow.done ? root.fgDim : agRow.stateCol
+                                                font.pointSize: 7.5
+                                                font.weight: Font.Bold
+                                                font.features: { "tnum": 1 }
+                                            }
+                                        }
+
+                                        // Bouton Stop (SIGINT doux) au survol d'un agent CLI en cours
+                                        Rectangle {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            visible: agRow.working && agRow.modelData.canStop && rowHover.hovered
+                                            width: 22
+                                            height: 22
+                                            radius: 11
+                                            scale: agStopArea.pressed ? 0.88 : 1
+                                            color: Qt.alpha(root.red, agStopArea.containsMouse ? 0.28 : 0.14)
+                                            border.width: 0.5
+                                            border.color: Qt.alpha(root.red, agStopArea.containsMouse ? 0.6 : 0.34)
+
+                                            Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
+
+                                            MaterialIcon {
+                                                anchors.centerIn: parent
+                                                text: "stop"
+                                                color: root.red
+                                                fontStyle: Tokens.font.icon.size(13).build()
+                                                fill: 1
+                                            }
+
+                                            MouseArea {
+                                                id: agStopArea
+
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: Agents.stop(agRow.modelData)
+                                            }
+                                        }
+
+                                        // Bouton inspecter / déplier
+                                        Rectangle {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            visible: rowHover.hovered || agRow.expanded
+                                            width: 22
+                                            height: 22
+                                            radius: 11
+                                            scale: agExpArea.pressed ? 0.88 : 1
+                                            color: Qt.alpha(root.fg, agExpArea.containsMouse ? 0.18 : 0.09)
+                                            border.width: 0.5
+                                            border.color: Qt.alpha(root.fg, agExpArea.containsMouse ? 0.34 : 0.16)
+
+                                            Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
+
+                                            MaterialIcon {
+                                                anchors.centerIn: parent
+                                                text: agRow.expanded ? "expand_less" : "expand_more"
+                                                color: root.fg
+                                                fontStyle: Tokens.font.icon.size(13).build()
+                                            }
+
+                                            MouseArea {
+                                                id: agExpArea
+
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: Agents.toggleExpand(agRow.modelData)
+                                            }
+                                        }
+
+                                        // Bouton × concentrique au survol d'un agent terminé
+                                        Rectangle {
+                                            id: agCloseBtn
+
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            visible: agRow.done && rowHover.hovered
+                                            width: 22
+                                            height: 22
+                                            radius: 11
+                                            scale: agCloseArea.pressed ? 0.88 : 1
+                                            color: Qt.alpha(root.fg, agCloseArea.containsMouse ? 0.18 : 0.1)
+                                            border.width: 0.5
+                                            border.color: Qt.alpha(root.fg, agCloseArea.containsMouse ? 0.34 : 0.18)
+
+                                            Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
+
+                                            MaterialIcon {
+                                                anchors.centerIn: parent
+                                                text: "close"
+                                                color: root.fg
+                                                fontStyle: Tokens.font.icon.size(11).build()
+                                            }
+
+                                            MouseArea {
+                                                id: agCloseArea
+
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: Agents.dismiss(agRow.modelData)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Panneau inspecteur détaillé (déplié via chevron ou clic droit)
+                                Item {
+                                    visible: agRow.expanded
+                                    opacity: agRow.expanded ? 1 : 0
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.bottom: parent.bottom
+                                    anchors.leftMargin: 16
+                                    anchors.rightMargin: 12
+                                    anchors.bottomMargin: 8
+                                    height: 48
+
+                                    Behavior on opacity { NumberAnimation { duration: 150 } }
+
+                                    Rectangle {
+                                        anchors.top: parent.top
+                                        width: parent.width
+                                        height: 1
+                                        color: Qt.alpha(root.fg, 0.1)
+                                    }
+
+                                    Row {
+                                        anchors.fill: parent
+                                        anchors.topMargin: 6
+                                        spacing: 8
+
+                                        Column {
+                                            width: parent.width - agDetailBtns.width - 8
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            spacing: 2
+
+                                            StyledText {
+                                                width: parent.width
+                                                elide: Text.ElideRight
+                                                text: agRow.modelData.reply || agRow.modelData.title || I18n.tr("Session active")
+                                                color: root.fg
+                                                font.pointSize: 7.7
+                                            }
+                                            StyledText {
+                                                width: parent.width
+                                                elide: Text.ElideMiddle
+                                                text: agRow.modelData.cwd || (agRow.modelData.pid > 0 ? `PID ${agRow.modelData.pid}` : Agents.kindName(agRow.modelData.kind))
+                                                color: root.fgDim
+                                                font.family: "monospace"
+                                                font.pointSize: 6.9
+                                            }
+                                        }
+
+                                        Row {
+                                            id: agDetailBtns
+
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            spacing: 5
+
+                                            Rectangle {
+                                                visible: Boolean(agRow.modelData.window || agRow.modelData.kind === "antigravity")
+                                                width: fBtnTxt.implicitWidth + 14
+                                                height: 22
+                                                radius: 11
+                                                color: Qt.alpha(agRow.tint, fBtnArea.containsMouse ? 0.28 : 0.16)
+                                                border.width: 0.5
+                                                border.color: Qt.alpha(agRow.tint, 0.44)
+
+                                                StyledText {
+                                                    id: fBtnTxt
+
+                                                    anchors.centerIn: parent
+                                                    text: I18n.tr("Ouvrir")
+                                                    color: agRow.tint
+                                                    font.pointSize: 7.2
+                                                    font.weight: Font.Bold
+                                                }
+                                                MouseArea {
+                                                    id: fBtnArea
+
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: Agents.focus(agRow.modelData)
+                                                }
+                                            }
+
+                                            Rectangle {
+                                                visible: agRow.working && agRow.modelData.canStop
+                                                width: sBtnTxt.implicitWidth + 14
+                                                height: 22
+                                                radius: 11
+                                                color: Qt.alpha(root.red, sBtnArea.containsMouse ? 0.28 : 0.16)
+                                                border.width: 0.5
+                                                border.color: Qt.alpha(root.red, 0.44)
+
+                                                StyledText {
+                                                    id: sBtnTxt
+
+                                                    anchors.centerIn: parent
+                                                    text: I18n.tr("Stop")
+                                                    color: root.red
+                                                    font.pointSize: 7.2
+                                                    font.weight: Font.Bold
+                                                }
+                                                MouseArea {
+                                                    id: sBtnArea
+
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: Agents.stop(agRow.modelData)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                HoverHandler {
+                                    id: rowHover
+                                }
+                            }
                         }
                     }
                 }
@@ -7442,7 +8153,7 @@ print(json.dumps({"freq": sum(freqs)//len(freqs) if freqs else 0, "fan": fan, "l
             active: root.mode === "perm"
 
             readonly property var perm: Agents.perm
-            readonly property var agent: Agents.list.find(a => a.id === perm?.agentPid) ?? null
+            readonly property var agent: Agents.list.find(a => a.pid === perm?.agentPid || a.id === `pid:${perm?.agentPid}`) ?? null
 
             Rectangle {
                 id: permIcon

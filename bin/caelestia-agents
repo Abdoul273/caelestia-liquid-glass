@@ -1,32 +1,71 @@
 #!/usr/bin/env python3
-"""Agents IA dans la Dynamic Island de Caelestia.
+"""Agent OS pour la Dynamic Island de Caelestia / Ano Shell.
 
-  caelestia-agents watch              état des agents (Claude Code, Codex) en lignes JSON, à chaque changement
-  caelestia-agents hook               hook PermissionRequest de Claude Code : la demande passe par l'île
+  caelestia-agents watch              état temps réel de tous les agents IA en lignes JSON
+  caelestia-agents once               instantané JSON (debug)
+  caelestia-agents hook               hook PermissionRequest (Claude Code) : validation depuis l'île
   caelestia-agents answer ID DÉCISION réponse de l'île (allow | deny | terminal)
+  caelestia-agents stop PID           interruption douce (SIGINT) d'un agent CLI
+  caelestia-agents launch KIND        lance un agent IA (kitty ou application)
 
-Les demandes en attente vivent dans ~/.local/state/caelestia/agent-perms/<id>.json ;
-l'île y répond par <id>.answer, que le hook attend.
+Agents pris en charge :
+  - Claude Code (CLI)        : /proc + ~/.claude/sessions + transcripts JSONL + hook permissions
+  - OpenAI Codex (CLI)       : /proc + ~/.codex/sessions/rollout-*.jsonl + session_index.jsonl
+  - GitHub Copilot (CLI)     : /proc + ~/.copilot/open-sessions-state.json + session-state + session-store.db
+  - OpenCode (CLI / daemon)  : /proc + ~/.local/share/opencode/opencode.db (session_v2 / session_part / permission)
+  - Antigravity App (Hub/IDE): /proc + ~/.gemini/antigravity/conversation_summaries.db + brain/*/transcript.jsonl
+  - Antigravity CLI (agy)    : /proc + conversation_summaries.db (source CLI) + transcript.jsonl
+  - Gemini CLI / Aider       : /proc + heuristique d'activité
 """
 
 import json
 import os
+import re
+import shutil
 import signal
+import sqlite3
 import subprocess
 import sys
 import time
+import urllib.parse
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 HOME = Path.home()
 PERMS = HOME / ".local/state/caelestia/agent-perms"
 WAIT = 110  # secondes d'attente d'une réponse de l'île (timeout du hook : 120)
 TAIL = 96 * 1024
+RECENT_WINDOW = 1800  # 30 min pour les sessions DB récemment terminées
 
+
+# ───────────────────────── utilitaires ─────────────────────────
 
 def clip(text, n):
     text = " ".join(str(text or "").split())
-    return text if len(text) <= n else text[: n - 1] + "…"
+    return text if len(text) <= n else text[: max(1, n - 1)] + "…"
+
+
+def parse_iso_ts(val):
+    if not val:
+        return 0.0
+    if isinstance(val, (int, float)):
+        return val / 1000.0 if val > 1e12 else float(val)
+    s = str(val).strip()
+    if not s or s.startswith("0001-"):
+        return 0.0
+    try:
+        # Gère les nanosecondes Go (ex. 2026-11-27 15:45:35.390683932+00:00) et le suffixe Z
+        s = s.replace(" ", "T")
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        s = re.sub(r"(\.\d{6})\d+", r"\1", s)
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.timestamp()
+    except ValueError:
+        return 0.0
 
 
 def tail_lines(path, size=TAIL):
@@ -43,6 +82,8 @@ def tail_lines(path, size=TAIL):
         lines = lines[1:]
     out = []
     for raw in lines:
+        if not raw.strip():
+            continue
         try:
             out.append(json.loads(raw))
         except ValueError:
@@ -58,23 +99,141 @@ def first_line(path):
         return None
 
 
-def tool_label(name, inp):
+def file_sig(path):
+    """Signature rapide (mtime, size) incluant le fichier -wal pour SQLite."""
+    sig = []
+    for p in (path, Path(str(path) + "-wal")):
+        try:
+            st = p.stat()
+            sig.append((st.st_mtime_ns, st.st_size))
+        except OSError:
+            sig.append((0, 0))
+    return tuple(sig)
+
+
+def pretty_model(raw):
+    if not raw:
+        return ""
+    s = str(raw).strip()
+    if s.startswith("<") or s == "auto":
+        return ""
+    if "/" in s:
+        s = s.rsplit("/", 1)[-1]
+    s = re.sub(r"-free$", "", s)
+    s = re.sub(r"-\d{8}$", "", s)
+    s = re.sub(r"-(preview|latest|exp)$", "", s)
+    # Noms connus joliment formatés
+    low = s.lower()
+    if low.startswith("gemini-"):
+        parts = [p.capitalize() if not p[0].isdigit() else p for p in s.split("-")]
+        return clip(" ".join(parts), 26)
+    if low.startswith("claude-"):
+        parts = s.split("-")
+        # ex. claude-sonnet-4-5 ou claude-opus-4-6
+        out = ["Claude"]
+        for p in parts[1:]:
+            if p.isdigit() and out and out[-1][0].isdigit():
+                out[-1] = f"{out[-1]}.{p}"
+            else:
+                out.append(p.capitalize())
+        return clip(" ".join(out), 26)
+    if low.startswith("gpt-"):
+        parts = s.split("-")
+        head = f"GPT-{parts[1]}" if len(parts) > 1 else "GPT"
+        rest = [p.capitalize() if not p[0].isdigit() else p for p in parts[2:]]
+        return clip(" ".join([head] + rest), 26)
+    if low.startswith("deepseek-"):
+        parts = s.split("-")
+        rest = [p.capitalize() if not (p[0].isdigit() or p.startswith("v")) else p for p in parts[1:]]
+        return clip(" ".join(["DeepSeek"] + rest), 26)
+    return clip(s, 26)
+
+
+def tool_label(name, inp=None):
     inp = inp if isinstance(inp, dict) else {}
-    labels = {"Bash": "Commande", "Edit": "Modifie", "Write": "Écrit", "MultiEdit": "Modifie", "Read": "Lit",
-              "Grep": "Cherche", "Glob": "Cherche", "WebFetch": "Web", "WebSearch": "Recherche web",
-              "Agent": "Sous-agent", "Task": "Sous-agent", "NotebookEdit": "Notebook"}
+    raw = str(name or "Outil")
+    clean = raw.replace("mcp__", "").split("__")[-1]
+    low = clean.lower()
+    labels = {
+        "bash": "Commande", "shell": "Commande", "run_command": "Commande",
+        "command_execution": "Commande", "commandexecution": "Commande", "exec": "Commande",
+        "edit": "Modifie", "edit_file": "Modifie", "multiedit": "Modifie",
+        "replace_file_content": "Modifie", "multi_replace_file_content": "Modifie",
+        "apply_patch": "Patch", "patch": "Patch", "filechange": "Modifie",
+        "write": "Écrit", "write_file": "Écrit", "write_to_file": "Écrit", "create": "Crée",
+        "notebookedit": "Notebook",
+        "read": "Lit", "read_file": "Lit", "view": "Lit", "view_file": "Lit",
+        "view_file_outline": "Plan", "view_code_item": "Code",
+        "grep": "Cherche", "grep_search": "Cherche", "glob": "Fichiers",
+        "find_by_name": "Fichiers", "list_dir": "Dossier",
+        "webfetch": "Web", "read_url_content": "Web",
+        "websearch": "Recherche web", "search_web": "Recherche web",
+        "agent": "Sous-agent", "task": "Sous-agent", "invoke_subagent": "Sous-agent",
+        "send_message": "Message agent", "run_workflow": "Workflow",
+        "update_focus": "Phase", "update_steps": "Étapes",
+        "ask_question": "Question", "ask_user": "Question",
+    }
     detail = None
-    for k in ("description", "file_path", "command", "pattern", "path", "url", "query", "prompt"):
-        if isinstance(inp.get(k), str):
-            detail = inp[k]
-            if k in ("file_path", "path"):
+    for k in ("description", "toolSummary", "focus", "file_path", "Path", "TargetFile",
+              "path", "command", "CommandLine", "pattern", "Query", "query", "url", "prompt", "Role"):
+        v = inp.get(k)
+        if isinstance(v, str) and v.strip():
+            detail = v.strip().strip('"')
+            if k in ("file_path", "Path", "TargetFile", "path"):
                 detail = os.path.basename(detail.rstrip("/")) or detail
             break
-    label = labels.get(name, name.replace("mcp__", "").split("__")[-1])
+    if not detail and low == "apply_patch" and isinstance(inp.get("patch"), str):
+        m = re.search(r"\*\*\* (?:Update|Add|Delete) File:\s*(.+)", inp["patch"])
+        if m:
+            detail = os.path.basename(m.group(1).strip())
+    label = labels.get(low, clean)
     return f"{label} · {clip(detail, 70)}" if detail else label
 
 
-# ───────────────────────── processus ─────────────────────────
+_git_cache = {}  # cwd -> (ts, branch)
+
+
+def git_branch(cwd):
+    if not cwd or cwd == str(HOME):
+        return ""
+    now = time.time()
+    hit = _git_cache.get(cwd)
+    if hit and now - hit[0] < 15:
+        return hit[1]
+    branch = ""
+    cur = Path(cwd)
+    for _ in range(6):
+        g = cur / ".git"
+        if g.exists():
+            try:
+                head = (g / "HEAD") if g.is_dir() else Path(g.read_text().split(":", 1)[1].strip()) / "HEAD"
+                if not head.is_absolute():
+                    head = (cur / head).resolve()
+                txt = head.read_text(errors="replace").strip()
+                if txt.startswith("ref:"):
+                    branch = txt.rsplit("/", 1)[-1]
+                elif txt:
+                    branch = txt[:7]
+            except OSError:
+                pass
+            break
+        if cur.parent == cur or cur == HOME:
+            break
+        cur = cur.parent
+    _git_cache[cwd] = (now, branch)
+    return branch
+
+
+def norm_project(cwd, fallback="~"):
+    if not cwd:
+        return fallback
+    p = cwd.rstrip("/")
+    if p == str(HOME):
+        return "~"
+    return os.path.basename(p) or fallback
+
+
+# ───────────────────────── processus & fenêtres ─────────────────────────
 
 def read_proc(pid):
     try:
@@ -84,43 +243,87 @@ def read_proc(pid):
     rp = stat.rfind(")")
     comm = stat[stat.find("(") + 1 : rp]
     rest = stat[rp + 2 :].split()
-    return {"pid": pid, "ppid": int(rest[1]), "comm": comm, "start": int(rest[19])}
+    if len(rest) < 20:
+        return None
+    return {
+        "pid": pid,
+        "ppid": int(rest[1]),
+        "comm": comm,
+        "utime": int(rest[11]),
+        "stime": int(rest[12]),
+        "start": int(rest[19]),
+    }
 
 
-BACKGROUND = {"app-server", "mcp-server", "mcp", "login", "logout", "update", "completion", "doctor", "daemon"}
-AGENT_COMMS = {"claude", "codex", "node", "bun", "mainthread"}
+BACKGROUND = {
+    "app-server", "mcp-server", "mcp", "login", "logout", "update", "completion",
+    "doctor", "daemon", "serve", "auth", "version", "--version", "-v", "help", "--help",
+}
+AGENT_COMMS = {
+    "claude", "codex", "copilot", "opencode", "agy", "antigravity",
+    "gemini", "aider", "node", "bun", "python", "python3", "mainthread",
+}
+
+
+def read_proc_meta(pid):
+    try:
+        exe = os.readlink(f"/proc/{pid}/exe")
+    except OSError:
+        exe = ""
+    try:
+        argv = [a.decode(errors="replace") for a in Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0") if a]
+    except OSError:
+        argv = []
+    return exe, argv
 
 
 def agent_of(p):
     comm = p["comm"].lower()
-    # Filtrage rapide avant d'ouvrir /exe et /cmdline sur les ~250 processus système
     if comm not in AGENT_COMMS and not (comm and comm[0].isdigit()):
         return None
-    try:
-        exe = os.readlink(f"/proc/{p['pid']}/exe")
-    except OSError:
-        exe = ""
-    try:
-        argv = [a.decode(errors="replace") for a in Path(f"/proc/{p['pid']}/cmdline").read_bytes().split(b"\0") if a]
-    except OSError:
-        argv = []
+    exe, argv = read_proc_meta(p["pid"])
     argv0 = argv[0] if argv else ""
-    names = {comm, os.path.basename(exe).lower(), os.path.basename(argv0).lower()}
-    # démons et outils de fond (codex app-server, serveurs MCP…) : pas des sessions
+    base_exe = os.path.basename(exe).lower()
+    base_argv0 = os.path.basename(argv0).lower()
+    names = {comm, base_exe, base_argv0}
+
+    # Ignorer les sous-processus Electron (renderer, gpu, zygote, utility, sidecars)
+    if "antigravity" in names:
+        joined = " ".join(argv[1:4])
+        if "--type=" in joined or "--import=" in joined or "sidecar" in joined or "language_server" in joined:
+            return None
+        return "antigravity"
+
+    # Ignorer démons / outils de fond (codex app-server, opencode serve, serveurs MCP…)
     if BACKGROUND & set(argv[1:3]):
         return None
+
     if "claude" in names or "/claude/versions/" in exe:
         return "claude"
     if "codex" in names:
         return "codex"
+    if "copilot" in names or "/copilot" in exe.lower():
+        return "copilot"
+    if "opencode" in names and "opencode-pty" not in comm:
+        return "opencode"
+    if "agy" in names:
+        return "agy"
+    if "aider" in names or (comm in ("python", "python3") and any("aider" in a.lower() for a in argv[1:3])):
+        return "aider"
+    if "gemini" in names or (
+        comm in ("node", "bun")
+        and any(a.endswith("/gemini") or "gemini-cli" in a for a in argv[1:3])
+    ):
+        return "gemini"
     return None
 
 
 BOOT = 0.0
 try:
-    for line in open("/proc/stat"):
-        if line.startswith("btime"):
-            BOOT = float(line.split()[1])
+    with open("/proc/stat") as f:
+        for line in f:
+            if line.startswith("btime"):
+                BOOT = float(line.split()[1])
 except OSError:
     pass
 HZ = os.sysconf("SC_CLK_TCK")
@@ -149,58 +352,87 @@ def scan():
     return procs, roots
 
 
-_win_cache = (0.0, {})
+_win_cache = (0.0, {}, {})  # (ts, by_pid, by_class)
 
 
 def windows():
     global _win_cache
-    if time.time() - _win_cache[0] < 4:
-        return _win_cache[1]
-    out = {}
+    if time.time() - _win_cache[0] < 3:
+        return _win_cache[1], _win_cache[2]
+    by_pid, by_class = {}, {}
     try:
-        res = subprocess.run(["hyprctl", "clients", "-j"], capture_output=True, timeout=2)
+        res = subprocess.run(["hyprctl", "clients", "-j"], capture_output=True, timeout=2, check=False)
         for c in json.loads(res.stdout or b"[]"):
-            out[c.get("pid")] = (c.get("address") or "").removeprefix("0x")
+            addr = (c.get("address") or "").removeprefix("0x")
+            if not addr:
+                continue
+            pid = c.get("pid")
+            if pid:
+                by_pid[pid] = addr
+            cls = (c.get("class") or "").lower()
+            if cls and cls not in by_class:
+                by_class[cls] = addr
     except (OSError, ValueError, subprocess.TimeoutExpired):
         pass
-    _win_cache = (time.time(), out)
-    return out
+    _win_cache = (time.time(), by_pid, by_class)
+    return by_pid, by_class
 
 
-def window_of(pid, procs):
-    wins, cur = windows(), pid
+def window_of(pid, procs, fallback_class=""):
+    by_pid, by_class = windows()
+    cur = pid
     for _ in range(24):
-        if cur in wins:
-            return wins[cur]
+        if cur in by_pid:
+            return by_pid[cur]
         p = procs.get(cur)
         if not p or p["ppid"] <= 1:
             break
         cur = p["ppid"]
+    if fallback_class:
+        return by_class.get(fallback_class.lower(), "")
     return ""
 
 
-# ───────────────────────── sessions ─────────────────────────
+def proc_cwd(pid):
+    try:
+        return os.readlink(f"/proc/{pid}/cwd")
+    except OSError:
+        return ""
+
+
+# ───────────────────────── 1. Claude Code ─────────────────────────
 
 def claude_transcript(sid):
-    for d in (HOME / ".claude/projects").iterdir():
+    base = HOME / ".claude/projects"
+    if not base.is_dir():
+        return None
+    for d in base.iterdir():
         f = d / f"{sid}.jsonl"
         if f.is_file():
             return f
     return None
 
 
-_transcripts = {}
+_claude_transcripts = {}
+_claude_cache = {}
 
 
 def claude_summary(sid):
-    path = _transcripts.get(sid)
+    s = {"title": "", "tool": "", "reply": "", "prompt": "", "files": [], "model": "", "tokens": 0, "subagents": 0}
+    if not sid:
+        return s
+    path = _claude_transcripts.get(sid)
     if not path or not path.is_file():
         path = claude_transcript(sid)
-        _transcripts[sid] = path
-    s = {"title": "", "tool": "", "reply": "", "prompt": "", "files": [], "model": ""}
+        _claude_transcripts[sid] = path
     if not path:
         return s
+    sig = file_sig(path)
+    hit = _claude_cache.get(sid)
+    if hit and hit[0] == sig:
+        return hit[1]
     custom = None
+    active_subagents = set()
     for line in tail_lines(path):
         kind = line.get("type")
         if kind in ("ai-title", "custom-title", "summary"):
@@ -219,9 +451,11 @@ def claude_summary(sid):
                 if isinstance(content, str) and not content.startswith("<"):
                     s["prompt"] = clip(content, 120)
                 elif isinstance(content, list):
-                    if any(b.get("type") == "tool_result" for b in content if isinstance(b, dict)):
-                        s["tool"] = ""
-                    else:
+                    for b in content:
+                        if isinstance(b, dict) and b.get("type") == "tool_result":
+                            s["tool"] = ""
+                            active_subagents.discard(b.get("tool_use_id"))
+                    if not any(b.get("type") == "tool_result" for b in content if isinstance(b, dict)):
                         texts = [b.get("text") for b in content if isinstance(b, dict) and isinstance(b.get("text"), str)]
                         texts = [t for t in texts if not t.startswith("<")]
                         if texts:
@@ -229,6 +463,11 @@ def claude_summary(sid):
                 continue
             if isinstance(msg.get("model"), str) and not msg["model"].startswith("<"):
                 s["model"] = msg["model"]
+            usage = msg.get("usage")
+            if isinstance(usage, dict):
+                tok = (usage.get("input_tokens") or 0) + (usage.get("output_tokens") or 0) + (usage.get("cache_read_input_tokens") or 0)
+                if tok > 0:
+                    s["tokens"] = max(s["tokens"], tok)
             for b in content if isinstance(content, list) else []:
                 if not isinstance(b, dict):
                     continue
@@ -237,24 +476,32 @@ def claude_summary(sid):
                     s["tool"] = ""
                 elif b.get("type") == "tool_use":
                     inp = b.get("input") or {}
-                    s["tool"] = tool_label(b.get("name") or "Outil", inp)
+                    tname = b.get("name") or "Outil"
+                    s["tool"] = tool_label(tname, inp)
+                    if tname in ("Agent", "Task") and b.get("id"):
+                        active_subagents.add(b["id"])
                     f = inp.get("file_path") or inp.get("notebook_path")
-                    if b.get("name") in ("Edit", "Write", "MultiEdit", "NotebookEdit") and f and f not in s["files"]:
+                    if tname in ("Edit", "Write", "MultiEdit", "NotebookEdit") and f and f not in s["files"]:
                         s["files"].append(f)
     if custom:
         s["title"] = custom
+    s["subagents"] = len(active_subagents)
+    _claude_cache[sid] = (sig, s)
     return s
 
+
+# ───────────────────────── 2. OpenAI Codex ─────────────────────────
 
 def codex_titles():
     titles = {}
     try:
-        for line in open(HOME / ".codex/session_index.jsonl"):
-            try:
-                v = json.loads(line)
-                titles[v["id"]] = v["thread_name"]
-            except (ValueError, KeyError):
-                pass
+        with open(HOME / ".codex/session_index.jsonl") as f:
+            for line in f:
+                try:
+                    v = json.loads(line)
+                    titles[v["id"]] = v["thread_name"]
+                except (ValueError, KeyError):
+                    pass
     except OSError:
         pass
     return titles
@@ -262,11 +509,21 @@ def codex_titles():
 
 def codex_files():
     root = HOME / ".codex/sessions"
+    if not root.is_dir():
+        return []
     days = sorted(root.glob("*/*/*"), reverse=True)[:4]
-    return [(f, f.stat().st_mtime) for d in days for f in d.glob("rollout-*.jsonl")]
+    out = []
+    for d in days:
+        for f in d.glob("rollout-*.jsonl"):
+            try:
+                out.append((f, f.stat().st_mtime))
+            except OSError:
+                pass
+    return out
 
 
-_BUSY = {}
+_codex_busy_cache = {}
+_codex_summary_cache = {}
 
 
 def codex_busy(path):
@@ -275,7 +532,7 @@ def codex_busy(path):
         size = path.stat().st_size
     except OSError:
         return None
-    hit = _BUSY.get(path)
+    hit = _codex_busy_cache.get(path)
     if hit and hit[0] == size:
         return hit[1]
     try:
@@ -285,19 +542,36 @@ def codex_busy(path):
     start = data.rfind(b'"type":"task_started"')
     end = max(data.rfind(b'"type":"task_complete"'), data.rfind(b'"type":"turn_aborted"'))
     busy = None if start < 0 and end < 0 else start > end
-    _BUSY[path] = (size, busy)
+    _codex_busy_cache[path] = (size, busy)
     return busy
 
 
 def codex_summary(path, titles):
+    sig = file_sig(path)
+    hit = _codex_summary_cache.get(path)
+    if hit and hit[0] == sig:
+        return hit[1]
     meta = (first_line(path) or {}).get("payload") or {}
-    s = {"title": clip(titles.get(meta.get("id"), ""), 60), "tool": "", "reply": "", "prompt": "",
-         "files": [], "model": "", "busy": None}
+    s = {
+        "title": clip(titles.get(meta.get("id"), ""), 60),
+        "tool": "", "reply": "", "prompt": "",
+        "files": [], "model": "", "busy": None, "tokens": 0,
+    }
     for line in tail_lines(path):
         p = line.get("payload") or {}
-        if line.get("type") == "turn_context":
+        ltype = line.get("type")
+        if ltype == "turn_context":
             s["model"] = p.get("model") or s["model"]
-        elif line.get("type") == "event_msg":
+        elif ltype == "response_item":
+            ptype = p.get("type")
+            if ptype == "function_call":
+                fname = p.get("name") or "Outil"
+                try:
+                    args = json.loads(p.get("arguments") or "{}")
+                except ValueError:
+                    args = {}
+                s["tool"] = tool_label(fname, args)
+        elif ltype == "event_msg":
             t = p.get("type")
             if t == "task_started":
                 s["busy"] = True
@@ -305,6 +579,12 @@ def codex_summary(path, titles):
                 s["busy"], s["tool"] = False, ""
                 if p.get("last_agent_message"):
                     s["reply"] = clip(p["last_agent_message"], 160)
+            elif t == "token_count":
+                info = p.get("info") or {}
+                tu = info.get("total_token_usage") or info.get("last_token_usage") or {}
+                tok = tu.get("total_tokens") or ((tu.get("input_tokens") or 0) + (tu.get("output_tokens") or 0))
+                if tok:
+                    s["tokens"] = max(s["tokens"], int(tok))
             elif t == "item_completed":
                 item = p.get("item") or {}
                 it = item.get("type")
@@ -326,10 +606,787 @@ def codex_summary(path, titles):
                     txt = [t for t in txt if not t.startswith("<")]
                     if txt:
                         s["prompt"] = clip(txt[0], 120)
+    _codex_summary_cache[path] = (sig, s)
     return s
 
 
-# ───────────────────────── demandes de permission ─────────────────────────
+# ───────────────────────── 3. GitHub Copilot CLI ─────────────────────────
+
+_copilot_cache = {}
+
+
+def parse_simple_yaml(path):
+    out = {}
+    try:
+        for line in path.read_text(errors="replace").splitlines():
+            if ":" in line and not line.startswith(" "):
+                k, v = line.split(":", 1)
+                out[k.strip()] = v.strip().strip('"').strip("'")
+    except OSError:
+        pass
+    return out
+
+
+def copilot_open_sessions():
+    p = HOME / ".copilot/open-sessions-state.json"
+    try:
+        return json.loads(p.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def copilot_session_summary(sdir):
+    ev = sdir / "events.jsonl"
+    ws_path = sdir / "workspace.yaml"
+    sig = (file_sig(ev), file_sig(ws_path))
+    hit = _copilot_cache.get(sdir.name)
+    if hit and hit[0] == sig:
+        return hit[1]
+
+    ws = parse_simple_yaml(ws_path) if ws_path.is_file() else {}
+    s = {
+        "sid": sdir.name,
+        "cwd": ws.get("cwd") or "",
+        "branch": ws.get("branch") or "",
+        "title": clip(ws.get("name") or "", 60),
+        "tool": "", "reply": "", "prompt": "",
+        "files": [], "model": "", "tokens": 0,
+        "status": "idle", "wait_detail": "",
+        "updated": ev.stat().st_mtime if ev.is_file() else 0.0,
+        "started": parse_iso_ts(ws.get("created_at")),
+    }
+    if not ev.is_file():
+        _copilot_cache[sdir.name] = (sig, s)
+        return s
+
+    pending_perm = {}
+    in_turn = False
+    running_tools = {}
+    for line in tail_lines(ev, size=128 * 1024):
+        t = line.get("type")
+        d = line.get("data") or {}
+        if t == "session.start":
+            if not s["started"]:
+                s["started"] = parse_iso_ts(d.get("startTime"))
+            ctx = d.get("context") or {}
+            if not s["cwd"] and ctx.get("cwd"):
+                s["cwd"] = ctx["cwd"]
+        elif t == "session.model_change":
+            m = d.get("newModel")
+            if m and m != "auto":
+                s["model"] = m
+        elif t == "user.message":
+            if d.get("content"):
+                s["prompt"] = clip(d["content"], 120)
+        elif t == "assistant.turn_start" or t == "model.turn_started":
+            in_turn = True
+        elif t in ("assistant.turn_end", "model.turn_ended", "session.shutdown"):
+            in_turn = False
+            running_tools.clear()
+            pending_perm.clear()
+            s["tool"] = ""
+        elif t == "session.error":
+            in_turn = False
+            running_tools.clear()
+        elif t == "assistant.message":
+            if d.get("model"):
+                s["model"] = d["model"]
+            if (d.get("content") or "").strip():
+                s["reply"] = clip(d["content"], 160)
+        elif t == "tool.execution_start":
+            cid = d.get("toolCallId") or "t"
+            tname = d.get("toolName") or "Outil"
+            args = d.get("arguments")
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except ValueError:
+                    args = {"patch": args} if "Begin Patch" in args else {"command": args}
+            lbl = tool_label(tname, args if isinstance(args, dict) else {})
+            running_tools[cid] = lbl
+            s["tool"] = lbl
+            in_turn = True
+            # Compter fichiers touchés
+            if isinstance(args, dict):
+                f = args.get("file_path") or args.get("path")
+                if tname in ("edit", "create", "write", "write_file", "edit_file") and f and f not in s["files"]:
+                    s["files"].append(f)
+                elif tname == "apply_patch" and isinstance(args.get("patch"), str):
+                    for m in re.finditer(r"\*\*\* (?:Update|Add|Delete) File:\s*(.+)", args["patch"]):
+                        fp = m.group(1).strip()
+                        if fp not in s["files"]:
+                            s["files"].append(fp)
+        elif t == "tool.execution_complete":
+            cid = d.get("toolCallId")
+            running_tools.pop(cid, None)
+            if d.get("model"):
+                s["model"] = d["model"]
+            if not running_tools:
+                s["tool"] = ""
+        elif t == "permission.requested":
+            rid = d.get("requestId") or "p"
+            pr = d.get("permissionRequest") or {}
+            detail = pr.get("fullCommandText") or pr.get("path") or pr.get("kind") or "Permission"
+            pending_perm[rid] = clip(detail, 80)
+        elif t == "permission.completed":
+            pending_perm.pop(d.get("requestId"), None)
+        elif t in ("session.usage_checkpoint", "session.shutdown"):
+            td = d.get("tokenDetails") or {}
+            if td:
+                tok = sum((v.get("tokenCount") or 0) for v in td.values() if isinstance(v, dict))
+                if tok:
+                    s["tokens"] = max(s["tokens"], int(tok))
+
+    if pending_perm:
+        s["status"] = "waiting"
+        s["wait_detail"] = next(iter(pending_perm.values()))
+    elif in_turn or running_tools:
+        s["status"] = "working"
+    else:
+        s["status"] = "idle"
+    _copilot_cache[sdir.name] = (sig, s)
+    return s
+
+
+def collect_copilot(procs, copilot_pids):
+    sroot = HOME / ".copilot/session-state"
+    open_state = copilot_open_sessions()
+    sessions = []
+    if sroot.is_dir():
+        dirs = sorted(
+            [d for d in sroot.iterdir() if d.is_dir()],
+            key=lambda x: x.stat().st_mtime,
+            reverse=True,
+        )[:8]
+        for d in dirs:
+            s = copilot_session_summary(d)
+            st = open_state.get(d.name)
+            if isinstance(st, dict):
+                if st.get("working"):
+                    if s["status"] != "waiting":
+                        s["status"] = "working"
+                elif s["status"] == "working" and time.time() - s["updated"] > 15:
+                    s["status"] = "idle"
+            sessions.append(s)
+
+    out = []
+    used_sids = set()
+    now = time.time()
+
+    # 1. Processus Copilot CLI vivants
+    for pid in copilot_pids:
+        p = procs[pid]
+        cwd = proc_cwd(pid)
+        started = BOOT + p["start"] / HZ
+        match = None
+        for s in sessions:
+            if s["sid"] in used_sids:
+                continue
+            if s["cwd"] and s["cwd"] == cwd:
+                match = s
+                break
+        if not match and len(copilot_pids) == 1 and sessions:
+            # Repli sur la session la plus récente ouverte
+            for s in sessions:
+                if s["sid"] not in used_sids and (s["sid"] in open_state or now - s["updated"] < 3600):
+                    match = s
+                    break
+        if match:
+            used_sids.add(match["sid"])
+            status = match["status"]
+            # Si le processus est vivant et le fichier events.jsonl vient de bouger (<6 s), il travaille
+            if status == "idle" and now - match["updated"] < 6:
+                status = "working"
+            out.append({
+                "id": f"pid:{pid}",
+                "pid": pid,
+                "kind": "copilot",
+                "surface": "cli",
+                "status": status,
+                "started": int(started * 1000),
+                "updated": match["updated"],
+                "cwd": match["cwd"] or cwd,
+                "branch": match["branch"] or git_branch(match["cwd"] or cwd),
+                "title": match["title"] or match["prompt"],
+                "focus": "",
+                "tool": match["wait_detail"] if status == "waiting" else (match["tool"] if status == "working" else ""),
+                "reply": match["reply"],
+                "files": len(match["files"]),
+                "tokens": match["tokens"],
+                "model": pretty_model(match["model"]),
+                "subagents": 0,
+                "stepDone": 0,
+                "stepTotal": 0,
+                "window": window_of(pid, procs),
+                "canStop": True,
+                "alive": True,
+            })
+        else:
+            out.append({
+                "id": f"pid:{pid}",
+                "pid": pid,
+                "kind": "copilot",
+                "surface": "cli",
+                "status": "idle",
+                "started": int(started * 1000),
+                "updated": started,
+                "cwd": cwd,
+                "branch": git_branch(cwd),
+                "title": "",
+                "focus": "",
+                "tool": "",
+                "reply": "",
+                "files": 0,
+                "tokens": 0,
+                "model": "",
+                "subagents": 0,
+                "stepDone": 0,
+                "stepTotal": 0,
+                "window": window_of(pid, procs),
+                "canStop": True,
+                "alive": True,
+            })
+
+    # 2. Sessions Copilot récemment terminées ou actives sans PID trouvé (ex. sous-shell/IDE)
+    for s in sessions:
+        if s["sid"] in used_sids:
+            continue
+        age = now - s["updated"]
+        st = open_state.get(s["sid"]) or {}
+        if st.get("working") and age < 120:
+            status = s["status"] if s["status"] != "idle" else "working"
+        elif age < RECENT_WINDOW and not copilot_pids:
+            status = "idle"
+        else:
+            continue
+        out.append({
+            "id": f"cop:{s['sid'][:8]}",
+            "pid": 0,
+            "kind": "copilot",
+            "surface": "cli",
+            "status": status,
+            "started": int((s["started"] or s["updated"]) * 1000),
+            "updated": s["updated"],
+            "cwd": s["cwd"],
+            "branch": s["branch"] or git_branch(s["cwd"]),
+            "title": s["title"] or s["prompt"],
+            "focus": "",
+            "tool": s["wait_detail"] if status == "waiting" else (s["tool"] if status == "working" else ""),
+            "reply": s["reply"],
+            "files": len(s["files"]),
+            "tokens": s["tokens"],
+            "model": pretty_model(s["model"]),
+            "subagents": 0,
+            "stepDone": 0,
+            "stepTotal": 0,
+            "window": "",
+            "canStop": False,
+            "alive": False,
+        })
+    return out
+
+
+# ───────────────────────── 4. OpenCode ─────────────────────────
+
+_opencode_cache = (None, [])
+
+
+def opencode_db_sessions():
+    global _opencode_cache
+    db = HOME / ".local/share/opencode/opencode.db"
+    if not db.is_file():
+        return []
+    sig = file_sig(db)
+    if _opencode_cache[0] == sig:
+        return _opencode_cache[1]
+
+    out = []
+    try:
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=0.4)
+        con.row_factory = sqlite3.Row
+        cur = con.cursor()
+        # Permissions en attente par project_id
+        perm_projects = set()
+        try:
+            for r in cur.execute("SELECT project_id FROM permission"):
+                perm_projects.add(r[0])
+        except sqlite3.Error:
+            pass
+
+        rows = cur.execute(
+            """
+            SELECT id, project_id, parent_id, slug, directory, title,
+                   summary_files, tokens_input, tokens_output, tokens_reasoning,
+                   agent, model, time_created, time_updated, time_busy, time_idle,
+                   idle_outcome, time_archived
+            FROM session_v2
+            WHERE time_archived IS NULL
+            ORDER BY time_updated DESC
+            LIMIT 12
+            """
+        ).fetchall()
+
+        # Compter sous-agents actifs par parent_id
+        sub_active = {}
+        now_ms = int(time.time() * 1000)
+        for r in rows:
+            pid_parent = r["parent_id"]
+            tb, ti = r["time_busy"] or 0, r["time_idle"] or 0
+            if pid_parent and tb > ti and now_ms - (r["time_updated"] or 0) < 1800_000:
+                sub_active[pid_parent] = sub_active.get(pid_parent, 0) + 1
+
+        for r in rows:
+            if r["parent_id"]:
+                continue
+            sid = r["id"]
+            tb, ti = r["time_busy"] or 0, r["time_idle"] or 0
+            tu = r["time_updated"] or r["time_created"] or 0
+            age_s = (now_ms - tu) / 1000.0
+            is_busy = tb > ti and age_s < 1800
+            is_waiting = r["project_id"] in perm_projects and is_busy
+            if not is_busy and age_s > RECENT_WINDOW:
+                continue
+
+            model_raw = ""
+            if r["model"]:
+                try:
+                    mj = json.loads(r["model"])
+                    model_raw = mj.get("id") or ""
+                except ValueError:
+                    model_raw = str(r["model"])
+
+            # Dernières parts (outil, réponse, fichiers)
+            tool_txt, reply_txt, prompt_txt = "", "", ""
+            files_set = set()
+            try:
+                parts = cur.execute(
+                    "SELECT type, data FROM session_part WHERE session_id = ? ORDER BY time_updated DESC LIMIT 20",
+                    (sid,),
+                ).fetchall()
+                for pt in parts:
+                    try:
+                        pd = json.loads(pt["data"])
+                    except (ValueError, TypeError):
+                        continue
+                    ptype = pt["type"]
+                    if ptype == "tool":
+                        st = pd.get("state") or {}
+                        inp = st.get("input") or {}
+                        tname = pd.get("name") or "Outil"
+                        if not tool_txt and (is_busy or st.get("status") in ("running", "pending")):
+                            tool_txt = tool_label(tname, inp)
+                        fp = inp.get("filePath") or inp.get("file_path") or inp.get("path")
+                        if tname in ("edit", "write", "patch", "apply_patch") and isinstance(fp, str):
+                            files_set.add(fp)
+                    elif ptype == "text" and not reply_txt:
+                        txt = (pd.get("text") or "").strip()
+                        if txt:
+                            reply_txt = clip(txt, 160)
+                    elif ptype == "reasoning" and not tool_txt and is_busy:
+                        tool_txt = "Réfléchit…"
+                if not r["title"]:
+                    um = cur.execute(
+                        "SELECT data FROM session_message WHERE session_id = ? AND type = 'user' ORDER BY seq DESC LIMIT 1",
+                        (sid,),
+                    ).fetchone()
+                    if um:
+                        try:
+                            prompt_txt = clip(json.loads(um[0]).get("text") or "", 120)
+                        except (ValueError, TypeError):
+                            pass
+            except sqlite3.Error:
+                pass
+
+            tokens = (r["tokens_input"] or 0) + (r["tokens_output"] or 0) + (r["tokens_reasoning"] or 0)
+            files_count = r["summary_files"] or len(files_set)
+            status = "waiting" if is_waiting else ("working" if is_busy else "idle")
+            out.append({
+                "sid": sid,
+                "cwd": r["directory"] or "",
+                "title": clip(r["title"] or prompt_txt or r["slug"] or "", 60),
+                "status": status,
+                "tool": tool_txt if status == "working" else "",
+                "reply": reply_txt,
+                "model": pretty_model(model_raw),
+                "files": int(files_count),
+                "tokens": int(tokens),
+                "subagents": sub_active.get(sid, 0),
+                "started": r["time_created"] or tu,
+                "updated": tu / 1000.0,
+            })
+        con.close()
+    except sqlite3.Error:
+        pass
+    _opencode_cache = (sig, out)
+    return out
+
+
+def collect_opencode(procs, oc_pids):
+    db_sessions = opencode_db_sessions()
+    out = []
+    used_sids = set()
+
+    # Associer les TUI opencode vivants à leur session DB
+    for pid in oc_pids:
+        p = procs[pid]
+        cwd = proc_cwd(pid)
+        started = BOOT + p["start"] / HZ
+        win = window_of(pid, procs)
+        match = None
+        for s in db_sessions:
+            if s["sid"] not in used_sids and s["cwd"] == cwd:
+                match = s
+                break
+        if not match and len(oc_pids) == 1 and db_sessions:
+            match = db_sessions[0]
+        if match:
+            used_sids.add(match["sid"])
+            out.append({
+                "id": f"oc:{match['sid'][:10]}",
+                "pid": pid,
+                "kind": "opencode",
+                "surface": "cli",
+                "status": match["status"],
+                "started": int(match["started"]),
+                "updated": match["updated"],
+                "cwd": match["cwd"] or cwd,
+                "branch": git_branch(match["cwd"] or cwd),
+                "title": match["title"],
+                "focus": "",
+                "tool": match["tool"],
+                "reply": match["reply"],
+                "files": match["files"],
+                "tokens": match["tokens"],
+                "model": match["model"],
+                "subagents": match["subagents"],
+                "stepDone": 0,
+                "stepTotal": 0,
+                "window": win,
+                "canStop": True,
+                "alive": True,
+            })
+        else:
+            out.append({
+                "id": f"pid:{pid}",
+                "pid": pid,
+                "kind": "opencode",
+                "surface": "cli",
+                "status": "idle",
+                "started": int(started * 1000),
+                "updated": started,
+                "cwd": cwd,
+                "branch": git_branch(cwd),
+                "title": "",
+                "focus": "",
+                "tool": "",
+                "reply": "",
+                "files": 0,
+                "tokens": 0,
+                "model": "",
+                "subagents": 0,
+                "stepDone": 0,
+                "stepTotal": 0,
+                "window": win,
+                "canStop": True,
+                "alive": True,
+            })
+
+    # Sessions OpenCode actives ou récentes pilotées via opencode serve (ou récemment fermées)
+    for s in db_sessions:
+        if s["sid"] in used_sids:
+            continue
+        out.append({
+            "id": f"oc:{s['sid'][:10]}",
+            "pid": 0,
+            "kind": "opencode",
+            "surface": "cli",
+            "status": s["status"],
+            "started": int(s["started"]),
+            "updated": s["updated"],
+            "cwd": s["cwd"],
+            "branch": git_branch(s["cwd"]),
+            "title": s["title"],
+            "focus": "",
+            "tool": s["tool"],
+            "reply": s["reply"],
+            "files": s["files"],
+            "tokens": s["tokens"],
+            "model": s["model"],
+            "subagents": s["subagents"],
+            "stepDone": 0,
+            "stepTotal": 0,
+            "window": "",
+            "canStop": False,
+            "alive": s["status"] != "idle",
+        })
+    return out
+
+
+# ───────────────────────── 5. Antigravity App & AGY CLI ─────────────────────────
+
+_ag_db_cache = (None, [])
+_ag_tr_cache = {}
+
+
+def ag_transcript_summary(conv_id):
+    tr = HOME / f".gemini/antigravity/brain/{conv_id}/.system_generated/logs/transcript.jsonl"
+    s = {
+        "model": "", "tool": "", "focus": "", "reply": "", "prompt": "",
+        "files": [], "tokens": 0, "stepDone": 0, "stepTotal": 0,
+    }
+    if not tr.is_file():
+        return s
+    sig = file_sig(tr)
+    hit = _ag_tr_cache.get(conv_id)
+    if hit and hit[0] == sig:
+        return hit[1]
+
+    for line in tail_lines(tr, size=128 * 1024):
+        ltype = line.get("type")
+        if ltype == "USER_INPUT":
+            txt = line.get("content") or ""
+            m = re.search(r"<USER_REQUEST>\s*(.*?)\s*</USER_REQUEST>", txt, re.DOTALL)
+            if m:
+                txt = m.group(1)
+            s["prompt"] = clip(txt, 120)
+        elif ltype == "PLANNER_RESPONSE":
+            if line.get("model"):
+                s["model"] = line["model"]
+            tok = (line.get("input_tokens") or 0) + (line.get("cache_read_tokens") or 0) + (line.get("output_tokens") or 0)
+            if tok:
+                s["tokens"] = max(s["tokens"], int(tok))
+            if (line.get("content") or "").strip():
+                s["reply"] = clip(line["content"], 160)
+                s["tool"] = ""
+            tcalls = line.get("tool_calls") or []
+            for tc in tcalls:
+                if not isinstance(tc, dict):
+                    continue
+                tname = tc.get("name") or ""
+                args = tc.get("args") or {}
+                if not isinstance(args, dict):
+                    args = {}
+                if tname == "update_focus":
+                    fv = args.get("focus")
+                    if isinstance(fv, str):
+                        s["focus"] = clip(fv.strip().strip('"'), 70)
+                elif tname == "update_steps":
+                    raw_steps = args.get("steps")
+                    if isinstance(raw_steps, str):
+                        try:
+                            raw_steps = json.loads(raw_steps)
+                        except ValueError:
+                            raw_steps = None
+                    if isinstance(raw_steps, list) and raw_steps:
+                        s["stepTotal"] = len(raw_steps)
+                        s["stepDone"] = sum(1 for st in raw_steps if isinstance(st, dict) and st.get("status") == "done")
+                else:
+                    s["tool"] = tool_label(tname, args)
+                    if tname in ("edit_file", "write_file", "replace_file_content", "multi_replace_file_content", "write_to_file"):
+                        fp = args.get("Path") or args.get("TargetFile") or args.get("file_path")
+                        if isinstance(fp, str):
+                            fp = fp.strip().strip('"')
+                            if fp and fp not in s["files"]:
+                                s["files"].append(fp)
+    _ag_tr_cache[conv_id] = (sig, s)
+    return s
+
+
+def ag_decode_workspace(uris_raw):
+    if not uris_raw:
+        return ""
+    try:
+        arr = json.loads(uris_raw)
+        if isinstance(arr, list) and arr:
+            u = str(arr[0])
+            if u.startswith("file://"):
+                return urllib.parse.unquote(u[7:])
+            return u
+    except ValueError:
+        pass
+    return ""
+
+
+def ag_db_conversations():
+    global _ag_db_cache
+    db = HOME / ".gemini/antigravity/conversation_summaries.db"
+    if not db.is_file():
+        return []
+    sig = file_sig(db)
+    if _ag_db_cache[0] == sig:
+        return _ag_db_cache[1]
+
+    rows_out = []
+    try:
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=0.4)
+        con.row_factory = sqlite3.Row
+        rows = con.execute(
+            """
+            SELECT conversation_id, title, preview, step_count, last_modified_time,
+                   workspace_uris, status, source, parent_conversation_id,
+                   nesting_depth, not_fully_idle, killed, last_user_input_time
+            FROM conversation_summaries
+            WHERE killed = 0
+            ORDER BY last_modified_time DESC
+            LIMIT 25
+            """
+        ).fetchall()
+        con.close()
+
+        # Compter les sous-agents en cours pour chaque parent
+        sub_running = {}
+        for r in rows:
+            parent = r["parent_conversation_id"]
+            if parent and "RUNNING" in (r["status"] or ""):
+                sub_running[parent] = sub_running.get(parent, 0) + 1
+
+        now = time.time()
+        for r in rows:
+            if (r["nesting_depth"] or 0) > 0 or r["parent_conversation_id"]:
+                continue
+            mod_ts = parse_iso_ts(r["last_modified_time"])
+            age = now - mod_ts if mod_ts else 999999
+            raw_st = (r["status"] or "").upper()
+            is_running = "RUNNING" in raw_st
+            is_waiting = any(k in raw_st for k in ("WAIT", "APPROV", "CONFIRM", "INPUT"))
+            if not is_running and not is_waiting and age > RECENT_WINDOW:
+                continue
+            # Sécurité contre une conversation figée "RUNNING" d'un vieux crash (>30 min sans modif)
+            if is_running and age > 1800:
+                is_running = False
+                if age > RECENT_WINDOW:
+                    continue
+            cid = r["conversation_id"]
+            is_cli = "CLI" in (r["source"] or "").upper()
+            rows_out.append({
+                "cid": cid,
+                "is_cli": is_cli,
+                "title": clip(r["title"] or r["preview"] or "", 60),
+                "cwd": ag_decode_workspace(r["workspace_uris"]),
+                "status": "waiting" if is_waiting else ("working" if is_running else "idle"),
+                "updated": mod_ts or now,
+                "started": parse_iso_ts(r["last_user_input_time"]) or mod_ts or now,
+                "subagents": sub_running.get(cid, 0),
+                "steps": int(r["step_count"] or 0),
+            })
+    except sqlite3.Error:
+        pass
+    _ag_db_cache = (sig, rows_out)
+    return rows_out
+
+
+def collect_antigravity(procs, app_pids, agy_pids):
+    convs = ag_db_conversations()
+    app_running = bool(app_pids) or any(
+        p["comm"] == "language_server" for p in procs.values()
+    )
+    app_win = window_of(app_pids[0], procs, fallback_class="antigravity") if app_pids else window_of(0, procs, fallback_class="antigravity")
+    out = []
+    used_cids = set()
+
+    # 1. Processus agy CLI vivants
+    for pid in agy_pids:
+        p = procs[pid]
+        cwd = proc_cwd(pid)
+        started = BOOT + p["start"] / HZ
+        win = window_of(pid, procs)
+        match = None
+        for c in convs:
+            if c["cid"] in used_cids:
+                continue
+            if c["is_cli"] and (not c["cwd"] or c["cwd"] == cwd):
+                match = c
+                break
+        if match:
+            used_cids.add(match["cid"])
+            tr = ag_transcript_summary(match["cid"])
+            out.append({
+                "id": f"agy:{match['cid'][:8]}",
+                "pid": pid,
+                "kind": "agy",
+                "surface": "cli",
+                "status": match["status"],
+                "started": int(started * 1000),
+                "updated": match["updated"],
+                "cwd": match["cwd"] or cwd,
+                "branch": git_branch(match["cwd"] or cwd),
+                "title": match["title"] or tr["prompt"],
+                "focus": tr["focus"] if match["status"] == "working" else "",
+                "tool": (tr["focus"] or tr["tool"]) if match["status"] == "working" else "",
+                "reply": tr["reply"],
+                "files": len(tr["files"]),
+                "tokens": tr["tokens"],
+                "model": pretty_model(tr["model"]),
+                "subagents": match["subagents"],
+                "stepDone": tr["stepDone"],
+                "stepTotal": tr["stepTotal"],
+                "window": win,
+                "canStop": True,
+                "alive": True,
+            })
+        else:
+            out.append({
+                "id": f"pid:{pid}",
+                "pid": pid,
+                "kind": "agy",
+                "surface": "cli",
+                "status": "idle",
+                "started": int(started * 1000),
+                "updated": started,
+                "cwd": cwd,
+                "branch": git_branch(cwd),
+                "title": "",
+                "focus": "",
+                "tool": "",
+                "reply": "",
+                "files": 0,
+                "tokens": 0,
+                "model": "",
+                "subagents": 0,
+                "stepDone": 0,
+                "stepTotal": 0,
+                "window": win,
+                "canStop": True,
+                "alive": True,
+            })
+
+    # 2. Conversations Antigravity App (Hub/IDE) et sessions CLI récentes
+    for c in convs:
+        if c["cid"] in used_cids:
+            continue
+        if not c["is_cli"] and not app_running and c["status"] == "idle":
+            continue
+        tr = ag_transcript_summary(c["cid"])
+        kind = "agy" if c["is_cli"] else "antigravity"
+        cwd = c["cwd"]
+        out.append({
+            "id": f"ag:{c['cid'][:8]}",
+            "pid": app_pids[0] if (not c["is_cli"] and app_pids) else 0,
+            "kind": kind,
+            "surface": "cli" if c["is_cli"] else "app",
+            "status": c["status"],
+            "started": int(c["started"] * 1000),
+            "updated": c["updated"],
+            "cwd": cwd,
+            "branch": git_branch(cwd),
+            "title": c["title"] or tr["prompt"],
+            "focus": tr["focus"] if c["status"] == "working" else "",
+            "tool": (tr["focus"] or tr["tool"]) if c["status"] == "working" else "",
+            "reply": tr["reply"],
+            "files": len(tr["files"]),
+            "tokens": tr["tokens"],
+            "model": pretty_model(tr["model"]),
+            "subagents": c["subagents"],
+            "stepDone": tr["stepDone"],
+            "stepTotal": tr["stepTotal"],
+            "window": "" if c["is_cli"] else app_win,
+            "canStop": False,
+            "alive": (not c["is_cli"] and app_running) or c["status"] != "idle",
+        })
+    return out
+
+
+# ───────────────────────── 6. Demandes de permission ─────────────────────────
 
 def pid_alive(pid):
     try:
@@ -357,78 +1414,227 @@ def pending_perms():
     return out
 
 
-# ───────────────────────── watch ─────────────────────────
+# ───────────────────────── snapshot & watch ─────────────────────────
+
+_cpu_prev = {}  # pid -> (ts, ticks)
+
+
+def cpu_active(p):
+    """Heuristique CPU légère pour les agents sans transcript structuré (gemini/aider)."""
+    pid = p["pid"]
+    ticks = p["utime"] + p["stime"]
+    now = time.time()
+    prev = _cpu_prev.get(pid)
+    _cpu_prev[pid] = (now, ticks)
+    if not prev or now - prev[0] <= 0.1:
+        return False
+    rate = (ticks - prev[1]) / max(0.2, now - prev[0])
+    return rate > 8.0
+
 
 def snapshot(state):
     procs, roots = scan()
     perms = pending_perms()
     perm_pids = {p.get("agentPid") for p in perms}
-    need_codex = any(k == "codex" for _, k in roots)
-    titles = codex_titles() if need_codex else {}
-    cfiles = codex_files() if need_codex else []
-    agents = []
+
+    by_kind = {}
     for pid, kind in roots:
+        by_kind.setdefault(kind, []).append(pid)
+
+    raw_agents = []
+
+    # 1. Claude Code
+    for pid in by_kind.get("claude", []):
         p = procs[pid]
         started = BOOT + p["start"] / HZ
+        cwd = proc_cwd(pid)
         try:
-            cwd = os.readlink(f"/proc/{pid}/cwd")
-        except OSError:
-            cwd = ""
-        status, name = "idle", ""
-        if kind == "claude":
-            try:
-                meta = json.loads((HOME / f".claude/sessions/{pid}.json").read_text())
-            except (OSError, ValueError):
-                meta = {}
-            cwd = meta.get("cwd") or cwd
-            raw = meta.get("status")
-            status = "working" if raw == "busy" else "idle" if raw in ("idle", None) else "waiting"
-            s = claude_summary(meta["sessionId"]) if meta.get("sessionId") else claude_summary("")
-            name = meta.get("name") or ""
-        else:
+            meta = json.loads((HOME / f".claude/sessions/{pid}.json").read_text())
+        except (OSError, ValueError):
+            meta = {}
+        cwd = meta.get("cwd") or cwd
+        raw = meta.get("status")
+        status = "working" if raw == "busy" else "idle" if raw in ("idle", None) else "waiting"
+        if pid in perm_pids:
+            status = "waiting"
+        s = claude_summary(meta.get("sessionId") or "")
+        name = meta.get("name") or ""
+        raw_agents.append({
+            "id": f"pid:{pid}",
+            "pid": pid,
+            "kind": "claude",
+            "surface": "cli",
+            "status": status,
+            "started": int(started * 1000),
+            "statusUpdatedAt": meta.get("statusUpdatedAt") or 0,
+            "cwd": cwd,
+            "branch": git_branch(cwd),
+            "title": s["title"] or s["prompt"] or name,
+            "focus": "",
+            "tool": s["tool"] if status == "working" else "",
+            "reply": s["reply"],
+            "files": len(s["files"]),
+            "tokens": s["tokens"],
+            "model": pretty_model(s["model"]),
+            "subagents": s["subagents"],
+            "stepDone": 0,
+            "stepTotal": 0,
+            "window": window_of(pid, procs),
+            "canStop": True,
+            "alive": True,
+        })
+
+    # 2. Codex
+    codex_pids = by_kind.get("codex", [])
+    if codex_pids:
+        titles = codex_titles()
+        cfiles = codex_files()
+        for pid in codex_pids:
+            p = procs[pid]
+            started = BOOT + p["start"] / HZ
+            cwd = proc_cwd(pid)
             best = None
             for f, mt in cfiles:
                 if mt < started - 5:
                     continue
-                m = ((first_line(f) or {}).get("payload") or {})
+                m = (first_line(f) or {}).get("payload") or {}
                 if m.get("cwd") == cwd and (best is None or mt > best[1]):
                     best = (f, mt)
-            s = codex_summary(best[0], titles) if best else {"title": "", "tool": "", "reply": "", "prompt": "", "files": [], "model": "", "busy": None}
+            s = codex_summary(best[0], titles) if best else {
+                "title": "", "tool": "", "reply": "", "prompt": "",
+                "files": [], "model": "", "busy": None, "tokens": 0,
+            }
             if s.get("busy") is None and best:
                 s["busy"] = codex_busy(best[0])
+            status = "idle"
             if s.get("busy") is not None:
                 status = "working" if s["busy"] else "idle"
             elif best and time.time() - best[1] < 8:
                 status = "working"
-        if pid in perm_pids:
-            status = "waiting"
-        prev = state.get(pid)
+            raw_agents.append({
+                "id": f"pid:{pid}",
+                "pid": pid,
+                "kind": "codex",
+                "surface": "cli",
+                "status": status,
+                "started": int(started * 1000),
+                "cwd": cwd,
+                "branch": git_branch(cwd),
+                "title": s["title"] or s["prompt"],
+                "focus": "",
+                "tool": s["tool"] if status == "working" else "",
+                "reply": s["reply"],
+                "files": len(s["files"]),
+                "tokens": s["tokens"],
+                "model": pretty_model(s["model"]),
+                "subagents": 0,
+                "stepDone": 0,
+                "stepTotal": 0,
+                "window": window_of(pid, procs),
+                "canStop": True,
+                "alive": True,
+            })
+
+    # 3. GitHub Copilot CLI
+    raw_agents.extend(collect_copilot(procs, by_kind.get("copilot", [])))
+
+    # 4. OpenCode (CLI + serve)
+    raw_agents.extend(collect_opencode(procs, by_kind.get("opencode", [])))
+
+    # 5. Antigravity App & AGY CLI
+    raw_agents.extend(collect_antigravity(procs, by_kind.get("antigravity", []), by_kind.get("agy", [])))
+
+    # 6. Gemini CLI & Aider
+    for kind in ("gemini", "aider"):
+        for pid in by_kind.get(kind, []):
+            p = procs[pid]
+            started = BOOT + p["start"] / HZ
+            cwd = proc_cwd(pid)
+            status = "working" if cpu_active(p) else "idle"
+            raw_agents.append({
+                "id": f"pid:{pid}",
+                "pid": pid,
+                "kind": kind,
+                "surface": "cli",
+                "status": status,
+                "started": int(started * 1000),
+                "cwd": cwd,
+                "branch": git_branch(cwd),
+                "title": "",
+                "focus": "",
+                "tool": "Exécution…" if status == "working" else "",
+                "reply": "",
+                "files": 0,
+                "tokens": 0,
+                "model": "",
+                "subagents": 0,
+                "stepDone": 0,
+                "stepTotal": 0,
+                "window": window_of(pid, procs),
+                "canStop": True,
+                "alive": True,
+            })
+
+    # Normalisation des timestamps `since` et nettoyage de l'état
+    now = time.time()
+    agents = []
+    seen_ids = set()
+    for a in raw_agents:
+        aid = a["id"]
+        if aid in seen_ids:
+            continue
+        seen_ids.add(aid)
+        status = a["status"]
+        prev = state.get(aid)
         if prev and prev["status"] == status:
             since = prev["since"]
-        elif not prev and kind == "claude" and status != "waiting" and meta.get("statusUpdatedAt"):
-            since = meta["statusUpdatedAt"] / 1000
+        elif not prev and a.get("statusUpdatedAt") and status != "waiting":
+            since = a["statusUpdatedAt"] / 1000.0
+        elif not prev and status == "idle" and a.get("updated"):
+            since = a["updated"]
+        elif not prev and status == "working" and a.get("started"):
+            # Pour une conversation déjà en cours au démarrage du watcher
+            st_s = a["started"] / 1000.0
+            since = st_s if (now - st_s) < 7200 else now
         else:
-            since = time.time()
-        state[pid] = {"status": status, "since": since}
+            since = now
+        state[aid] = {"status": status, "since": since}
+        cwd = a.get("cwd") or ""
+        fallback_proj = "Antigravity" if a["kind"] == "antigravity" else "~"
         agents.append({
-            "id": pid,
-            "kind": kind,
+            "id": aid,
+            "pid": a.get("pid") or 0,
+            "kind": a["kind"],
+            "surface": a.get("surface") or "cli",
             "status": status,
             "since": int(since * 1000),
-            "started": int(started * 1000),
-            "project": os.path.basename(cwd.rstrip("/")) or "~",
+            "started": int(a.get("started") or int(now * 1000)),
+            "project": norm_project(cwd, fallback_proj),
             "cwd": cwd,
-            "title": s["title"] or s["prompt"] or name,
-            "tool": s["tool"] if status == "working" else "",
-            "reply": s["reply"],
-            "files": len(s["files"]),
-            "model": s["model"],
-            "window": window_of(pid, procs),
+            "branch": a.get("branch") or "",
+            "title": a.get("title") or "",
+            "focus": a.get("focus") or "",
+            "tool": a.get("tool") or "",
+            "reply": a.get("reply") or "",
+            "files": int(a.get("files") or 0),
+            "tokens": int(a.get("tokens") or 0),
+            "model": a.get("model") or "",
+            "subagents": int(a.get("subagents") or 0),
+            "stepDone": int(a.get("stepDone") or 0),
+            "stepTotal": int(a.get("stepTotal") or 0),
+            "window": a.get("window") or "",
+            "canStop": bool(a.get("canStop")),
+            "alive": bool(a.get("alive")),
         })
-    for pid in list(state):
-        if pid not in {a["id"] for a in agents}:
-            del state[pid]
-    agents.sort(key=lambda a: ({"waiting": 0, "working": 1}.get(a["status"], 2), -a["started"]))
+
+    for aid in list(state):
+        if aid not in seen_ids:
+            del state[aid]
+
+    agents.sort(key=lambda a: (
+        {"waiting": 0, "working": 1}.get(a["status"], 2),
+        -a["since"] if a["status"] == "idle" else -a["started"],
+    ))
     return {"agents": agents, "perms": perms}
 
 
@@ -438,7 +1644,7 @@ def watch():
     while True:
         try:
             snap = snapshot(state)
-        except Exception as e:  # une sonde ratée ne doit pas tuer l'île
+        except Exception as e:  # noqa: BLE001 — une sonde ratée ne doit pas tuer l'île
             print(f"caelestia-agents: {e}", file=sys.stderr)
             time.sleep(2)
             continue
@@ -451,18 +1657,64 @@ def watch():
         time.sleep(0.5 if snap["perms"] else 1.5 if busy else 3.0 if has_agents else 4.0)
 
 
-# ───────────────────────── hook ─────────────────────────
+# ───────────────────────── actions Agent OS ─────────────────────────
+
+def stop_agent(pid_str):
+    try:
+        pid = int(pid_str)
+    except ValueError:
+        sys.exit(2)
+    if pid <= 1:
+        sys.exit(2)
+    p = read_proc(pid)
+    if not p or not agent_of(p):
+        sys.exit(1)
+    try:
+        os.kill(pid, signal.SIGINT)
+    except OSError:
+        sys.exit(1)
+
+
+def launch_agent(kind):
+    if kind == "antigravity":
+        bin_path = shutil.which("antigravity") or "/opt/Antigravity/antigravity"
+        subprocess.Popen([bin_path], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return
+    cmds = {
+        "claude": "claude",
+        "codex": "codex",
+        "copilot": "copilot",
+        "opencode": "opencode",
+        "agy": "agy",
+        "gemini": "gemini",
+        "aider": "aider",
+    }
+    exe = cmds.get(kind)
+    if not exe:
+        sys.exit(2)
+    term = shutil.which("kitty") or shutil.which("foot") or shutil.which("alacritty")
+    if not term:
+        sys.exit(1)
+    shell = shutil.which("fish") or os.environ.get("SHELL", "/bin/sh")
+    if os.path.basename(term) == "kitty":
+        cmd = [term, "--title", f"{kind.capitalize()} · Agent OS", shell, "-ic", exe]
+    else:
+        cmd = [term, "-e", shell, "-ic", exe]
+    subprocess.Popen(cmd, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+# ───────────────────────── hook PermissionRequest ─────────────────────────
 
 def island_running():
     try:
-        res = subprocess.run(["pgrep", "-f", "qs -c caelestia"], capture_output=True, timeout=2)
+        res = subprocess.run(["pgrep", "-f", "qs -c (caelestia|ano-shell)"], capture_output=True, timeout=2, check=False)
         return res.returncode == 0
     except (OSError, subprocess.TimeoutExpired):
         return False
 
 
 def agent_pid():
-    procs, cur = {}, os.getppid()
+    cur = os.getppid()
     for _ in range(12):
         p = read_proc(cur)
         if not p:
@@ -535,7 +1787,6 @@ def hook():
         if answer == "deny":
             decision["message"] = "Refusé depuis l'île par l'utilisateur."
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": decision}}))
-    # « terminal » ou pas de réponse : Claude Code pose la question dans le terminal
 
 
 def answer(rid, decision):
@@ -553,6 +1804,10 @@ if __name__ == "__main__":
         hook()
     elif cmd == "answer" and len(sys.argv) == 4:
         answer(sys.argv[2], sys.argv[3])
+    elif cmd == "stop" and len(sys.argv) == 3:
+        stop_agent(sys.argv[2])
+    elif cmd == "launch" and len(sys.argv) == 3:
+        launch_agent(sys.argv[2])
     elif cmd == "once":
         print(json.dumps(snapshot({}), ensure_ascii=False, indent=2))
     else:
